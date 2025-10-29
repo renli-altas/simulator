@@ -1,0 +1,4 @@
+COMMON_DIR = ..
+TARGET = recursion
+C_SRCS = cpu-tests/recursion.c
+include ../common.mk

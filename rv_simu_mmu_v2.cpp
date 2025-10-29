@@ -14,6 +14,7 @@
 #include <front_module.h>
 #include <fstream>
 #include <util.h>
+#include <Memory.h>
 using namespace std;
 
 bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
@@ -28,7 +29,7 @@ int commit_num = 0;
 long long sim_time = 0;
 bool sim_end = false;
 
-uint32_t *p_memory = new uint32_t[PHYSICAL_MEMORY_LENGTH];
+extern uint32_t *p_memory;
 uint32_t POS_MEMORY_SHIFT = uint32_t(0x80000000 / 4);
 
 int main(int argc, char *argv[]) {

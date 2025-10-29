@@ -6,7 +6,7 @@
 #include <util.h>
 
 extern Back_Top back;
-
+extern int commit_num;
 bool load_data(uint32_t &data, uint32_t v_addr, int rob_idx);
 bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
            bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory);
@@ -197,7 +197,7 @@ void alu(Inst_uop &inst) {
   }
 }
 
-void ldu(Inst_uop &inst) {
+void ldu(Inst_uop &inst,Mem_IO* &io,bool &mispred) {
   uint32_t addr = inst.src1_rdata + inst.imm;
 
   if (addr == 0x1fd0e000) {
@@ -215,7 +215,71 @@ void ldu(Inst_uop &inst) {
   }
 
   uint32_t data;
-  bool page_fault = !load_data(data, addr, inst.rob_idx);
+  uint32_t p_addr = addr;
+  bool ret = true;
+
+  if (back.csr.CSR_RegFile[number_satp] & 0x80000000 &&
+      back.csr.privilege != 3)
+  {
+    bool mstatus[32], sstatus[32];
+    cvt_number_to_bit_unsigned(mstatus, back.csr.CSR_RegFile[number_mstatus],
+                               32);
+
+    cvt_number_to_bit_unsigned(sstatus, back.csr.CSR_RegFile[number_sstatus],
+                               32);
+
+    ret = va2pa(p_addr, addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
+                sstatus, back.csr.privilege, p_memory);
+  }
+  if (p_addr == 0x1fd0e000)
+  {
+    data = commit_num;
+  }
+  else if (p_addr == 0x1fd0e004)
+  {
+    data = 0;
+  }
+  else
+  {
+    if (!mispred)
+    {
+      if (io->req == false)
+      {
+        io->req = true;
+        io->wr = 0;
+        io->wdata = 0;
+        io->wstrb = 0;
+        io->addr = p_addr;
+      }
+      else if (io->addr == p_addr && io->data_ok == true)
+      {
+        data = io->rdata;
+        io->req = false;
+        io->wr = 0;
+        io->wdata = 0;
+        io->wstrb = 0;
+        io->addr = 0;
+        // printf("fu2 load addr:%x data:%x\n", p_addr, data);
+        back.stq.st2ld_fwd(p_addr, data, inst.rob_idx);
+      }
+      else
+      {
+        io->req = true;
+        io->wr = 0;
+        io->wdata = 0;
+        io->wstrb = 0;
+        io->addr = p_addr;
+      }
+    }
+    else{
+      io->req = false;
+      io->wr = 0;
+      io->wdata = 0;
+      io->wstrb = 0;
+      io->addr = 0;
+    }
+  }
+  bool page_fault = !ret;
 
   if (!page_fault) {
     data = data >> (offset * 8);

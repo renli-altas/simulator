@@ -10,6 +10,7 @@ typedef struct {
   Rob_Commit *rob_commit;
   Dec_Broadcast *dec_bcast;
   Rob_Broadcast *rob_bcast;
+  Mem_IO * stq2cache;
 } STQ_IO;
 
 typedef struct {
@@ -36,4 +37,6 @@ public:
   STQ_entry entry[STQ_NUM];
   int commit_ptr = 0;
   int count = 0;
+
+  bool write_flag = 0;
 };

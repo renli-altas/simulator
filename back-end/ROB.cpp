@@ -125,7 +125,7 @@ void ROB::comb_commit() {
   io.rob2dis->enq_idx = enq_ptr;
 
   stall_cycle++;
-  if (stall_cycle > 1000) {
+  if (stall_cycle > 500) {
     cout << dec << sim_time << endl;
     cout << "卡死了" << endl;
     cout << "ROB deq inst:" << endl;
@@ -137,7 +137,7 @@ void ROB::comb_commit() {
              << endl;
       }
     }
-    // exit(1);
+    exit(1);
   }
 }
 

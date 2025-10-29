@@ -10,7 +10,8 @@
 #include <STQ.h>
 #include <config.h>
 #include <cstdint>
-
+#include <Memory.h>
+#include <Arbiter.h>
 typedef struct {
   uint32_t inst[FETCH_WIDTH];
   uint32_t pc[FETCH_WIDTH];
@@ -44,6 +45,9 @@ public:
   CSRU csr;
   STQ stq;
   ROB rob;
+
+  Arbiter arbiter;
+  MEMORY pmemory;
 
   Back_in in;
   Back_out out;

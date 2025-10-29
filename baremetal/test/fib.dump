@@ -8,32 +8,19 @@ Disassembly of section .init:
 80000000 <_start>:
 _start():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:9
-    .type _start,@function
-
-
-_start:
-
-  la gp, __global_pointer
 80000000:	00001197          	auipc	gp,0x1
 80000004:	86018193          	addi	gp,gp,-1952 # 80000860 <__global_pointer>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:10
-  la sp, _sp
 80000008:	08000117          	auipc	sp,0x8000
 8000000c:	ff810113          	addi	sp,sp,-8 # 88000000 <_sp>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:12
-
-  call main
 80000010:	00c000ef          	jal	ra,8000001c <main>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:13
-  ebreak
 80000014:	00100073          	ebreak
 
 80000018 <loop>:
 loop():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:16
-
-loop:
-    j loop
 80000018:	0000006f          	jal	zero,80000018 <loop>
 
 Disassembly of section .text:
@@ -41,61 +28,37 @@ Disassembly of section .text:
 8000001c <main>:
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:8 (discriminator 1)
-int fib[40] = {1, 1};
-int ans[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, 2178309, 3524578, 5702887, 9227465, 14930352, 24157817, 39088169, 63245986, 102334155};
-
-int main() {
-	int i;
-	for(i = 2; i < 40; i ++) {
 8000001c:	800007b7          	lui	a5,0x80000
 80000020:	06078793          	addi	a5,a5,96 # 80000060 <fib>
 80000024:	0a878693          	addi	a3,a5,168
 80000028:	09878513          	addi	a0,a5,152
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-typedef unsigned int size_t;
-
-inline void check(int cond) {
-  volatile int *end_flag = (int *)0x1c;
-  if (!cond) {
-    *end_flag = 1;
 8000002c:	00100813          	addi	a6,zero,1
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:9
-		fib[i] = fib[i - 1] + fib[i - 2];
 80000030:	0047a703          	lw	a4,4(a5)
 80000034:	0007a583          	lw	a1,0(a5)
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000038:	0006a603          	lw	a2,0(a3)
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:8 (discriminator 1)
-	for(i = 2; i < 40; i ++) {
 8000003c:	00478793          	addi	a5,a5,4
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:9
-		fib[i] = fib[i - 1] + fib[i - 2];
 80000040:	00b70733          	add	a4,a4,a1
 80000044:	00e7a223          	sw	a4,4(a5)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:8 (discriminator 1)
-	for(i = 2; i < 40; i ++) {
 80000048:	00468693          	addi	a3,a3,4
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
 8000004c:	00c70463          	beq	a4,a2,80000054 <main+0x38>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000050:	01002e23          	sw	a6,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:8 (discriminator 1)
 80000054:	fca79ee3          	bne	a5,a0,80000030 <main+0x14>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:16
-	}
-
-	check(i == 40);
-
-	return 0;
-}
 80000058:	00000513          	addi	a0,zero,0
 8000005c:	00008067          	jalr	zero,0(ra)
 
@@ -103,7 +66,6 @@ Disassembly of section .data:
 
 80000060 <fib>:
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:3
-int fib[40] = {1, 1};
 80000060:	0001                	.insn	2, 0x0001
 80000062:	0000                	.insn	2, 0x0000
 80000064:	0001                	.insn	2, 0x0001
@@ -111,7 +73,6 @@ int fib[40] = {1, 1};
 
 80000100 <ans>:
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/fib.c:4
-int ans[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, 2178309, 3524578, 5702887, 9227465, 14930352, 24157817, 39088169, 63245986, 102334155};
 80000100:	0001                	.insn	2, 0x0001
 80000102:	0000                	.insn	2, 0x0000
 80000104:	0001                	.insn	2, 0x0001
@@ -187,34 +148,30 @@ int ans[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	4541                	.insn	2, 0x4541
+   0:	3741                	.insn	2, 0x3741
    2:	0000                	.insn	2, 0x0000
    4:	7200                	.insn	2, 0x7200
    6:	7369                	.insn	2, 0x7369
    8:	01007663          	bgeu	zero,a6,14 <__stack_size-0x1ffffec>
-   c:	0000003b          	.insn	4, 0x003b
+   c:	002d                	.insn	2, 0x002d
+   e:	0000                	.insn	2, 0x0000
   10:	1004                	.insn	2, 0x1004
   12:	7205                	.insn	2, 0x7205
   14:	3376                	.insn	2, 0x3376
   16:	6932                	.insn	2, 0x6932
   18:	7032                	.insn	2, 0x7032
   1a:	5f31                	.insn	2, 0x5f31
-  1c:	326d                	.insn	2, 0x326d
-  1e:	3070                	.insn	2, 0x3070
-  20:	615f 7032 5f31      	.insn	6, 0x5f317032615f
-  26:	6d7a                	.insn	2, 0x6d7a
-  28:	756d                	.insn	2, 0x756d
-  2a:	316c                	.insn	2, 0x316c
-  2c:	3070                	.insn	2, 0x3070
-  2e:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
-  34:	7031                	.insn	2, 0x7031
-  36:	5f30                	.insn	2, 0x5f30
-  38:	617a                	.insn	2, 0x617a
-  3a:	726c                	.insn	2, 0x726c
-  3c:	70316373          	.insn	4, 0x70316373
-  40:	0030                	.insn	2, 0x0030
-  42:	0108                	.insn	2, 0x0108
-  44:	0b0a                	.insn	2, 0x0b0a
+  1c:	3261                	.insn	2, 0x3261
+  1e:	3170                	.insn	2, 0x3170
+  20:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
+  26:	7031                	.insn	2, 0x7031
+  28:	5f30                	.insn	2, 0x5f30
+  2a:	617a                	.insn	2, 0x617a
+  2c:	726c                	.insn	2, 0x726c
+  2e:	70316373          	.insn	4, 0x70316373
+  32:	0030                	.insn	2, 0x0030
+  34:	0108                	.insn	2, 0x0108
+  36:	0b0a                	.insn	2, 0x0b0a
 
 Disassembly of section .comment:
 

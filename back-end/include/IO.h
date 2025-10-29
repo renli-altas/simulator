@@ -157,3 +157,34 @@ typedef struct {
   // 数据写入
   Inst_entry data_entry;
 } Exe_Stq;
+
+typedef struct{
+  bool en;
+  bool wen;
+  uint8_t sel;
+  uint8_t len;
+  bool last;
+  uint8_t size;
+  uint32_t addr;
+  uint32_t wdata;
+}EXMem_CONTROL;
+typedef struct{
+  uint32_t data;
+  bool last;
+  bool done;
+}EXMem_DATA;
+typedef struct{
+  EXMem_CONTROL control;
+  EXMem_DATA data;
+}EXMem_IO;
+
+typedef struct{
+  bool req;
+  uint32_t addr;
+  uint32_t wdata;
+  bool wr;
+  uint8_t wstrb;
+
+  uint32_t rdata;
+  bool data_ok;
+}Mem_IO;

@@ -8,32 +8,19 @@ Disassembly of section .init:
 80000000 <_start>:
 _start():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:9
-    .type _start,@function
-
-
-_start:
-
-  la gp, __global_pointer
 80000000:	00001197          	auipc	gp,0x1
 80000004:	24018193          	addi	gp,gp,576 # 80001240 <__global_pointer>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:10
-  la sp, _sp
 80000008:	08000117          	auipc	sp,0x8000
 8000000c:	ff810113          	addi	sp,sp,-8 # 88000000 <_sp>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:12
-
-  call main
 80000010:	00c000ef          	jal	ra,8000001c <main>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:13
-  ebreak
 80000014:	00100073          	ebreak
 
 80000018 <loop>:
 loop():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:16
-
-loop:
-    j loop
 80000018:	0000006f          	jal	zero,80000018 <loop>
 
 Disassembly of section .text:
@@ -41,47 +28,27 @@ Disassembly of section .text:
 8000001c <main>:
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:44
-  }
-  return ~crc;
-}
-
-int main() {
-  uint32_t res = rc_crc32(0, STR, STRLEN);
 8000001c:	800005b7          	lui	a1,0x80000
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:43
-int main() {
 80000020:	ff010113          	addi	sp,sp,-16
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:44
-  uint32_t res = rc_crc32(0, STR, STRLEN);
 80000024:	20c58593          	addi	a1,a1,524 # 8000020c <rc_crc32+0x1b0>
 80000028:	02b00613          	addi	a2,zero,43
 8000002c:	00000513          	addi	a0,zero,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:43
-int main() {
 80000030:	00112623          	sw	ra,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:44
-  uint32_t res = rc_crc32(0, STR, STRLEN);
 80000034:	028000ef          	jal	ra,8000005c <rc_crc32>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-#include <stdint.h>
-typedef unsigned int size_t;
-
-inline void check(int cond) {
-  volatile int *end_flag = (int *)0x1c;
-  if (!cond) {
 80000038:	414fa7b7          	lui	a5,0x414fa
 8000003c:	33978793          	addi	a5,a5,825 # 414fa339 <__stack_size+0x3f4fa339>
 80000040:	00f50663          	beq	a0,a5,8000004c <main+0x30>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000044:	00100793          	addi	a5,zero,1
 80000048:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:47
-  check(res == 0x414FA339);
-  return 0;
-}
 8000004c:	00c12083          	lw	ra,12(sp)
 80000050:	00000513          	addi	a0,zero,0
 80000054:	01010113          	addi	sp,sp,16
@@ -90,24 +57,19 @@ main():
 8000005c <rc_crc32>:
 rc_crc32():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:9
-uint32_t rc_crc32(uint32_t crc, const char *buf, size_t len) {
 8000005c:	ff010113          	addi	sp,sp,-16
 80000060:	00812623          	sw	s0,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:18
-  if (have_table == 0) {
 80000064:	80001437          	lui	s0,0x80001
 80000068:	a3842703          	lw	a4,-1480(s0) # 80000a38 <have_table.1>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:9
-uint32_t rc_crc32(uint32_t crc, const char *buf, size_t len) {
 8000006c:	00912423          	sw	s1,8(sp)
 80000070:	00058493          	addi	s1,a1,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:18
-  if (have_table == 0) {
 80000074:	14071463          	bne	a4,zero,800001bc <rc_crc32+0x160>
 80000078:	800007b7          	lui	a5,0x80000
 8000007c:	800003b7          	lui	t2,0x80000
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:29
-      table[i] = rem;
 80000080:	00ff02b7          	lui	t0,0xff0
 80000084:	ff010fb7          	lui	t6,0xff010
 80000088:	0f0f1f37          	lui	t5,0xf0f1
@@ -128,10 +90,8 @@ uint32_t rc_crc32(uint32_t crc, const char *buf, size_t len) {
 800000c4:	55588893          	addi	a7,a7,1365 # 55555555 <__stack_size+0x53555555>
 800000c8:	aaa80813          	addi	a6,a6,-1366 # aaaaaaaa <_sp+0x22aaaaaa>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:20 (discriminator 1)
-    for (i = 0; i < 256; i++) {
 800000cc:	10000593          	addi	a1,zero,256
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:29
-      table[i] = rem;
 800000d0:	01075913          	srli	s2,a4,0x10
 800000d4:	01071793          	slli	a5,a4,0x10
 800000d8:	0127e7b3          	or	a5,a5,s2
@@ -161,10 +121,8 @@ uint32_t rc_crc32(uint32_t crc, const char *buf, size_t len) {
 80000138:	00092903          	lw	s2,0(s2)
 8000013c:	00879793          	slli	a5,a5,0x8
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:20 (discriminator 2)
-    for (i = 0; i < 256; i++) {
 80000140:	00170713          	addi	a4,a4,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:29
-      table[i] = rem;
 80000144:	0127c7b3          	xor	a5,a5,s2
 80000148:	01079913          	slli	s2,a5,0x10
 8000014c:	0107d793          	srli	a5,a5,0x10
@@ -191,34 +149,26 @@ uint32_t rc_crc32(uint32_t crc, const char *buf, size_t len) {
 800001a0:	00f967b3          	or	a5,s2,a5
 800001a4:	00f6a023          	sw	a5,0(a3)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:20 (discriminator 1)
-    for (i = 0; i < 256; i++) {
 800001a8:	00468693          	addi	a3,a3,4
 800001ac:	f2b712e3          	bne	a4,a1,800000d0 <rc_crc32+0x74>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:31
-    have_table = 1;
 800001b0:	00412903          	lw	s2,4(sp)
 800001b4:	00100793          	addi	a5,zero,1
 800001b8:	a2f42c23          	sw	a5,-1480(s0)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:35
-  q = buf + len;
 800001bc:	00c48633          	add	a2,s1,a2
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:36 (discriminator 1)
-  for (p = buf; p < q; p++) {
 800001c0:	02c4fe63          	bgeu	s1,a2,800001fc <rc_crc32+0x1a0>
 800001c4:	800007b7          	lui	a5,0x80000
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:34
-  crc = ~crc;
 800001c8:	fff54513          	xori	a0,a0,-1
 800001cc:	63878793          	addi	a5,a5,1592 # 80000638 <table.0>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:38
-    crc = (crc >> 8) ^ table[(crc & 0xff) ^ octet];
 800001d0:	0004c683          	lbu	a3,0(s1)
 800001d4:	0ff57713          	andi	a4,a0,255
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:36 (discriminator 3)
-  for (p = buf; p < q; p++) {
 800001d8:	00148493          	addi	s1,s1,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:38
-    crc = (crc >> 8) ^ table[(crc & 0xff) ^ octet];
 800001dc:	00d74733          	xor	a4,a4,a3
 800001e0:	00271713          	slli	a4,a4,0x2
 800001e4:	00e78733          	add	a4,a5,a4
@@ -226,13 +176,10 @@ uint32_t rc_crc32(uint32_t crc, const char *buf, size_t len) {
 800001ec:	00855513          	srli	a0,a0,0x8
 800001f0:	00e54533          	xor	a0,a0,a4
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:36 (discriminator 1)
-  for (p = buf; p < q; p++) {
 800001f4:	fc961ee3          	bne	a2,s1,800001d0 <rc_crc32+0x174>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:40
-  return ~crc;
 800001f8:	fff54513          	xori	a0,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/crc32.c:41
-}
 800001fc:	00c12403          	lw	s0,12(sp)
 80000200:	00812483          	lw	s1,8(sp)
 80000204:	01010113          	addi	sp,sp,16
@@ -662,34 +609,30 @@ Disassembly of section .rodata:
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	4541                	.insn	2, 0x4541
+   0:	3741                	.insn	2, 0x3741
    2:	0000                	.insn	2, 0x0000
    4:	7200                	.insn	2, 0x7200
    6:	7369                	.insn	2, 0x7369
    8:	01007663          	bgeu	zero,a6,14 <__stack_size-0x1ffffec>
-   c:	0000003b          	.insn	4, 0x003b
+   c:	002d                	.insn	2, 0x002d
+   e:	0000                	.insn	2, 0x0000
   10:	1004                	.insn	2, 0x1004
   12:	7205                	.insn	2, 0x7205
   14:	3376                	.insn	2, 0x3376
   16:	6932                	.insn	2, 0x6932
   18:	7032                	.insn	2, 0x7032
   1a:	5f31                	.insn	2, 0x5f31
-  1c:	326d                	.insn	2, 0x326d
-  1e:	3070                	.insn	2, 0x3070
-  20:	615f 7032 5f31      	.insn	6, 0x5f317032615f
-  26:	6d7a                	.insn	2, 0x6d7a
-  28:	756d                	.insn	2, 0x756d
-  2a:	316c                	.insn	2, 0x316c
-  2c:	3070                	.insn	2, 0x3070
-  2e:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
-  34:	7031                	.insn	2, 0x7031
-  36:	5f30                	.insn	2, 0x5f30
-  38:	617a                	.insn	2, 0x617a
-  3a:	726c                	.insn	2, 0x726c
-  3c:	70316373          	.insn	4, 0x70316373
-  40:	0030                	.insn	2, 0x0030
-  42:	0108                	.insn	2, 0x0108
-  44:	0b0a                	.insn	2, 0x0b0a
+  1c:	3261                	.insn	2, 0x3261
+  1e:	3170                	.insn	2, 0x3170
+  20:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
+  26:	7031                	.insn	2, 0x7031
+  28:	5f30                	.insn	2, 0x5f30
+  2a:	617a                	.insn	2, 0x617a
+  2c:	726c                	.insn	2, 0x726c
+  2e:	70316373          	.insn	4, 0x70316373
+  32:	0030                	.insn	2, 0x0030
+  34:	0108                	.insn	2, 0x0108
+  36:	0b0a                	.insn	2, 0x0b0a
 
 Disassembly of section .comment:
 

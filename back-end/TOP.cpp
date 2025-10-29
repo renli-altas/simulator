@@ -108,7 +108,9 @@ Stq_Dis stq2dis;
 
 Csr_Exe csr2exe;
 Exe_Csr exe2csr;
-
+Mem_IO exe2cache;
+Mem_IO stq2cache;
+EXMem_IO arbiter2mem;
 void Back_Top::init() {
 
   idu.io.front2dec = &front2dec;
@@ -170,6 +172,8 @@ void Back_Top::init() {
   exu.io.exe2csr = &exe2csr;
   exu.io.csr2exe = &csr2exe;
 
+  exu.io.exe2cache = &exe2cache;
+
   rob.io.dis2rob = &dis2rob;
   rob.io.dec_bcast = &dec_bcast;
   rob.io.prf2rob = &prf2rob;
@@ -185,6 +189,14 @@ void Back_Top::init() {
   stq.io.dec_bcast = &dec_bcast;
   stq.io.rob_bcast = &rob_bcast;
 
+  stq.io.stq2cache = &stq2cache;
+
+  arbiter.io.cpu_ld = &exe2cache;
+  arbiter.io.cpu_st = &stq2cache;
+  arbiter.io.mem = &arbiter2mem;
+
+  pmemory.io.mem = &arbiter2mem;
+
   csr.io.exe2csr = &exe2csr;
   csr.io.csr2exe = &csr2exe;
   csr.io.rob_bcast = &rob_bcast;
@@ -195,6 +207,8 @@ void Back_Top::init() {
   exu.init();
   csr.init();
   rob.init();
+  arbiter.init();
+  pmemory.init();
 }
 
 void Back_Top::Back_comb() {
@@ -255,6 +269,9 @@ void Back_Top::Back_comb() {
   exu.comb_branch();
   exu.comb_pipeline();
   exu.comb_flush();
+  arbiter.comb_in();
+  pmemory.comb();
+  arbiter.comb_out();
   prf.comb_write();
   prf.comb_branch();
   prf.comb_pipeline();
@@ -308,6 +325,8 @@ void Back_Top::Back_seq() {
   rob.seq();
   stq.seq();
   csr.seq();
+  arbiter.seq();
+  pmemory.seq();
   for (int i = 0; i < FETCH_WIDTH; i++) {
     out.fire[i] = idu.io.dec2front->fire[i];
   }

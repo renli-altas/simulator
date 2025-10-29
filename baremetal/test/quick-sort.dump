@@ -8,32 +8,19 @@ Disassembly of section .init:
 80000000 <_start>:
 _start():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:9
-    .type _start,@function
-
-
-_start:
-
-  la gp, __global_pointer
 80000000:	00001197          	auipc	gp,0x1
 80000004:	b7018193          	addi	gp,gp,-1168 # 80000b70 <__global_pointer>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:10
-  la sp, _sp
 80000008:	08000117          	auipc	sp,0x8000
 8000000c:	ff810113          	addi	sp,sp,-8 # 88000000 <_sp>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:12
-
-  call main
 80000010:	00c000ef          	jal	ra,8000001c <main>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:13
-  ebreak
 80000014:	00100073          	ebreak
 
 80000018 <loop>:
 loop():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:16
-
-loop:
-    j loop
 80000018:	0000006f          	jal	zero,80000018 <loop>
 
 Disassembly of section .text:
@@ -41,56 +28,34 @@ Disassembly of section .text:
 8000001c <main>:
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:31
-	quick_sort(a, p, m - 1);
-	quick_sort(a, m + 1, q);
-}
-
-int main() {
-	quick_sort(a, 0, N - 1);
 8000001c:	80000537          	lui	a0,0x80000
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:30
-int main() {
 80000020:	ff010113          	addi	sp,sp,-16
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:31
-	quick_sort(a, 0, N - 1);
 80000024:	37050513          	addi	a0,a0,880 # 80000370 <a>
 80000028:	01300613          	addi	a2,zero,19
 8000002c:	00000593          	addi	a1,zero,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:30
-int main() {
 80000030:	00812423          	sw	s0,8(sp)
 80000034:	00112623          	sw	ra,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:31
-	quick_sort(a, 0, N - 1);
 80000038:	13c000ef          	jal	ra,80000174 <quick_sort>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:34 (discriminator 1)
-
-	int i;
-	for(i = 0; i < N; i ++) {
 8000003c:	800007b7          	lui	a5,0x80000
 80000040:	37078513          	addi	a0,a5,880 # 80000370 <a>
 80000044:	00050413          	addi	s0,a0,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:31
-	quick_sort(a, 0, N - 1);
 80000048:	00050713          	addi	a4,a0,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:34
-	for(i = 0; i < N; i ++) {
 8000004c:	00000793          	addi	a5,zero,0
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-typedef unsigned int size_t;
-
-inline void check(int cond) {
-  volatile int *end_flag = (int *)0x1c;
-  if (!cond) {
-    *end_flag = 1;
 80000050:	00100593          	addi	a1,zero,1
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:34 (discriminator 1)
 80000054:	01400613          	addi	a2,zero,20
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000058:	00072683          	lw	a3,0(a4)
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:34 (discriminator 1)
@@ -99,7 +64,6 @@ check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
 80000060:	00f68463          	beq	a3,a5,80000068 <main+0x4c>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000064:	00b02e23          	sw	a1,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:34 (discriminator 3)
@@ -107,18 +71,10 @@ main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:34 (discriminator 1)
 8000006c:	fec796e3          	bne	a5,a2,80000058 <main+0x3c>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:40
-		check(a[i] == i);
-	}
-
-	check(i == N);
-
-	quick_sort(a, 0, N - 1);
 80000070:	01300613          	addi	a2,zero,19
 80000074:	00000593          	addi	a1,zero,0
 80000078:	0fc000ef          	jal	ra,80000174 <quick_sort>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:42
-
-	for(i = 0; i < N; i ++) {
 8000007c:	00000793          	addi	a5,zero,0
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
@@ -128,7 +84,6 @@ main():
 80000084:	01400693          	addi	a3,zero,20
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000088:	00042703          	lw	a4,0(s0)
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:42 (discriminator 1)
@@ -137,7 +92,6 @@ check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
 80000090:	00f70463          	beq	a4,a5,80000098 <main+0x7c>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000094:	00c02e23          	sw	a2,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:42 (discriminator 3)
@@ -145,12 +99,6 @@ main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:42 (discriminator 1)
 8000009c:	fed796e3          	bne	a5,a3,80000088 <main+0x6c>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:49
-	}
-
-	check(i == N);
-
-	return 0;
-}
 800000a0:	00c12083          	lw	ra,12(sp)
 800000a4:	00812403          	lw	s0,8(sp)
 800000a8:	00000513          	addi	a0,zero,0
@@ -160,20 +108,16 @@ main():
 800000b4 <partition>:
 partition():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:8
-	int pivot = a[p];
 800000b4:	00259813          	slli	a6,a1,0x2
 800000b8:	01050833          	add	a6,a0,a6
 800000bc:	00082883          	lw	a7,0(a6)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:10
-	while(i < j) {
 800000c0:	06c5d863          	bge	a1,a2,80000130 <partition+0x7c>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:12
-		a[i] = a[j];
 800000c4:	00261713          	slli	a4,a2,0x2
 800000c8:	00e507b3          	add	a5,a0,a4
 800000cc:	0007a783          	lw	a5,0(a5)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11 (discriminator 1)
-		while(i < j && a[j] > pivot) j --;
 800000d0:	ffc50e13          	addi	t3,a0,-4
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11
 800000d4:	00ee0733          	add	a4,t3,a4
@@ -182,29 +126,22 @@ partition():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11 (discriminator 3)
 800000dc:	fff60613          	addi	a2,a2,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:12
-		a[i] = a[j];
 800000e0:	00072783          	lw	a5,0(a4)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11 (discriminator 1)
-		while(i < j && a[j] > pivot) j --;
 800000e4:	06b60a63          	beq	a2,a1,80000158 <partition+0xa4>
 800000e8:	ffc70713          	addi	a4,a4,-4
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11 (discriminator 2)
 800000ec:	fef8c8e3          	blt	a7,a5,800000dc <partition+0x28>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:12
-		a[i] = a[j];
 800000f0:	00259813          	slli	a6,a1,0x2
 800000f4:	01050833          	add	a6,a0,a6
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11 (discriminator 2)
-		while(i < j && a[j] > pivot) j --;
 800000f8:	00261713          	slli	a4,a2,0x2
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:12
-		a[i] = a[j];
 800000fc:	00f82023          	sw	a5,0(a6)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:11 (discriminator 2)
-		while(i < j && a[j] > pivot) j --;
 80000100:	00e50333          	add	t1,a0,a4
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:14 (discriminator 1)
-		while(i < j && a[i] <= pivot) i ++;
 80000104:	06c5d463          	bge	a1,a2,8000016c <partition+0xb8>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:14
 80000108:	00080693          	addi	a3,a6,0
@@ -221,39 +158,30 @@ partition():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:14 (discriminator 2)
 80000124:	fef8d6e3          	bge	a7,a5,80000110 <partition+0x5c>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:15
-		a[j] = a[i];
 80000128:	00f32023          	sw	a5,0(t1)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:10
-	while(i < j) {
 8000012c:	fac5c4e3          	blt	a1,a2,800000d4 <partition+0x20>
 80000130:	00058613          	addi	a2,a1,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:18
-	a[i] = pivot;
 80000134:	01182023          	sw	a7,0(a6)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:20
-}
 80000138:	00060513          	addi	a0,a2,0
 8000013c:	00008067          	jalr	zero,0(ra)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:15
-		a[j] = a[i];
 80000140:	00e50833          	add	a6,a0,a4
 80000144:	00082783          	lw	a5,0(a6)
 80000148:	00f32023          	sw	a5,0(t1)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:18
-	a[i] = pivot;
 8000014c:	01182023          	sw	a7,0(a6)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:20
-}
 80000150:	00060513          	addi	a0,a2,0
 80000154:	00008067          	jalr	zero,0(ra)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:12
-		a[i] = a[j];
 80000158:	00261813          	slli	a6,a2,0x2
 8000015c:	01050833          	add	a6,a0,a6
 80000160:	00070313          	addi	t1,a4,0
 80000164:	00f82023          	sw	a5,0(a6)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:14 (discriminator 1)
-		while(i < j && a[i] <= pivot) i ++;
 80000168:	fe1ff06f          	jal	zero,80000148 <partition+0x94>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:14
 8000016c:	00058613          	addi	a2,a1,0
@@ -262,10 +190,8 @@ partition():
 80000174 <quick_sort>:
 quick_sort():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000174:	1ec5dc63          	bge	a1,a2,8000036c <quick_sort+0x1f8>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:22
-void quick_sort(int *a, int p, int q) {
 80000178:	fa010113          	addi	sp,sp,-96
 8000017c:	04812c23          	sw	s0,88(sp)
 80000180:	03712e23          	sw	s7,60(sp)
@@ -276,17 +202,14 @@ void quick_sort(int *a, int p, int q) {
 80000194:	00060b93          	addi	s7,a2,0
 80000198:	00050413          	addi	s0,a0,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 8000019c:	000b8613          	addi	a2,s7,0
 800001a0:	000d8593          	addi	a1,s11,0
 800001a4:	00040513          	addi	a0,s0,0
 800001a8:	f0dff0ef          	jal	ra,800000b4 <partition>
 800001ac:	00a12023          	sw	a0,0(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 800001b0:	fff50c13          	addi	s8,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800001b4:	198dd863          	bge	s11,s8,80000344 <quick_sort+0x1d0>
 800001b8:	04912a23          	sw	s1,84(sp)
 800001bc:	05212823          	sw	s2,80(sp)
@@ -294,107 +217,82 @@ void quick_sort(int *a, int p, int q) {
 800001c4:	03912a23          	sw	s9,52(sp)
 800001c8:	03a12823          	sw	s10,48(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 800001cc:	000c0613          	addi	a2,s8,0
 800001d0:	000d8593          	addi	a1,s11,0
 800001d4:	00040513          	addi	a0,s0,0
 800001d8:	eddff0ef          	jal	ra,800000b4 <partition>
 800001dc:	00a12223          	sw	a0,4(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 800001e0:	fff50c93          	addi	s9,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800001e4:	159dd063          	bge	s11,s9,80000324 <quick_sort+0x1b0>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 800001e8:	000c8613          	addi	a2,s9,0
 800001ec:	000d8593          	addi	a1,s11,0
 800001f0:	00040513          	addi	a0,s0,0
 800001f4:	ec1ff0ef          	jal	ra,800000b4 <partition>
 800001f8:	00a12423          	sw	a0,8(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 800001fc:	fff50d13          	addi	s10,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000200:	11addc63          	bge	s11,s10,80000318 <quick_sort+0x1a4>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000204:	000d0613          	addi	a2,s10,0
 80000208:	000d8593          	addi	a1,s11,0
 8000020c:	00040513          	addi	a0,s0,0
 80000210:	ea5ff0ef          	jal	ra,800000b4 <partition>
 80000214:	00a12623          	sw	a0,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 80000218:	fff50993          	addi	s3,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 8000021c:	0f3dd863          	bge	s11,s3,8000030c <quick_sort+0x198>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000220:	00098613          	addi	a2,s3,0
 80000224:	000d8593          	addi	a1,s11,0
 80000228:	00040513          	addi	a0,s0,0
 8000022c:	e89ff0ef          	jal	ra,800000b4 <partition>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 80000230:	fff50913          	addi	s2,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000234:	00050493          	addi	s1,a0,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000238:	0d2dd663          	bge	s11,s2,80000304 <quick_sort+0x190>
 8000023c:	05512223          	sw	s5,68(sp)
 80000240:	05612023          	sw	s6,64(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000244:	00090613          	addi	a2,s2,0
 80000248:	000d8593          	addi	a1,s11,0
 8000024c:	00040513          	addi	a0,s0,0
 80000250:	e65ff0ef          	jal	ra,800000b4 <partition>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 80000254:	fff50b13          	addi	s6,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000258:	00050a93          	addi	s5,a0,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 8000025c:	096ddc63          	bge	s11,s6,800002f4 <quick_sort+0x180>
 80000260:	05412423          	sw	s4,72(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000264:	000b0613          	addi	a2,s6,0
 80000268:	000d8593          	addi	a1,s11,0
 8000026c:	00040513          	addi	a0,s0,0
 80000270:	e45ff0ef          	jal	ra,800000b4 <partition>
 80000274:	00a12823          	sw	a0,16(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 80000278:	fff50a13          	addi	s4,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 8000027c:	074dd463          	bge	s11,s4,800002e4 <quick_sort+0x170>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000280:	000a0613          	addi	a2,s4,0
 80000284:	000d8593          	addi	a1,s11,0
 80000288:	00040513          	addi	a0,s0,0
 8000028c:	e29ff0ef          	jal	ra,800000b4 <partition>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 80000290:	fff50713          	addi	a4,a0,-1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 80000294:	00050793          	addi	a5,a0,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000298:	04edd263          	bge	s11,a4,800002dc <quick_sort+0x168>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:25
-	int m = partition(a, p, q);
 8000029c:	00070613          	addi	a2,a4,0
 800002a0:	000d8593          	addi	a1,s11,0
 800002a4:	00040513          	addi	a0,s0,0
@@ -402,73 +300,54 @@ void quick_sort(int *a, int p, int q) {
 800002ac:	00e12c23          	sw	a4,24(sp)
 800002b0:	e05ff0ef          	jal	ra,800000b4 <partition>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:26
-	quick_sort(a, p, m - 1);
 800002b4:	000d8593          	addi	a1,s11,0
 800002b8:	fff50613          	addi	a2,a0,-1
 800002bc:	00a12a23          	sw	a0,20(sp)
 800002c0:	00040513          	addi	a0,s0,0
 800002c4:	eb1ff0ef          	jal	ra,80000174 <quick_sort>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 800002c8:	01412683          	lw	a3,20(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800002cc:	01812703          	lw	a4,24(sp)
 800002d0:	01c12783          	lw	a5,28(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 800002d4:	00168d93          	addi	s11,a3,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800002d8:	fcedc2e3          	blt	s11,a4,8000029c <quick_sort+0x128>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 800002dc:	00178d93          	addi	s11,a5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800002e0:	fb4dc0e3          	blt	s11,s4,80000280 <quick_sort+0x10c>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 800002e4:	01012783          	lw	a5,16(sp)
 800002e8:	00178d93          	addi	s11,a5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800002ec:	f76dcce3          	blt	s11,s6,80000264 <quick_sort+0xf0>
 800002f0:	04812a03          	lw	s4,72(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 800002f4:	001a8d93          	addi	s11,s5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 800002f8:	f52dc6e3          	blt	s11,s2,80000244 <quick_sort+0xd0>
 800002fc:	04412a83          	lw	s5,68(sp)
 80000300:	04012b03          	lw	s6,64(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 80000304:	00148d93          	addi	s11,s1,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000308:	f13dcce3          	blt	s11,s3,80000220 <quick_sort+0xac>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 8000030c:	00c12783          	lw	a5,12(sp)
 80000310:	00178d93          	addi	s11,a5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000314:	efadc8e3          	blt	s11,s10,80000204 <quick_sort+0x90>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 80000318:	00812783          	lw	a5,8(sp)
 8000031c:	00178d93          	addi	s11,a5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 80000320:	ed9dc4e3          	blt	s11,s9,800001e8 <quick_sort+0x74>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 80000324:	00412783          	lw	a5,4(sp)
 80000328:	00178d93          	addi	s11,a5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 8000032c:	eb8dc0e3          	blt	s11,s8,800001cc <quick_sort+0x58>
 80000330:	05412483          	lw	s1,84(sp)
 80000334:	05012903          	lw	s2,80(sp)
@@ -476,14 +355,11 @@ void quick_sort(int *a, int p, int q) {
 8000033c:	03412c83          	lw	s9,52(sp)
 80000340:	03012d03          	lw	s10,48(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:27
-	quick_sort(a, m + 1, q);
 80000344:	00012783          	lw	a5,0(sp)
 80000348:	00178d93          	addi	s11,a5,1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:23
-	if(p >= q) return;
 8000034c:	e57dc8e3          	blt	s11,s7,8000019c <quick_sort+0x28>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:28
-}
 80000350:	05c12083          	lw	ra,92(sp)
 80000354:	05812403          	lw	s0,88(sp)
 80000358:	03c12b83          	lw	s7,60(sp)
@@ -497,7 +373,6 @@ Disassembly of section .data:
 
 80000370 <a>:
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/quick-sort.c:5
-int a[N] = {2, 12, 14, 6, 13, 15, 16, 10, 0, 18, 11, 19, 9, 1, 7, 5, 4, 3, 8, 17};
 80000370:	0002                	.insn	2, 0x0002
 80000372:	0000                	.insn	2, 0x0000
 80000374:	000c                	.insn	2, 0x000c
@@ -537,34 +412,30 @@ int a[N] = {2, 12, 14, 6, 13, 15, 16, 10, 0, 18, 11, 19, 9, 1, 7, 5, 4, 3, 8, 17
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	4541                	.insn	2, 0x4541
+   0:	3741                	.insn	2, 0x3741
    2:	0000                	.insn	2, 0x0000
    4:	7200                	.insn	2, 0x7200
    6:	7369                	.insn	2, 0x7369
    8:	01007663          	bgeu	zero,a6,14 <__stack_size-0x1ffffec>
-   c:	0000003b          	.insn	4, 0x003b
+   c:	002d                	.insn	2, 0x002d
+   e:	0000                	.insn	2, 0x0000
   10:	1004                	.insn	2, 0x1004
   12:	7205                	.insn	2, 0x7205
   14:	3376                	.insn	2, 0x3376
   16:	6932                	.insn	2, 0x6932
   18:	7032                	.insn	2, 0x7032
   1a:	5f31                	.insn	2, 0x5f31
-  1c:	326d                	.insn	2, 0x326d
-  1e:	3070                	.insn	2, 0x3070
-  20:	615f 7032 5f31      	.insn	6, 0x5f317032615f
-  26:	6d7a                	.insn	2, 0x6d7a
-  28:	756d                	.insn	2, 0x756d
-  2a:	316c                	.insn	2, 0x316c
-  2c:	3070                	.insn	2, 0x3070
-  2e:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
-  34:	7031                	.insn	2, 0x7031
-  36:	5f30                	.insn	2, 0x5f30
-  38:	617a                	.insn	2, 0x617a
-  3a:	726c                	.insn	2, 0x726c
-  3c:	70316373          	.insn	4, 0x70316373
-  40:	0030                	.insn	2, 0x0030
-  42:	0108                	.insn	2, 0x0108
-  44:	0b0a                	.insn	2, 0x0b0a
+  1c:	3261                	.insn	2, 0x3261
+  1e:	3170                	.insn	2, 0x3170
+  20:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
+  26:	7031                	.insn	2, 0x7031
+  28:	5f30                	.insn	2, 0x5f30
+  2a:	617a                	.insn	2, 0x617a
+  2c:	726c                	.insn	2, 0x726c
+  2e:	70316373          	.insn	4, 0x70316373
+  32:	0030                	.insn	2, 0x0030
+  34:	0108                	.insn	2, 0x0108
+  36:	0b0a                	.insn	2, 0x0b0a
 
 Disassembly of section .comment:
 

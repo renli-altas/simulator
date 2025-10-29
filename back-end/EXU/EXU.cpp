@@ -12,13 +12,13 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
 void alu(Inst_uop &inst);
 void bru(Inst_uop &inst);
-void ldu(Inst_uop &inst);
+void ldu(Inst_uop &inst, Mem_IO* &io,bool &mispred);
 void stu_addr(Inst_uop &inst);
 void stu_data(Inst_uop &inst);
 void mul(Inst_uop &inst);
 void div(Inst_uop &inst);
 
-void FU::exec(Inst_uop &inst) {
+void FU::exec(Inst_uop &inst, Mem_IO* &io,bool &mispred) {
 
   if (cycle == 0) {
     if (inst.op == UOP_MUL) { // mul
@@ -33,11 +33,36 @@ void FU::exec(Inst_uop &inst) {
   }
 
   cycle++;
-
+  bool is_load = is_load_uop(inst.op);
+  if(mispred){
+      complete = false;
+      cycle = 0;
+      latency=0;
+      if(is_load){
+          ldu(inst, io, mispred);
+      }
+      return ;
+  }
   if (cycle == latency) {
-    if (is_load_uop(inst.op)) {
-      ldu(inst);
-    } else if (is_sta_uop(inst.op)) {
+    if (is_load)
+    {
+      if (io->data_ok)
+      {
+        complete = true;
+        cycle = 0;
+      }
+      else if (!io->data_ok)
+      {
+        latency++;
+        complete = false;
+      }  
+      else
+      {
+        complete = false;
+      }
+      ldu(inst, io, mispred);
+      
+    }else if (is_sta_uop(inst.op)) {
       stu_addr(inst);
     } else if (is_std_uop(inst.op)) {
       stu_data(inst);
@@ -54,8 +79,11 @@ void FU::exec(Inst_uop &inst) {
     } else
       alu(inst);
 
-    complete = true;
-    cycle = 0;
+    if (!is_load)
+    {
+      complete = true;
+      cycle = 0;
+    }
   }
 }
 
@@ -77,7 +105,7 @@ void EXU::comb_exec() {
     io.exe2prf->entry[i].valid = false;
     io.exe2prf->entry[i].uop = inst_r[i].uop;
     if (inst_r[i].valid) {
-      fu[i].exec(io.exe2prf->entry[i].uop);
+      fu[i].exec(io.exe2prf->entry[i].uop, io.exe2cache,io.dec_bcast->mispred);
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&
             ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask))) {

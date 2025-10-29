@@ -8,32 +8,19 @@ Disassembly of section .init:
 80000000 <_start>:
 _start():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:9
-    .type _start,@function
-
-
-_start:
-
-  la gp, __global_pointer
 80000000:	00001197          	auipc	gp,0x1
 80000004:	a1018193          	addi	gp,gp,-1520 # 80000a10 <__global_pointer>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:10
-  la sp, _sp
 80000008:	08000117          	auipc	sp,0x8000
 8000000c:	ff810113          	addi	sp,sp,-8 # 88000000 <_sp>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:12
-
-  call main
 80000010:	00c000ef          	jal	ra,8000001c <main>
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:13
-  ebreak
 80000014:	00100073          	ebreak
 
 80000018 <loop>:
 loop():
 /home/tututu/qimeng/simulator/baremetal/benchmarks/coremark/../../start.S:16
-
-loop:
-    j loop
 80000018:	0000006f          	jal	zero,80000018 <loop>
 
 Disassembly of section .text:
@@ -41,209 +28,152 @@ Disassembly of section .text:
 8000001c <main>:
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:21
-
-	uint8_t * volatile p = buf + byte;
-	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
-}
-
-int main() {
 8000001c:	fe010113          	addi	sp,sp,-32
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:24
-	uint8_t buf[2];
-
-	buf[0] = 0xaa;
 80000020:	0aa00793          	addi	a5,zero,170
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:26
-	buf[1] = 0x0;
-	check(getbit(buf, 0) == 0);
 80000024:	00c10513          	addi	a0,sp,12
 80000028:	00000593          	addi	a1,zero,0
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:21
-int main() {
 8000002c:	00112e23          	sw	ra,28(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:24
-	buf[0] = 0xaa;
 80000030:	00f11623          	sh	a5,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:26
-	check(getbit(buf, 0) == 0);
 80000034:	15c000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-#include <stdint.h>
-typedef unsigned int size_t;
-
-inline void check(int cond) {
-  volatile int *end_flag = (int *)0x1c;
-  if (!cond) {
 80000038:	00050663          	beq	a0,zero,80000044 <main+0x28>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 8000003c:	00100793          	addi	a5,zero,1
 80000040:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:27
-	check(getbit(buf, 1) == 1);
 80000044:	00100593          	addi	a1,zero,1
 80000048:	00c10513          	addi	a0,sp,12
 8000004c:	144000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000050:	00051663          	bne	a0,zero,8000005c <main+0x40>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000054:	00100793          	addi	a5,zero,1
 80000058:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:28
-	check(getbit(buf, 2) == 0);
 8000005c:	00200593          	addi	a1,zero,2
 80000060:	00c10513          	addi	a0,sp,12
 80000064:	12c000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000068:	00050663          	beq	a0,zero,80000074 <main+0x58>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 8000006c:	00100793          	addi	a5,zero,1
 80000070:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:29
-	check(getbit(buf, 3) == 1);
 80000074:	00300593          	addi	a1,zero,3
 80000078:	00c10513          	addi	a0,sp,12
 8000007c:	114000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000080:	00051663          	bne	a0,zero,8000008c <main+0x70>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000084:	00100793          	addi	a5,zero,1
 80000088:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:30
-	check(getbit(buf, 4) == 0);
 8000008c:	00400593          	addi	a1,zero,4
 80000090:	00c10513          	addi	a0,sp,12
 80000094:	0fc000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 80000098:	00050663          	beq	a0,zero,800000a4 <main+0x88>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 8000009c:	00100793          	addi	a5,zero,1
 800000a0:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:31
-	check(getbit(buf, 5) == 1);
 800000a4:	00500593          	addi	a1,zero,5
 800000a8:	00c10513          	addi	a0,sp,12
 800000ac:	0e4000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 800000b0:	00051663          	bne	a0,zero,800000bc <main+0xa0>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 800000b4:	00100793          	addi	a5,zero,1
 800000b8:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:32
-	check(getbit(buf, 6) == 0);
 800000bc:	00600593          	addi	a1,zero,6
 800000c0:	00c10513          	addi	a0,sp,12
 800000c4:	0cc000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 800000c8:	00050663          	beq	a0,zero,800000d4 <main+0xb8>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 800000cc:	00100793          	addi	a5,zero,1
 800000d0:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:33
-	check(getbit(buf, 7) == 1);
 800000d4:	00700593          	addi	a1,zero,7
 800000d8:	00c10513          	addi	a0,sp,12
 800000dc:	0b4000ef          	jal	ra,80000190 <getbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 800000e0:	00051663          	bne	a0,zero,800000ec <main+0xd0>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 800000e4:	00100793          	addi	a5,zero,1
 800000e8:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:35
-
-	setbit(buf, 8, 1);
 800000ec:	00100613          	addi	a2,zero,1
 800000f0:	00800593          	addi	a1,zero,8
 800000f4:	00c10513          	addi	a0,sp,12
 800000f8:	0bc000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:36
-	setbit(buf, 9, 0);
 800000fc:	00c10513          	addi	a0,sp,12
 80000100:	00000613          	addi	a2,zero,0
 80000104:	00900593          	addi	a1,zero,9
 80000108:	0ac000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:37
-	setbit(buf, 10, 1);
 8000010c:	00c10513          	addi	a0,sp,12
 80000110:	00100613          	addi	a2,zero,1
 80000114:	00a00593          	addi	a1,zero,10
 80000118:	09c000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:38
-	setbit(buf, 11, 0);
 8000011c:	00c10513          	addi	a0,sp,12
 80000120:	00000613          	addi	a2,zero,0
 80000124:	00b00593          	addi	a1,zero,11
 80000128:	08c000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:39
-	setbit(buf, 12, 1);
 8000012c:	00c10513          	addi	a0,sp,12
 80000130:	00100613          	addi	a2,zero,1
 80000134:	00c00593          	addi	a1,zero,12
 80000138:	07c000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:40
-	setbit(buf, 13, 0);
 8000013c:	00c10513          	addi	a0,sp,12
 80000140:	00000613          	addi	a2,zero,0
 80000144:	00d00593          	addi	a1,zero,13
 80000148:	06c000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:41
-	setbit(buf, 14, 1);
 8000014c:	00c10513          	addi	a0,sp,12
 80000150:	00100613          	addi	a2,zero,1
 80000154:	00e00593          	addi	a1,zero,14
 80000158:	05c000ef          	jal	ra,800001b4 <setbit>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:42
-	setbit(buf, 15, 0);
 8000015c:	00c10513          	addi	a0,sp,12
 80000160:	00000613          	addi	a2,zero,0
 80000164:	00f00593          	addi	a1,zero,15
 80000168:	04c000ef          	jal	ra,800001b4 <setbit>
 check():
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
-  if (!cond) {
 8000016c:	00d14703          	lbu	a4,13(sp)
 80000170:	05500793          	addi	a5,zero,85
 80000174:	00f70663          	beq	a4,a5,80000180 <main+0x164>
 /home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
-    *end_flag = 1;
 80000178:	00100793          	addi	a5,zero,1
 8000017c:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:46
-	check(buf[1] == 0x55);
-
-	return 0;
-}
 80000180:	01c12083          	lw	ra,28(sp)
 80000184:	00000513          	addi	a0,zero,0
 80000188:	02010113          	addi	sp,sp,32
@@ -252,51 +182,38 @@ main():
 80000190 <getbit>:
 getbit():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:6
-	int byte = offset >> 3;
 80000190:	4035d793          	srai	a5,a1,0x3
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:9
-	return (((uint8_t *)buf)[byte] & mask) != 0;
 80000194:	00f50533          	add	a0,a0,a5
 80000198:	00054503          	lbu	a0,0(a0)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:7
-	offset &= 7;
 8000019c:	0075f593          	andi	a1,a1,7
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:8
-	uint8_t mask = 1 << offset;
 800001a0:	00100793          	addi	a5,zero,1
 800001a4:	00b797b3          	sll	a5,a5,a1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:9
-	return (((uint8_t *)buf)[byte] & mask) != 0;
 800001a8:	00f57533          	and	a0,a0,a5
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:10
-}
 800001ac:	00a03533          	sltu	a0,zero,a0
 800001b0:	00008067          	jalr	zero,0(ra)
 
 800001b4 <setbit>:
 setbit():
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:13
-	int byte = offset >> 3;
 800001b4:	4035d793          	srai	a5,a1,0x3
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:12
-void setbit(void *buf, int offset, bool bit){
 800001b8:	ff010113          	addi	sp,sp,-16
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:17
-	uint8_t * volatile p = buf + byte;
 800001bc:	00f50533          	add	a0,a0,a5
 800001c0:	00a12623          	sw	a0,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 1)
-	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
 800001c4:	00c12703          	lw	a4,12(sp)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:14
-	offset &= 7;
 800001c8:	0075f593          	andi	a1,a1,7
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:15
-	uint8_t mask = 1 << offset;
 800001cc:	00100793          	addi	a5,zero,1
 800001d0:	00b797b3          	sll	a5,a5,a1
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
-	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
 800001d4:	02061063          	bne	a2,zero,800001f4 <setbit+0x40>
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 1)
 800001d8:	00074703          	lbu	a4,0(a4)
@@ -308,11 +225,9 @@ void setbit(void *buf, int offset, bool bit){
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
 800001e8:	00f70023          	sb	a5,0(a4)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:19
-}
 800001ec:	01010113          	addi	sp,sp,16
 800001f0:	00008067          	jalr	zero,0(ra)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 2)
-	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
 800001f4:	00074703          	lbu	a4,0(a4)
 800001f8:	00f767b3          	or	a5,a4,a5
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 4)
@@ -320,41 +235,36 @@ void setbit(void *buf, int offset, bool bit){
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
 80000200:	00f70023          	sb	a5,0(a4)
 /home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:19
-}
 80000204:	01010113          	addi	sp,sp,16
 80000208:	00008067          	jalr	zero,0(ra)
 
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	4541                	.insn	2, 0x4541
+   0:	3741                	.insn	2, 0x3741
    2:	0000                	.insn	2, 0x0000
    4:	7200                	.insn	2, 0x7200
    6:	7369                	.insn	2, 0x7369
    8:	01007663          	bgeu	zero,a6,14 <__stack_size-0x1ffffec>
-   c:	0000003b          	.insn	4, 0x003b
+   c:	002d                	.insn	2, 0x002d
+   e:	0000                	.insn	2, 0x0000
   10:	1004                	.insn	2, 0x1004
   12:	7205                	.insn	2, 0x7205
   14:	3376                	.insn	2, 0x3376
   16:	6932                	.insn	2, 0x6932
   18:	7032                	.insn	2, 0x7032
   1a:	5f31                	.insn	2, 0x5f31
-  1c:	326d                	.insn	2, 0x326d
-  1e:	3070                	.insn	2, 0x3070
-  20:	615f 7032 5f31      	.insn	6, 0x5f317032615f
-  26:	6d7a                	.insn	2, 0x6d7a
-  28:	756d                	.insn	2, 0x756d
-  2a:	316c                	.insn	2, 0x316c
-  2c:	3070                	.insn	2, 0x3070
-  2e:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
-  34:	7031                	.insn	2, 0x7031
-  36:	5f30                	.insn	2, 0x5f30
-  38:	617a                	.insn	2, 0x617a
-  3a:	726c                	.insn	2, 0x726c
-  3c:	70316373          	.insn	4, 0x70316373
-  40:	0030                	.insn	2, 0x0030
-  42:	0108                	.insn	2, 0x0108
-  44:	0b0a                	.insn	2, 0x0b0a
+  1c:	3261                	.insn	2, 0x3261
+  1e:	3170                	.insn	2, 0x3170
+  20:	7a5f 6161 6f6d      	.insn	6, 0x6f6d61617a5f
+  26:	7031                	.insn	2, 0x7031
+  28:	5f30                	.insn	2, 0x5f30
+  2a:	617a                	.insn	2, 0x617a
+  2c:	726c                	.insn	2, 0x726c
+  2e:	70316373          	.insn	4, 0x70316373
+  32:	0030                	.insn	2, 0x0030
+  34:	0108                	.insn	2, 0x0108
+  36:	0b0a                	.insn	2, 0x0b0a
 
 Disassembly of section .comment:
 
