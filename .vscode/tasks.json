@@ -1,0 +1,10 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "cd build && make -j32"   // 这里compile是 Makefile中定义的编译命令
+        }
+    ]
+}

@@ -12,71 +12,99 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
 void alu(Inst_uop &inst);
 void bru(Inst_uop &inst);
-void ldu(Inst_uop &inst, Mem_IO* &io,bool &mispred);
+void ldu(Inst_uop &inst, Mem_IO *&io, bool &flag);
 void stu_addr(Inst_uop &inst);
 void stu_data(Inst_uop &inst);
 void mul(Inst_uop &inst);
 void div(Inst_uop &inst);
 
-void FU::exec(Inst_uop &inst, Mem_IO* &io,bool &mispred) {
+void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
+{
 
-  if (cycle == 0) {
-    if (inst.op == UOP_MUL) { // mul
+  if (cycle == 0)
+  {
+    if (inst.op == UOP_MUL)
+    { // mul
       latency = 1;
-    } else if (inst.op == UOP_DIV) { // div
+    }
+    else if (inst.op == UOP_DIV)
+    { // div
       latency = 1;
-    } else if (inst.op == UOP_LOAD) {
+    }
+    else if (inst.op == UOP_LOAD)
+    {
       latency = 1;
-    } else {
+    }
+    else
+    {
       latency = 1;
     }
   }
 
   cycle++;
   bool is_load = is_load_uop(inst.op);
-  if(mispred){
-      complete = false;
-      cycle = 0;
-      latency=0;
-      if(is_load){
-          ldu(inst, io, mispred);
-      }
-      return ;
+  bool flag = false;
+  if (mispred)
+  {
+    if (ARB_LOG)
+    {
+      printf("mispred in FU\n");
+    }
+    complete = false;
+    cycle = 0;
+    latency = 0;
+    io->req = false;
+    io->wr = 0;
+    io->wdata = 0;
+    io->wstrb = 0;
+    io->addr = 0;
+    return;
   }
-  if (cycle == latency) {
+  if(ARB_LOG)
+  printf("fu_is_load:%d cycle:%d latency:%d\n",is_load,cycle,latency);
+  if (cycle == latency)
+  {
     if (is_load)
     {
-      if (io->data_ok)
+      ldu(inst, io, flag);
+      if (io->data_ok || flag)
       {
         complete = true;
         cycle = 0;
       }
-      else if (!io->data_ok)
-      {
-        latency++;
-        complete = false;
-      }  
       else
       {
+        if (!io->data_ok)latency++;
         complete = false;
       }
-      ldu(inst, io, mispred);
-      
-    }else if (is_sta_uop(inst.op)) {
+    }
+    else if (is_sta_uop(inst.op))
+    {
       stu_addr(inst);
-    } else if (is_std_uop(inst.op)) {
+    }
+    else if (is_std_uop(inst.op))
+    {
       stu_data(inst);
-    } else if (is_branch_uop(inst.op)) {
+    }
+    else if (is_branch_uop(inst.op))
+    {
       bru(inst);
-    } else if (inst.op == UOP_MUL) {
+    }
+    else if (inst.op == UOP_MUL)
+    {
       mul(inst);
-    } else if (inst.op == UOP_DIV) {
+    }
+    else if (inst.op == UOP_DIV)
+    {
       div(inst);
-    } else if (inst.op == UOP_SFENCE_VMA) {
+    }
+    else if (inst.op == UOP_SFENCE_VMA)
+    {
       uint32_t vaddr = 0;
       uint32_t asid = 0;
       // TODO: sfence.vma
-    } else
+    }
+    else
       alu(inst);
 
     if (!is_load)
@@ -87,93 +115,132 @@ void FU::exec(Inst_uop &inst, Mem_IO* &io,bool &mispred) {
   }
 }
 
-void EXU::init() {
-  for (int i = 0; i < ISSUE_WAY; i++) {
+void EXU::init()
+{
+  for (int i = 0; i < ISSUE_WAY; i++)
+  {
     inst_r[i].valid = false;
   }
 }
 
-void EXU::comb_ready() {
-  for (int i = 0; i < ISSUE_WAY; i++) {
+void EXU::comb_ready()
+{
+  for (int i = 0; i < ISSUE_WAY; i++)
+  {
     io.exe2iss->ready[i] =
         (!inst_r[i].valid || fu[i].complete) && !io.dec_bcast->mispred;
+    if (ARB_LOG)
+    {
+      printf("fu_ready:%d inst_r[i].valid:%d fu[i].complete:%d io.dec_bcast->mispred:%d inst_r[i].uop.instruction:%08x inst_r[i].uop.addr:%08x\n", io.exe2iss->ready[i], inst_r[i].valid, fu[i].complete, io.dec_bcast->mispred, inst_r[i].uop.instruction, inst_r[i].uop.imm+inst_r[i].uop.src1_rdata);
+    }
+    
   }
 }
 
-void EXU::comb_exec() {
-  for (int i = 0; i < ISSUE_WAY; i++) {
+void EXU::comb_exec()
+{
+  for (int i = 0; i < ISSUE_WAY; i++)
+  {
     io.exe2prf->entry[i].valid = false;
     io.exe2prf->entry[i].uop = inst_r[i].uop;
-    if (inst_r[i].valid) {
-      fu[i].exec(io.exe2prf->entry[i].uop, io.exe2cache,io.dec_bcast->mispred);
+    if (inst_r[i].valid)
+    {
+      fu[i].exec(io.exe2prf->entry[i].uop, io.exe2cache, io.dec_bcast->mispred|io.rob_bcast->flush);
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&
-            ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask))) {
+            ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask)))
+      {
         io.exe2prf->entry[i].valid = true;
-      } else {
+      }
+      else
+      {
         io.exe2prf->entry[i].valid = false;
       }
     }
   }
 
   // store
-  if (inst_r[IQ_STA].valid) {
+  if (inst_r[IQ_STA].valid)
+  {
     io.exe2stq->addr_entry = io.exe2prf->entry[IQ_STA];
-  } else {
+  }
+  else
+  {
     io.exe2stq->addr_entry.valid = false;
   }
 
-  if (inst_r[IQ_STD].valid) {
+  if (inst_r[IQ_STD].valid)
+  {
     io.exe2stq->data_entry = io.exe2prf->entry[IQ_STD];
-  } else {
+  }
+  else
+  {
     io.exe2stq->data_entry.valid = false;
   }
 }
 
-void EXU::comb_to_csr() {
+void EXU::comb_to_csr()
+{
   io.exe2csr->we = false;
   io.exe2csr->re = false;
 
-  if (inst_r[0].valid && inst_r[0].uop.op == UOP_CSR && !io.rob_bcast->flush) {
+  if (inst_r[0].valid && inst_r[0].uop.op == UOP_CSR && !io.rob_bcast->flush)
+  {
     io.exe2csr->we = inst_r[0].uop.func3 == 1 || inst_r[0].uop.src1_areg != 0;
 
     io.exe2csr->re = inst_r[0].uop.func3 != 1 || inst_r[0].uop.dest_areg != 0;
 
     io.exe2csr->idx = inst_r[0].uop.csr_idx;
     io.exe2csr->wcmd = inst_r[0].uop.func3 & 0b11;
-    if (inst_r[0].uop.src2_is_imm) {
+    if (inst_r[0].uop.src2_is_imm)
+    {
       io.exe2csr->wdata = inst_r[0].uop.imm;
-    } else {
+    }
+    else
+    {
       io.exe2csr->wdata = inst_r[0].uop.src1_rdata;
     }
   }
 }
 
-void EXU::comb_from_csr() {
-  if (inst_r[0].valid && inst_r[0].uop.op == UOP_CSR && io.exe2csr->re) {
+void EXU::comb_from_csr()
+{
+  if (inst_r[0].valid && inst_r[0].uop.op == UOP_CSR && io.exe2csr->re)
+  {
     io.exe2prf->entry[0].uop.result = io.csr2exe->rdata;
   }
 }
 
-void EXU::comb_pipeline() {
-  for (int i = 0; i < ISSUE_WAY; i++) {
-    if (io.prf2exe->iss_entry[i].valid && io.exe2iss->ready[i]) {
+void EXU::comb_pipeline()
+{
+  for (int i = 0; i < ISSUE_WAY; i++)
+  {
+    if (io.prf2exe->iss_entry[i].valid && io.exe2iss->ready[i])
+    {
       inst_r_1[i] = io.prf2exe->iss_entry[i];
       fu[i].complete = false;
       fu[i].cycle = 0;
-    } else if (io.exe2prf->entry[i].valid && io.prf2exe->ready[i]) {
+    }
+    else if (io.exe2prf->entry[i].valid && io.prf2exe->ready[i])
+    {
       inst_r_1[i].valid = false;
       fu[i].complete = false;
       fu[i].cycle = 0;
     }
+    if(ARB_LOG)
+    printf("io.prf2exe->iss_entry[%d].valid:%d io.exe2iss->ready[%d]:%d\n", i, io.prf2exe->iss_entry[i].valid, i, io.exe2iss->ready[i]);
   }
 }
 
-void EXU::comb_branch() {
-  if (io.dec_bcast->mispred) {
-    for (int i = 0; i < ISSUE_WAY; i++) {
+void EXU::comb_branch()
+{
+  if (io.dec_bcast->mispred)
+  {
+    for (int i = 0; i < ISSUE_WAY; i++)
+    {
       if (inst_r[i].valid &&
-          (io.dec_bcast->br_mask & (1 << inst_r[i].uop.tag))) {
+          (io.dec_bcast->br_mask & (1 << inst_r[i].uop.tag)))
+      {
         inst_r_1[i].valid = false;
         fu[i].complete = false;
         fu[i].cycle = 0;
@@ -182,18 +249,25 @@ void EXU::comb_branch() {
   }
 }
 
-void EXU::comb_flush() {
-  if (io.rob_bcast->flush) {
-    for (int i = 0; i < ISSUE_WAY; i++) {
+void EXU::comb_flush()
+{
+  if (io.rob_bcast->flush)
+  {
+    for (int i = 0; i < ISSUE_WAY; i++)
+    {
       inst_r_1[i].valid = false;
       fu[i].complete = false;
       fu[i].cycle = 0;
     }
+    if(ARB_LOG)
+    printf("FLUSH EXU\n");
   }
 }
 
-void EXU::seq() {
-  for (int i = 0; i < ISSUE_WAY; i++) {
+void EXU::seq()
+{
+  for (int i = 0; i < ISSUE_WAY; i++)
+  {
     inst_r[i] = inst_r_1[i];
   }
 }

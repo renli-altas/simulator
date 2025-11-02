@@ -197,7 +197,7 @@ void alu(Inst_uop &inst) {
   }
 }
 
-void ldu(Inst_uop &inst,Mem_IO* &io,bool &mispred) {
+void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
   uint32_t addr = inst.src1_rdata + inst.imm;
 
   if (addr == 0x1fd0e000) {
@@ -215,6 +215,7 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &mispred) {
   }
 
   uint32_t data;
+  // bool page_fault = !load_data(data, addr, inst.rob_idx);
   uint32_t p_addr = addr;
   bool ret = true;
 
@@ -234,50 +235,54 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &mispred) {
   if (p_addr == 0x1fd0e000)
   {
     data = commit_num;
+    flag=true;
+    io->req = false;
+    io->wr = 0;
+    io->wdata = 0;
+    io->wstrb = 0;
+    io->addr = 0;
   }
   else if (p_addr == 0x1fd0e004)
   {
     data = 0;
+    flag=true;
+    io->req = false;
+    io->wr = 0;
+    io->wdata = 0;
+    io->wstrb = 0;
+    io->addr = 0;
   }
   else
   {
-    if (!mispred)
+    if (io->req == false)
     {
-      if (io->req == false)
-      {
-        io->req = true;
-        io->wr = 0;
-        io->wdata = 0;
-        io->wstrb = 0;
-        io->addr = p_addr;
-      }
-      else if (io->addr == p_addr && io->data_ok == true)
-      {
-        data = io->rdata;
-        io->req = false;
-        io->wr = 0;
-        io->wdata = 0;
-        io->wstrb = 0;
-        io->addr = 0;
-        // printf("fu2 load addr:%x data:%x\n", p_addr, data);
-        back.stq.st2ld_fwd(p_addr, data, inst.rob_idx);
-      }
-      else
-      {
-        io->req = true;
-        io->wr = 0;
-        io->wdata = 0;
-        io->wstrb = 0;
-        io->addr = p_addr;
-      }
+      io->req = true;
+      io->wr = 0;
+      io->wdata = 0;
+      io->wstrb = 0;
+      io->addr = p_addr;
     }
-    else{
+    else if (io->data_ok == true)
+    {
+      data = io->rdata;
       io->req = false;
       io->wr = 0;
       io->wdata = 0;
       io->wstrb = 0;
       io->addr = 0;
+      back.stq.st2ld_fwd(p_addr, data, inst.rob_idx);
     }
+    else
+    {
+      io->req = true;
+      io->wr = 0;
+      io->wdata = 0;
+      io->wstrb = 0;
+      io->addr = p_addr;
+    }
+  }
+  if(ARB_LOG){
+      printf("FU load add:%08x p_addr:%08x req:%d wr:%d wdata:%08x wstrb:%x addr:%08x data_ok:%d rdata:%08x\n",addr,p_addr,io->req,io->wr,io->wdata,io->wstrb,io->addr,io->data_ok,io->rdata);
   }
   bool page_fault = !ret;
 

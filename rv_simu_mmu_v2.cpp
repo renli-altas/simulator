@@ -258,34 +258,37 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
   return false;
 }
 
-bool load_data(uint32_t &data, uint32_t v_addr, int rob_idx) {
-  uint32_t p_addr = v_addr;
-  bool ret = true;
+// bool load_data(uint32_t &data, uint32_t v_addr, int rob_idx) {
+//   uint32_t p_addr = v_addr;
+//   bool ret = true;
 
-  if (back.csr.CSR_RegFile[number_satp] & 0x80000000 &&
-      back.csr.privilege != 3) {
-    bool mstatus[32], sstatus[32];
-    cvt_number_to_bit_unsigned(mstatus, back.csr.CSR_RegFile[number_mstatus],
-                               32);
+//   if (back.csr.CSR_RegFile[number_satp] & 0x80000000 &&
+//       back.csr.privilege != 3) {
+//     bool mstatus[32], sstatus[32];
+//     cvt_number_to_bit_unsigned(mstatus, back.csr.CSR_RegFile[number_mstatus],
+//                                32);
 
-    cvt_number_to_bit_unsigned(sstatus, back.csr.CSR_RegFile[number_sstatus],
-                               32);
+//     cvt_number_to_bit_unsigned(sstatus, back.csr.CSR_RegFile[number_sstatus],
+//                                32);
 
-    ret = va2pa(p_addr, v_addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
-                sstatus, back.csr.privilege, p_memory);
-  }
+//     ret = va2pa(p_addr, v_addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
+//                 sstatus, back.csr.privilege, p_memory);
+//   }
 
-  if (p_addr == 0x1fd0e000) {
-    data = commit_num;
-  } else if (p_addr == 0x1fd0e004) {
-    data = 0;
-  } else {
-    data = p_memory[p_addr >> 2];
-    back.stq.st2ld_fwd(p_addr, data, rob_idx);
-  }
+//   if (p_addr == 0x1fd0e000) {
+//     data = commit_num;
+//   } else if (p_addr == 0x1fd0e004) {
+//     data = 0;
+//   } else {
+//     data = p_memory[p_addr >> 2];
+//     if( MEM_LOG) {
+//       cout << "load data " << hex << data << " from " << p_addr << endl;
+//     }
+//     back.stq.st2ld_fwd(p_addr, data, rob_idx,fwd_flag);
+//   }
 
-  return ret;
-}
+//   return ret;
+// }
 
 void front_cycle(bool stall, bool misprediction, bool exception,
                  front_top_in &front_in, front_top_out &front_out,

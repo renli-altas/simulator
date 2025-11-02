@@ -4,7 +4,7 @@
 #include <config.h>
 #include <memory_config.h>
 
-const int Latency = 10; // 内存延迟10个周期
+const int Latency = 2; // 内存延迟10个周期
 const int MemorySize = 1<<20; // 1MB内存
 
 class MEMORY_IO

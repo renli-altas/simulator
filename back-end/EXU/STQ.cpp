@@ -83,6 +83,7 @@ void STQ::comb() {
       p_memory[0xc201004 / 4] = 0x0;
       /*output_data_from_RISCV[1152 + 31 - 9] = 0; // mip*/
       /*output_data_from_RISCV[1568 + 31 - 9] = 0; // sip*/
+    // }
     }else {
       io.stq2cache->req = true;
       io.stq2cache->wr = true;
@@ -90,6 +91,7 @@ void STQ::comb() {
       io.stq2cache->wdata = wdata;
       io.stq2cache->addr = waddr;
       write_flag = 1;
+      // printf("store addr:%x data:%x mask:%x\n", waddr, wdata, wstrb);
     }
 
     if(write_flag==0||(write_flag==1&&io.stq2cache->req && io.stq2cache->data_ok))

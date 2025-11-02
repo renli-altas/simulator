@@ -42,13 +42,31 @@ void MEMORY::seq()
         state = MEM_IDLE;
     }
 
+    if(state == LATENCY){
+        Latency_cnt++;
+    }
+    else{
+        Latency_cnt =0 ;
+    }
+    if(state == TRANSFER){
+        data_cnt ++;
+    }else{
+        data_cnt =0;
+    }
+    
+    if(state ==TRANSFER){
+        lastreg = data_cnt == (io.mem->control.len+1);
+    }else{
+        lastreg = false;
+    }
+
     // printf("memory state:%d\n",state);
     // printf("memory mem.en:%d mem.wen:%d mem.addr:%08x mem.wdata:%08x mem.sel:%d mem.len:%d mem.size%d mem.last:%d\n",io.mem->control.en,io.mem->control.wen,io.mem->control.addr,io.mem->control.wdata,io.mem->control.sel,io.mem->control.len,io.mem->control.size,io.mem->control.last);
     if(state == TRANSFER){
         if(io.mem->control.wen==0){
             rdata = p_memory[(io.mem->control.addr >> 2)];
             if(MEM_LOG){
-                printf("\n\nload  data %08x in %08x(%08x) mask %d\n",io.mem->data.data,io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel);
+                printf("\n\n\nload  data %08x in %08x(%08x) mask %d\n",rdata,io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel);
             }
         }
         else{
@@ -66,26 +84,9 @@ void MEMORY::seq()
             p_memory[io.mem->control.addr >> 2] = (mask & io.mem->control.wdata) | (~mask & old_data);
         
             if(MEM_LOG){
-                printf("store data %08x in %08x(%08x) mask %d\n",p_memory[io.mem->control.addr>>2],io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel);
+                printf("\n\n\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n",p_memory[io.mem->control.addr>>2],io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel,old_data);
             }
         }
     }
 
-    if(state ==TRANSFER){
-        lastreg = data_cnt == (io.mem->control.len+1);
-    }else{
-        lastreg = false;
-    }
-
-    if(state == LATENCY){
-        Latency_cnt++;
-    }
-    else{
-        Latency_cnt =0 ;
-    }
-    if(state == TRANSFER){
-        data_cnt ++;
-    }else{
-        data_cnt =0;
-    }
 }
