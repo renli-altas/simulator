@@ -5,13 +5,6 @@
 #include <cmath>
 #include "Dcache_Utils.h"
 
-enum Dcache_State
-{
-    DCACHE_IDLE = 0,
-    DCACHE_WAIT_MEM_LD = 1,
-    DCACHE_WAIT_MEM_ST = 2,
-};
-
 class Dcache_IO
 {
 public:
@@ -20,7 +13,18 @@ public:
   bool flush;
 };
 
-class Dcache
+enum Dcache_State_LD
+{
+    DCACHE_IDLE_LD = 0,
+    DCACHE_WAIT_LD = 1,
+};
+enum Dcache_State_ST
+{
+    DCACHE_IDLE_ST = 0,
+    DCACHE_WAIT_ST = 1,
+};
+
+class Dcache_Check
 {
 public:
 
@@ -45,7 +49,13 @@ public:
   uint32_t hit_way_st;
 
   Dcache_IO io;
-  Dcache_State state;
+
+  uint32_t old_tag_ld;
+  uint32_t old_tag_st;
 
   uint32_t hit_num;
+  uint32_t miss_num;
+
+  Dcache_State_LD state_ld;
+  Dcache_State_ST state_st;
 };

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <Memory.h>
 #include <Arbiter.h>
+#include <Dcache_Check.h>
 typedef struct {
   uint32_t inst[FETCH_WIDTH];
   uint32_t pc[FETCH_WIDTH];
@@ -48,6 +49,7 @@ public:
 
   Arbiter arbiter;
   MEMORY pmemory;
+  Dcache_Check dcache;
 
   Back_in in;
   Back_out out;

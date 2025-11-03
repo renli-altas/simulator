@@ -259,8 +259,6 @@ void EXU::comb_flush()
       fu[i].complete = false;
       fu[i].cycle = 0;
     }
-    if(ARB_LOG)
-    printf("FLUSH EXU\n");
   }
 }
 

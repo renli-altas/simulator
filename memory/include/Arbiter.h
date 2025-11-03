@@ -8,6 +8,10 @@ class ARBITER_IO
 public:
   Mem_IO *cpu_ld;
   Mem_IO *cpu_st;
+
+  Mem_IO *cache_ld;
+  Mem_IO *cache_st;
+
   EXMem_IO *mem;
 };
 

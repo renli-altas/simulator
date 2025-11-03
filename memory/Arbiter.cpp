@@ -49,6 +49,18 @@ void Arbiter::comb_in()
     io.mem->control.size=0;
     io.mem->control.last=1;
 
+    io.cache_ld->req=io.cpu_ld->req;
+    io.cache_st->req=io.cpu_st->req;
+    io.cache_ld->addr=io.cpu_ld->addr;
+    io.cache_ld->wdata=io.cpu_ld->wdata;
+    io.cache_ld->wr=io.cpu_ld->wr;
+    io.cache_ld->wstrb=io.cpu_ld->wstrb;
+    io.cache_st->addr=io.cpu_st->addr;
+    io.cache_st->wdata=io.cpu_st->wdata;    
+    io.cache_st->wr=io.cpu_st->wr;
+    io.cache_st->wstrb=io.cpu_st->wstrb;
+    io.cache_st->wdata=io.cpu_st->wdata;
+
 }
 void Arbiter::comb_out()
 {

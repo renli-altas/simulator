@@ -111,6 +111,10 @@ Exe_Csr exe2csr;
 Mem_IO exe2cache;
 Mem_IO stq2cache;
 EXMem_IO arbiter2mem;
+
+Mem_IO arbiter2cache_ld;
+Mem_IO arbiter2cache_st;
+
 void Back_Top::init() {
 
   idu.io.front2dec = &front2dec;
@@ -201,6 +205,11 @@ void Back_Top::init() {
   csr.io.csr2exe = &csr2exe;
   csr.io.rob_bcast = &rob_bcast;
 
+  arbiter.io.cache_ld = &arbiter2cache_ld;
+  arbiter.io.cache_st = &arbiter2cache_st;
+  dcache.io.cpu_ld = &arbiter2cache_ld;
+  dcache.io.cpu_st = &arbiter2cache_st;
+
   idu.init();
   isu.init();
   prf.init();
@@ -208,6 +217,7 @@ void Back_Top::init() {
   csr.init();
   rob.init();
   arbiter.init();
+  dcache.init();
   pmemory.init();
 }
 
@@ -270,6 +280,7 @@ void Back_Top::Back_comb() {
   exu.comb_pipeline();
   exu.comb_flush();
   arbiter.comb_in();
+  dcache.comb();
   pmemory.comb();
   arbiter.comb_out();
   prf.comb_write();
@@ -326,6 +337,7 @@ void Back_Top::Back_seq() {
   stq.seq();
   csr.seq();
   arbiter.seq();
+  dcache.seq();
   pmemory.seq();
   for (int i = 0; i < FETCH_WIDTH; i++) {
     out.fire[i] = idu.io.dec2front->fire[i];

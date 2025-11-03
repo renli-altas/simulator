@@ -155,6 +155,11 @@ SIM_END:
     printf("\033[1;32mcycle num      : %lld\033[0m\n", sim_time);
     printf("\033[1;32mipc            : %f\033[0m\n",
            (double)commit_num / sim_time);
+    printf("\033[1;32mhitnum         : %d\033[0m\n",back.dcache.hit_num);
+    printf("\033[1;32mmissnum        : %d\033[0m\n",back.dcache.miss_num);
+    printf("\033[1;32mdcache hit rate: %f\033[0m\n",
+           (double)back.dcache.hit_num /
+               (double)(back.dcache.hit_num + back.dcache.miss_num));
     cout << "\033[1;32m-----------------------------\033[0m" << endl;
     cout << endl;
 
