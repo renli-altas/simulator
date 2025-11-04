@@ -283,10 +283,11 @@ void Back_Top::Back_comb() {
   exu.comb_branch();
   exu.comb_pipeline();
   exu.comb_flush();
+  dcache.comb_in();
   arbiter.comb_in();
-  dcache.comb();
   pmemory.comb();
   arbiter.comb_out();
+  dcache.comb_out();
   prf.comb_write();
   prf.comb_branch();
   prf.comb_pipeline();
@@ -340,8 +341,8 @@ void Back_Top::Back_seq() {
   rob.seq();
   stq.seq();
   csr.seq();
-  arbiter.seq();
   dcache.seq();
+  arbiter.seq();
   pmemory.seq();
   for (int i = 0; i < FETCH_WIDTH; i++) {
     out.fire[i] = idu.io.dec2front->fire[i];

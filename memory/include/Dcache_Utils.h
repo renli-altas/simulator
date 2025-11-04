@@ -30,8 +30,8 @@ void updatelru(int linenum);
 int getlru(int linenum);
 void uselru(int linenum,int way);
 
-void write_cache_line(uint32_t index,uint32_t way,uint32_t offset,uint32_t wdata,uint8_t wstrb);
-uint32_t read_cache_line(uint32_t index,uint32_t way,uint32_t offset);
+void write_cache_data(uint32_t index,uint32_t way,uint32_t offset,uint32_t wdata,uint8_t wstrb);
+uint32_t read_cache_data(uint32_t index,uint32_t way,uint32_t offset);
 bool hit_check(uint32_t index,uint32_t tag,uint32_t &hit_way);
 
 void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset);
@@ -43,4 +43,4 @@ void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& d
 void transfer_zero(EXMem_IO* &mem);
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset);
 void write_data(EXMem_IO* &mem,uint32_t data,uint32_t addr,uint32_t offset);
-void miss_deal(uint32_t index, uint32_t way, uint32_t tag,uint32_t &hit_way,bool &dirty_writeback);
+void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback);

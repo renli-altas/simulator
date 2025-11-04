@@ -27,153 +27,210 @@ Disassembly of section .text:
 
 8000001c <main>:
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:21
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:21
+
+	uint8_t * volatile p = buf + byte;
+	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
+}
+
+int main() {
 8000001c:	fe010113          	addi	sp,sp,-32
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:24
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:24
+	uint8_t buf[2];
+
+	buf[0] = 0xaa;
 80000020:	0aa00793          	addi	a5,zero,170
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:26
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:26
+	buf[1] = 0x0;
+	check(getbit(buf, 0) == 0);
 80000024:	00c10513          	addi	a0,sp,12
 80000028:	00000593          	addi	a1,zero,0
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:21
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:21
+int main() {
 8000002c:	00112e23          	sw	ra,28(sp)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:24
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:24
+	buf[0] = 0xaa;
 80000030:	00f11623          	sh	a5,12(sp)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:26
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:26
+	check(getbit(buf, 0) == 0);
 80000034:	15c000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+#include <stdint.h>
+typedef unsigned int size_t;
+
+inline void check(int cond) {
+  volatile int *end_flag = (int *)0x1c;
+  if (!cond) {
 80000038:	00050663          	beq	a0,zero,80000044 <main+0x28>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 8000003c:	00100793          	addi	a5,zero,1
 80000040:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:27
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:27
+	check(getbit(buf, 1) == 1);
 80000044:	00100593          	addi	a1,zero,1
 80000048:	00c10513          	addi	a0,sp,12
 8000004c:	144000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 80000050:	00051663          	bne	a0,zero,8000005c <main+0x40>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 80000054:	00100793          	addi	a5,zero,1
 80000058:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:28
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:28
+	check(getbit(buf, 2) == 0);
 8000005c:	00200593          	addi	a1,zero,2
 80000060:	00c10513          	addi	a0,sp,12
 80000064:	12c000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 80000068:	00050663          	beq	a0,zero,80000074 <main+0x58>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 8000006c:	00100793          	addi	a5,zero,1
 80000070:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:29
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:29
+	check(getbit(buf, 3) == 1);
 80000074:	00300593          	addi	a1,zero,3
 80000078:	00c10513          	addi	a0,sp,12
 8000007c:	114000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 80000080:	00051663          	bne	a0,zero,8000008c <main+0x70>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 80000084:	00100793          	addi	a5,zero,1
 80000088:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:30
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:30
+	check(getbit(buf, 4) == 0);
 8000008c:	00400593          	addi	a1,zero,4
 80000090:	00c10513          	addi	a0,sp,12
 80000094:	0fc000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 80000098:	00050663          	beq	a0,zero,800000a4 <main+0x88>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 8000009c:	00100793          	addi	a5,zero,1
 800000a0:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:31
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:31
+	check(getbit(buf, 5) == 1);
 800000a4:	00500593          	addi	a1,zero,5
 800000a8:	00c10513          	addi	a0,sp,12
 800000ac:	0e4000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 800000b0:	00051663          	bne	a0,zero,800000bc <main+0xa0>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 800000b4:	00100793          	addi	a5,zero,1
 800000b8:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:32
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:32
+	check(getbit(buf, 6) == 0);
 800000bc:	00600593          	addi	a1,zero,6
 800000c0:	00c10513          	addi	a0,sp,12
 800000c4:	0cc000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 800000c8:	00050663          	beq	a0,zero,800000d4 <main+0xb8>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 800000cc:	00100793          	addi	a5,zero,1
 800000d0:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:33
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:33
+	check(getbit(buf, 7) == 1);
 800000d4:	00700593          	addi	a1,zero,7
 800000d8:	00c10513          	addi	a0,sp,12
 800000dc:	0b4000ef          	jal	ra,80000190 <getbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 800000e0:	00051663          	bne	a0,zero,800000ec <main+0xd0>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 800000e4:	00100793          	addi	a5,zero,1
 800000e8:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:35
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:35
+
+	setbit(buf, 8, 1);
 800000ec:	00100613          	addi	a2,zero,1
 800000f0:	00800593          	addi	a1,zero,8
 800000f4:	00c10513          	addi	a0,sp,12
 800000f8:	0bc000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:36
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:36
+	setbit(buf, 9, 0);
 800000fc:	00c10513          	addi	a0,sp,12
 80000100:	00000613          	addi	a2,zero,0
 80000104:	00900593          	addi	a1,zero,9
 80000108:	0ac000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:37
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:37
+	setbit(buf, 10, 1);
 8000010c:	00c10513          	addi	a0,sp,12
 80000110:	00100613          	addi	a2,zero,1
 80000114:	00a00593          	addi	a1,zero,10
 80000118:	09c000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:38
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:38
+	setbit(buf, 11, 0);
 8000011c:	00c10513          	addi	a0,sp,12
 80000120:	00000613          	addi	a2,zero,0
 80000124:	00b00593          	addi	a1,zero,11
 80000128:	08c000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:39
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:39
+	setbit(buf, 12, 1);
 8000012c:	00c10513          	addi	a0,sp,12
 80000130:	00100613          	addi	a2,zero,1
 80000134:	00c00593          	addi	a1,zero,12
 80000138:	07c000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:40
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:40
+	setbit(buf, 13, 0);
 8000013c:	00c10513          	addi	a0,sp,12
 80000140:	00000613          	addi	a2,zero,0
 80000144:	00d00593          	addi	a1,zero,13
 80000148:	06c000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:41
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:41
+	setbit(buf, 14, 1);
 8000014c:	00c10513          	addi	a0,sp,12
 80000150:	00100613          	addi	a2,zero,1
 80000154:	00e00593          	addi	a1,zero,14
 80000158:	05c000ef          	jal	ra,800001b4 <setbit>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:42
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:42
+	setbit(buf, 15, 0);
 8000015c:	00c10513          	addi	a0,sp,12
 80000160:	00000613          	addi	a2,zero,0
 80000164:	00f00593          	addi	a1,zero,15
 80000168:	04c000ef          	jal	ra,800001b4 <setbit>
 check():
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:9
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:9
+  if (!cond) {
 8000016c:	00d14703          	lbu	a4,13(sp)
 80000170:	05500793          	addi	a5,zero,85
 80000174:	00f70663          	beq	a4,a5,80000180 <main+0x164>
-/home/tututu/qimeng/simulator/baremetal/test/../include/trap.h:10
+/home/renli/qimeng/simulator/baremetal/test/../include/trap.h:10
+    *end_flag = 1;
 80000178:	00100793          	addi	a5,zero,1
 8000017c:	00f02e23          	sw	a5,28(zero) # 1c <__stack_size-0x1ffffe4>
 main():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:46
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:46
+	check(buf[1] == 0x55);
+
+	return 0;
+}
 80000180:	01c12083          	lw	ra,28(sp)
 80000184:	00000513          	addi	a0,zero,0
 80000188:	02010113          	addi	sp,sp,32
@@ -181,60 +238,76 @@ main():
 
 80000190 <getbit>:
 getbit():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:6
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:6
+	int byte = offset >> 3;
 80000190:	4035d793          	srai	a5,a1,0x3
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:9
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:9
+	return (((uint8_t *)buf)[byte] & mask) != 0;
 80000194:	00f50533          	add	a0,a0,a5
 80000198:	00054503          	lbu	a0,0(a0)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:7
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:7
+	offset &= 7;
 8000019c:	0075f593          	andi	a1,a1,7
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:8
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:8
+	uint8_t mask = 1 << offset;
 800001a0:	00100793          	addi	a5,zero,1
 800001a4:	00b797b3          	sll	a5,a5,a1
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:9
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:9
+	return (((uint8_t *)buf)[byte] & mask) != 0;
 800001a8:	00f57533          	and	a0,a0,a5
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:10
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:10
+}
 800001ac:	00a03533          	sltu	a0,zero,a0
 800001b0:	00008067          	jalr	zero,0(ra)
 
 800001b4 <setbit>:
 setbit():
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:13
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:13
+	int byte = offset >> 3;
 800001b4:	4035d793          	srai	a5,a1,0x3
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:12
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:12
+void setbit(void *buf, int offset, bool bit){
 800001b8:	ff010113          	addi	sp,sp,-16
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:17
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:17
+	uint8_t * volatile p = buf + byte;
 800001bc:	00f50533          	add	a0,a0,a5
 800001c0:	00a12623          	sw	a0,12(sp)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 1)
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 1)
+	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
 800001c4:	00c12703          	lw	a4,12(sp)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:14
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:14
+	offset &= 7;
 800001c8:	0075f593          	andi	a1,a1,7
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:15
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:15
+	uint8_t mask = 1 << offset;
 800001cc:	00100793          	addi	a5,zero,1
 800001d0:	00b797b3          	sll	a5,a5,a1
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
+	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
 800001d4:	02061063          	bne	a2,zero,800001f4 <setbit+0x40>
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 1)
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 1)
 800001d8:	00074703          	lbu	a4,0(a4)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
 800001dc:	fff7c793          	xori	a5,a5,-1
 800001e0:	00f777b3          	and	a5,a4,a5
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 4)
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 4)
 800001e4:	00c12703          	lw	a4,12(sp)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
 800001e8:	00f70023          	sb	a5,0(a4)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:19
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:19
+}
 800001ec:	01010113          	addi	sp,sp,16
 800001f0:	00008067          	jalr	zero,0(ra)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 2)
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 2)
+	*p = (bit == 0 ? (*p & ~mask) : (*p | mask));
 800001f4:	00074703          	lbu	a4,0(a4)
 800001f8:	00f767b3          	or	a5,a4,a5
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 4)
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18 (discriminator 4)
 800001fc:	00c12703          	lw	a4,12(sp)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:18
 80000200:	00f70023          	sb	a5,0(a4)
-/home/tututu/qimeng/simulator/baremetal/test/cpu-tests/bit.c:19
+/home/renli/qimeng/simulator/baremetal/test/cpu-tests/bit.c:19
+}
 80000204:	01010113          	addi	sp,sp,16
 80000208:	00008067          	jalr	zero,0(ra)
 
@@ -271,14 +344,10 @@ Disassembly of section .comment:
 00000000 <.comment>:
    0:	3a434347          	.insn	4, 0x3a434347
    4:	2820                	.insn	2, 0x2820
-   6:	33623167          	.insn	4, 0x33623167
-   a:	3630                	.insn	2, 0x3630
-   c:	3330                	.insn	2, 0x3330
-   e:	6139                	.insn	2, 0x6139
-  10:	2029                	.insn	2, 0x2029
-  12:	3531                	.insn	2, 0x3531
-  14:	312e                	.insn	2, 0x312e
-  16:	302e                	.insn	2, 0x302e
+   6:	2029                	.insn	2, 0x2029
+   8:	3531                	.insn	2, 0x3531
+   a:	312e                	.insn	2, 0x312e
+   c:	302e                	.insn	2, 0x302e
 	...
 
 Disassembly of section .debug_line:
@@ -340,11 +409,12 @@ Disassembly of section .debug_line:
   7a:	0001                	.insn	2, 0x0001
   7c:	0100                	.insn	2, 0x0100
   7e:	0101                	.insn	2, 0x0101
-  80:	051f 0028 0000      	.insn	6, 0x0028051f
+  80:	051f 00b3 0000      	.insn	6, 0x00b3051f
   86:	00000077          	.insn	4, 0x0077
   8a:	0082                	.insn	2, 0x0082
   8c:	0000                	.insn	2, 0x0000
-  8e:	000000b3          	add	ra,zero,zero
+  8e:	0040                	.insn	2, 0x0040
+  90:	0000                	.insn	2, 0x0000
   92:	006d                	.insn	2, 0x006d
   94:	0000                	.insn	2, 0x0000
   96:	0102                	.insn	2, 0x0102
@@ -353,9 +423,9 @@ Disassembly of section .debug_line:
   a0:	2200                	.insn	2, 0x2200
   a2:	0000                	.insn	2, 0x0000
   a4:	0400                	.insn	2, 0x0400
-  a6:	0066                	.insn	2, 0x0066
+  a6:	0039                	.insn	2, 0x0039
   a8:	0000                	.insn	2, 0x0000
-  aa:	5501                	.insn	2, 0x5501
+  aa:	2801                	.insn	2, 0x2801
   ac:	0000                	.insn	2, 0x0000
   ae:	0200                	.insn	2, 0x0200
   b0:	000e                	.insn	2, 0x000e
@@ -843,35 +913,30 @@ Disassembly of section .debug_line_str:
   1e:	2f737473          	.insn	4, 0x2f737473
   22:	6962                	.insn	2, 0x6962
   24:	2e74                	.insn	2, 0x2e74
-  26:	682f0063          	beq	t5,sp,6a6 <__stack_size-0x1fff95a>
-  2a:	2f656d6f          	jal	s10,56320 <__stack_size-0x1fa9ce0>
-  2e:	7574                	.insn	2, 0x7574
-  30:	7574                	.insn	2, 0x7574
-  32:	7574                	.insn	2, 0x7574
-  34:	6d69712f          	.insn	4, 0x6d69712f
-  38:	6e65                	.insn	2, 0x6e65
-  3a:	69732f67          	.insn	4, 0x69732f67
-  3e:	756d                	.insn	2, 0x756d
-  40:	616c                	.insn	2, 0x616c
-  42:	6f74                	.insn	2, 0x6f74
-  44:	2f72                	.insn	2, 0x2f72
-  46:	6162                	.insn	2, 0x6162
-  48:	6572                	.insn	2, 0x6572
-  4a:	656d                	.insn	2, 0x656d
-  4c:	6174                	.insn	2, 0x6174
-  4e:	2f6c                	.insn	2, 0x2f6c
-  50:	6574                	.insn	2, 0x6574
-  52:	5f007473          	.insn	4, 0x5f007473
-  56:	6564                	.insn	2, 0x6564
-  58:	6166                	.insn	2, 0x6166
-  5a:	6c75                	.insn	2, 0x6c75
-  5c:	5f74                	.insn	2, 0x5f74
-  5e:	7974                	.insn	2, 0x7974
-  60:	6570                	.insn	2, 0x6570
-  62:	00682e73          	.insn	4, 0x00682e73
-  66:	7274                	.insn	2, 0x7274
-  68:	7061                	.insn	2, 0x7061
-  6a:	682e                	.insn	2, 0x682e
+  26:	645f0063          	beq	t5,t0,666 <__stack_size-0x1fff99a>
+  2a:	6665                	.insn	2, 0x6665
+  2c:	7561                	.insn	2, 0x7561
+  2e:	746c                	.insn	2, 0x746c
+  30:	745f 7079 7365      	.insn	6, 0x73657079745f
+  36:	682e                	.insn	2, 0x682e
+  38:	7400                	.insn	2, 0x7400
+  3a:	6172                	.insn	2, 0x6172
+  3c:	2e70                	.insn	2, 0x2e70
+  3e:	0068                	.insn	2, 0x0068
+  40:	74706f2f          	.insn	4, 0x74706f2f
+  44:	7369722f          	.insn	4, 0x7369722f
+  48:	32337663          	bgeu	t1,gp,374 <__stack_size-0x1fffc8c>
+  4c:	7369722f          	.insn	4, 0x7369722f
+  50:	32337663          	bgeu	t1,gp,37c <__stack_size-0x1fffc84>
+  54:	752d                	.insn	2, 0x752d
+  56:	6b6e                	.insn	2, 0x6b6e
+  58:	6f6e                	.insn	2, 0x6f6e
+  5a:	652d6e77          	.insn	4, 0x652d6e77
+  5e:	666c                	.insn	2, 0x666c
+  60:	636e692f          	.insn	4, 0x636e692f
+  64:	756c                	.insn	2, 0x756c
+  66:	6564                	.insn	2, 0x6564
+  68:	7379732f          	.insn	4, 0x7379732f
   6c:	6300                	.insn	2, 0x6300
   6e:	7570                	.insn	2, 0x7570
   70:	742d                	.insn	2, 0x742d
@@ -899,22 +964,24 @@ Disassembly of section .debug_line_str:
   ae:	6968                	.insn	2, 0x6968
   b0:	656e                	.insn	2, 0x656e
   b2:	2f00                	.insn	2, 0x2f00
-  b4:	2f74706f          	jal	zero,47baa <__stack_size-0x1fb8456>
-  b8:	6972                	.insn	2, 0x6972
-  ba:	33766373          	.insn	4, 0x33766373
-  be:	2f32                	.insn	2, 0x2f32
-  c0:	6972                	.insn	2, 0x6972
-  c2:	33766373          	.insn	4, 0x33766373
-  c6:	2d32                	.insn	2, 0x2d32
-  c8:	6e75                	.insn	2, 0x6e75
-  ca:	776f6e6b          	.insn	4, 0x776f6e6b
-  ce:	2d6e                	.insn	2, 0x2d6e
-  d0:	6c65                	.insn	2, 0x6c65
-  d2:	2f66                	.insn	2, 0x2f66
-  d4:	6e69                	.insn	2, 0x6e69
-  d6:	64756c63          	bltu	a0,t2,72e <__stack_size-0x1fff8d2>
-  da:	2f65                	.insn	2, 0x2f65
-  dc:	00737973          	.insn	4, 0x00737973
+  b4:	6f68                	.insn	2, 0x6f68
+  b6:	656d                	.insn	2, 0x656d
+  b8:	6e65722f          	.insn	4, 0x6e65722f
+  bc:	696c                	.insn	2, 0x696c
+  be:	6d69712f          	.insn	4, 0x6d69712f
+  c2:	6e65                	.insn	2, 0x6e65
+  c4:	69732f67          	.insn	4, 0x69732f67
+  c8:	756d                	.insn	2, 0x756d
+  ca:	616c                	.insn	2, 0x616c
+  cc:	6f74                	.insn	2, 0x6f74
+  ce:	2f72                	.insn	2, 0x2f72
+  d0:	6162                	.insn	2, 0x6162
+  d2:	6572                	.insn	2, 0x6572
+  d4:	656d                	.insn	2, 0x656d
+  d6:	6174                	.insn	2, 0x6174
+  d8:	2f6c                	.insn	2, 0x2f6c
+  da:	6574                	.insn	2, 0x6574
+  dc:	007473 	.3byte	0x007473
 
 Disassembly of section .debug_info:
 
@@ -948,7 +1015,7 @@ Disassembly of section .debug_info:
   36:	03164703          	lbu	a4,49(a2)
   3a:	1800                	.insn	2, 0x1800
   3c:	0000                	.insn	2, 0x0000
-  3e:	2800                	.insn	2, 0x2800
+  3e:	b300                	.insn	2, 0xb300
   40:	0000                	.insn	2, 0x0000
   42:	0c00                	.insn	2, 0x0c00
   44:	0000                	.insn	2, 0x0000

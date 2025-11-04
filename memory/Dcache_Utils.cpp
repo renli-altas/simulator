@@ -33,12 +33,12 @@ void uselru(int linenum, int way)
     dcache_lru[linenum][way] = 0;
 }
 
-uint32_t read_cache_line(uint32_t index, uint32_t way, uint32_t offset)
+uint32_t read_cache_data(uint32_t index, uint32_t way, uint32_t offset)
 {
     return dcache_data[index][way][offset];
 }
 
-void write_cache_line(uint32_t index, uint32_t way, uint32_t offset, uint32_t wdata, uint8_t wstrb)
+void write_cache_data(uint32_t index, uint32_t way, uint32_t offset, uint32_t wdata, uint8_t wstrb)
 {
     uint32_t old_data = dcache_data[index][way][offset];
     uint32_t mask = 0;
@@ -110,11 +110,12 @@ void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& d
 }
 void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t data, bool done,bool last)
 {
+
     if(done){
         dcache_data[index][way][offset++] = data;
     }
     if(last){
-        offset=0;   
+        offset=0;
     }
 }
 void transfer_zero(EXMem_IO* &mem)
@@ -137,7 +138,7 @@ void write_data(EXMem_IO* &mem,uint32_t data,uint32_t addr,uint32_t offset)
     mem->control.sel = 0b1111;
     mem->control.len = DCACHE_OFFSET_NUM - 1;
     mem->control.size = 0b10;
-    mem->control.last = offset == DCACHE_OFFSET_NUM;
+    mem->control.last = offset == DCACHE_OFFSET_NUM - 1;
 }
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 {
@@ -148,9 +149,9 @@ void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
     mem->control.sel = 0;
     mem->control.len = DCACHE_OFFSET_NUM - 1;
     mem->control.size = 0b10;
-    mem->control.last = offset == DCACHE_OFFSET_NUM;
+    mem->control.last = offset == DCACHE_OFFSET_NUM - 1;
 }
-void miss_deal(uint32_t index, uint32_t way, uint32_t tag,uint32_t &hit_way,bool &dirty_writeback)
+void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback)
 {
     hit_way = getlru(index);
     if(dcache_dirty[index][hit_way]){

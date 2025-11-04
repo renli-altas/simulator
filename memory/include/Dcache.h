@@ -19,7 +19,8 @@ class Dcache
 {
 public:
 
-  void comb();
+  void comb_in();
+  void comb_out();
   void seq();
 
   void init();
