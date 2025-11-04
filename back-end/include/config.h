@@ -22,6 +22,7 @@ typedef uint8_t reg6_t;
 typedef uint8_t reg7_t;
 typedef uint8_t reg8_t;
 typedef uint16_t reg16_t;
+typedef uint32_t reg22_t;
 typedef uint32_t reg32_t;
 
 using namespace std;
@@ -49,8 +50,8 @@ using namespace std;
 
 #define LOG_START 0 //357912703
 #define LOG (0 && (sim_time >= LOG_START))
-#define MEM_LOG (0 && (sim_time >= LOG_START))
-#define ARB_LOG (0 && (sim_time >= LOG_START))
+#define MEM_LOG (1 && (sim_time >= LOG_START))
+#define ARB_LOG (1 && (sim_time >= LOG_START))
 
 extern long long sim_time;
 

@@ -66,7 +66,7 @@ void MEMORY::seq()
         if(io.mem->control.wen==0){
             rdata = p_memory[(io.mem->control.addr >> 2)];
             if(MEM_LOG){
-                printf("\n\n\nload  data %08x in %08x(%08x) mask %d\n",rdata,io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel);
+                printf("\nload  data %08x in %08x(%08x) mask %d\n",rdata,io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel);
             }
         }
         else{
@@ -84,7 +84,7 @@ void MEMORY::seq()
             p_memory[io.mem->control.addr >> 2] = (mask & io.mem->control.wdata) | (~mask & old_data);
         
             if(MEM_LOG){
-                printf("\n\n\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n",p_memory[io.mem->control.addr>>2],io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel,old_data);
+                printf("\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n",p_memory[io.mem->control.addr>>2],io.mem->control.addr,io.mem->control.addr>>2,io.mem->control.sel,old_data);
             }
         }
     }

@@ -5,18 +5,13 @@
 #include <cmath>
 #include "Dcache_Utils.h"
 
-enum Dcache_State
-{
-    DCACHE_IDLE = 0,
-    DCACHE_WAIT_MEM_LD = 1,
-    DCACHE_WAIT_MEM_ST = 2,
-};
-
 class Dcache_IO
 {
 public:
   Mem_IO *cpu_ld;
   Mem_IO *cpu_st;
+  EXMem_IO *mem_ld;
+  EXMem_IO *mem_st;
   bool flush;
 };
 
@@ -40,12 +35,21 @@ public:
   
   bool hit_ld;
   uint32_t hit_way_ld;
+  uint32_t rdata;
 
   bool hit_st;
   uint32_t hit_way_st;
 
   Dcache_IO io;
-  Dcache_State state;
+  Dcache_State state_ld;
+  Dcache_State state_st;
 
   uint32_t hit_num;
+  uint32_t miss_num;
+
+  bool dirty_writeback_ld;
+  bool dirty_writeback_st;
+
+  uint32_t offset_id_ld;
+  uint32_t offset_id_st;
 };

@@ -112,8 +112,9 @@ Mem_IO exe2cache;
 Mem_IO stq2cache;
 EXMem_IO arbiter2mem;
 
-Mem_IO arbiter2cache_ld;
-Mem_IO arbiter2cache_st;
+EXMem_IO arbiter2cache_ld;
+EXMem_IO arbiter2cache_st;
+
 
 void Back_Top::init() {
 
@@ -195,8 +196,10 @@ void Back_Top::init() {
 
   stq.io.stq2cache = &stq2cache;
 
-  arbiter.io.cpu_ld = &exe2cache;
-  arbiter.io.cpu_st = &stq2cache;
+  dcache.io.cpu_ld = &exe2cache;
+  dcache.io.cpu_st = &stq2cache;
+  dcache.io.mem_ld = &arbiter2cache_ld;
+  dcache.io.mem_st = &arbiter2cache_st;
   arbiter.io.mem = &arbiter2mem;
 
   pmemory.io.mem = &arbiter2mem;
@@ -205,10 +208,8 @@ void Back_Top::init() {
   csr.io.csr2exe = &csr2exe;
   csr.io.rob_bcast = &rob_bcast;
 
-  arbiter.io.cache_ld = &arbiter2cache_ld;
-  arbiter.io.cache_st = &arbiter2cache_st;
-  dcache.io.cpu_ld = &arbiter2cache_ld;
-  dcache.io.cpu_st = &arbiter2cache_st;
+  arbiter.io.cpu_ld = &arbiter2cache_ld;
+  arbiter.io.cpu_st = &arbiter2cache_st;
 
   idu.init();
   isu.init();

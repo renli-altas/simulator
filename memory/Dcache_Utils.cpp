@@ -75,9 +75,81 @@ void update_cache_line(uint32_t index, uint32_t way, uint32_t tag)
     dcache_valid[index][way] = true;
     dcache_dirty[index][way] = false;
 }
+void update_cache_offset(uint32_t index, uint32_t way, uint32_t offset, uint32_t data)
+{
+    dcache_data[index][way][offset] = data;
+}
 void get_addr_info(uint32_t addr, uint32_t &tag, uint32_t &index, uint32_t &offset)
 {
     tag = (addr >> 2) >> (DCACHE_INDEX_BITS + DCACHE_OFFSET_BITS);
     index = ((addr >> 2) >> DCACHE_OFFSET_BITS) & ((1 << DCACHE_INDEX_BITS) - 1);
     offset = (addr >> 2) & ((1 << DCACHE_OFFSET_BITS) - 1);
+}
+
+void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty)
+{
+    if(state==DCACHE_IDLE){
+        if(io_req==true&&!hit&&dirty==true){
+            state = DCACHE_WRITE;
+        }
+        else if(io_req==true&&!hit&&dirty==false){
+            state = DCACHE_READ;
+        }
+    }else if(state==DCACHE_WRITE){
+        if(io_last==true){
+            state = DCACHE_READ; 
+        }
+    }
+    else if(state==DCACHE_READ){
+        if(io_last==true){
+            state = DCACHE_IDLE; 
+        }
+    }
+}
+void transfer_cache_line(uint32_t index, uint32_t way, uint32_t offset,uint32_t data, bool done,bool last)
+{
+    if(done){
+        dcache_data[index][way][offset] = data;
+    }
+    if(last){
+        offset=0;   
+    }
+}
+void transfer_zero(EXMem_IO* &mem)
+{
+    mem->control.en = false;
+    mem->control.wen = false;
+    mem->control.addr = 0;
+    mem->control.wdata = 0;
+    mem->control.sel = 0;
+    mem->control.len = 0;
+    mem->control.size = 0;
+    mem->control.last = true;
+}
+void write_data(Mem_IO* &cpu, EXMem_IO* &mem)
+{
+    mem->control.en = cpu->req;
+    mem->control.wen = cpu->wr;
+    mem->control.addr = cpu->addr;
+    mem->control.wdata = cpu->wdata;
+    mem->control.sel = cpu->wstrb;
+    mem->control.len = DCACHE_OFFSET_NUM - 1;
+    mem->control.size = 0b10;
+    mem->control.last = true;
+}
+void read_data(Mem_IO* &cpu, EXMem_IO* &mem)
+{
+    cpu->req = mem->control.en;
+    cpu->wr = mem->control.wen;
+    cpu->addr = mem->control.addr;
+    cpu->wdata = mem->control.wdata;
+    cpu->wstrb = mem->control.sel;
+}
+void miss_deal(uint32_t index, uint32_t way, uint32_t tag,uint32_t &hit_way,bool &dirty_writeback)
+{
+    hit_way = getlru(index);
+    if(dcache_dirty[index][hit_way]){
+        dirty_writeback=true;
+    }
+    update_cache_line(index, hit_way, tag);
 }

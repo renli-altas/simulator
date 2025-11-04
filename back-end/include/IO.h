@@ -188,3 +188,18 @@ typedef struct{
   uint32_t rdata;
   bool data_ok;
 }Mem_IO;
+
+typedef struct{
+  bool valid;
+  uint32_t addr;
+  uint32_t wdata;
+  bool wr;
+  uint8_t wstrb;
+  uint32_t tag;
+  uint32_t index;
+  uint32_t offset;
+  uint32_t lru_num;
+
+  bool data_ok;
+
+}MSHR_IO;

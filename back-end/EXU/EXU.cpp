@@ -46,10 +46,6 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
   bool flag = false;
   if (mispred)
   {
-    if (ARB_LOG)
-    {
-      printf("mispred in FU\n");
-    }
     complete = false;
     cycle = 0;
     latency = 0;
@@ -60,8 +56,6 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
     io->addr = 0;
     return;
   }
-  if(ARB_LOG)
-  printf("fu_is_load:%d cycle:%d latency:%d\n",is_load,cycle,latency);
   if (cycle == latency)
   {
     if (is_load)
@@ -129,10 +123,6 @@ void EXU::comb_ready()
   {
     io.exe2iss->ready[i] =
         (!inst_r[i].valid || fu[i].complete) && !io.dec_bcast->mispred;
-    if (ARB_LOG)
-    {
-      printf("fu_ready:%d inst_r[i].valid:%d fu[i].complete:%d io.dec_bcast->mispred:%d inst_r[i].uop.instruction:%08x inst_r[i].uop.addr:%08x\n", io.exe2iss->ready[i], inst_r[i].valid, fu[i].complete, io.dec_bcast->mispred, inst_r[i].uop.instruction, inst_r[i].uop.imm+inst_r[i].uop.src1_rdata);
-    }
     
   }
 }
@@ -227,8 +217,6 @@ void EXU::comb_pipeline()
       fu[i].complete = false;
       fu[i].cycle = 0;
     }
-    if(ARB_LOG)
-    printf("io.prf2exe->iss_entry[%d].valid:%d io.exe2iss->ready[%d]:%d\n", i, io.prf2exe->iss_entry[i].valid, i, io.exe2iss->ready[i]);
   }
 }
 

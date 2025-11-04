@@ -75,7 +75,7 @@ void div(Inst_uop &inst) {
   default:
     assert(0);
     break;
-  }
+  } 
 }
 
 void bru(Inst_uop &inst) {
@@ -280,9 +280,6 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
       io->wstrb = 0;
       io->addr = p_addr;
     }
-  }
-  if(ARB_LOG){
-      printf("FU load add:%08x p_addr:%08x req:%d wr:%d wdata:%08x wstrb:%x addr:%08x data_ok:%d rdata:%08x\n",addr,p_addr,io->req,io->wr,io->wdata,io->wstrb,io->addr,io->data_ok,io->rdata);
   }
   bool page_fault = !ret;
 

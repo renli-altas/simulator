@@ -19,6 +19,13 @@ extern uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM];// sv3
 extern bool dcache_valid[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
 extern bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
 
+enum Dcache_State
+{
+    DCACHE_IDLE = 0,
+    DCACHE_WRITE = 1,
+    DCACHE_READ = 2
+};
+
 void updatelru(int linenum);
 int getlru(int linenum);
 void uselru(int linenum,int way);
@@ -29,3 +36,9 @@ bool hit_check(uint32_t index,uint32_t tag,uint32_t &hit_way);
 
 void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset);
 void update_cache_line(uint32_t index, uint32_t way, uint32_t tag);
+void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty);
+void update_cache_offset(uint32_t index, uint32_t way, uint32_t offset, uint32_t data);
+void transfer_cache_line(uint32_t index, uint32_t way, uint32_t offset,uint32_t data, bool done,bool last);
+void transfer_zero(EXMem_IO* &mem);
+void transfer_data(Mem_IO* &cpu, EXMem_IO* &mem);
+void miss_deal(uint32_t index, uint32_t way, uint32_t tag,uint32_t &hit_way,bool &dirty_writeback);
