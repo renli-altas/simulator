@@ -35,10 +35,12 @@ uint32_t read_cache_line(uint32_t index,uint32_t way,uint32_t offset);
 bool hit_check(uint32_t index,uint32_t tag,uint32_t &hit_way);
 
 void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset);
-void update_cache_line(uint32_t index, uint32_t way, uint32_t tag);
-void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty);
-void update_cache_offset(uint32_t index, uint32_t way, uint32_t offset, uint32_t data);
-void transfer_cache_line(uint32_t index, uint32_t way, uint32_t offset,uint32_t data, bool done,bool last);
+void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty,bool flush);
+
+void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t data, bool done,bool last);
+void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data, bool done,bool last);
+
 void transfer_zero(EXMem_IO* &mem);
-void transfer_data(Mem_IO* &cpu, EXMem_IO* &mem);
+void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset);
+void write_data(EXMem_IO* &mem,uint32_t data,uint32_t addr,uint32_t offset);
 void miss_deal(uint32_t index, uint32_t way, uint32_t tag,uint32_t &hit_way,bool &dirty_writeback);

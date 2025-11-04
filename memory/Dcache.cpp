@@ -23,12 +23,6 @@ void Dcache::init()
 
 void Dcache::comb()
 {
-    if(state_ld==DCACHE_IDLE&&io.cpu_ld->req==true){
-        get_addr_info(io.cpu_ld->addr, tag_ld, index_ld, offset_ld);
-    }
-    if(state_st==DCACHE_IDLE&&io.cpu_st->req==true){
-        get_addr_info(io.cpu_st->addr, tag_st, index_st, offset_st);
-    }
 
     if (hit_st == true)
     {
@@ -39,11 +33,12 @@ void Dcache::comb()
     {
         if (state_st == DCACHE_WRITE)
         {
-            /* code */
+            write_data(io.mem_st, write_data_st, io.cpu_st->addr&0xfffffffc, offset_id_st);
         }
         else if(state_st==DCACHE_READ){
-            transfer_data(io.cpu_st, io.mem_st);
-            io.cpu_st->data_ok = io.mem_st->data.last;
+            read_data(io.mem_st, io.cpu_st->addr&0xfffffffc, offset_id_st);
+            if(!flush_flag_st)io.cpu_st->data_ok = io.mem_st->data.last;
+            else io.cpu_st->data_ok = false;
         }else {
             transfer_zero(io.mem_st);
             io.cpu_st->data_ok = false;
@@ -58,11 +53,14 @@ void Dcache::comb()
     else
     {
         if(state_ld==DCACHE_WRITE){
-            /* code */
+            write_data(io.mem_ld, write_data_ld, io.cpu_ld->addr&0xfffffffc, offset_id_ld);
         }
         else if(state_ld==DCACHE_READ){
-            transfer_data(io.cpu_ld, io.mem_ld);
-            io.cpu_ld->data_ok = io.mem_ld->data.last;
+            read_data(io.mem_ld, io.cpu_ld->addr&0xfffffffc, offset_id_ld);
+            if(!flush_flag_ld)io.cpu_ld->data_ok = io.mem_ld->data.last;
+            else io.cpu_ld->data_ok = false;
+            if(offset_ld==offset_id_ld)io.cpu_ld->rdata = rdata;
+            else io.cpu_ld->rdata = 0;
         }
         else {
             transfer_zero(io.mem_ld);
@@ -71,44 +69,91 @@ void Dcache::comb()
     }
 }
 void Dcache::seq()
-{
+{   
+    if(!io.flush){
+        
+        if(state_ld==DCACHE_IDLE&&io.cpu_ld->req==true){
+            get_addr_info(io.cpu_ld->addr, tag_ld, index_ld, offset_ld);
+        }
+        if(state_st==DCACHE_IDLE&&io.cpu_st->req==true){
+            get_addr_info(io.cpu_st->addr, tag_st, index_st, offset_st);
+        }
 
-    if (io.cpu_ld->req == true&&state_ld==DCACHE_IDLE)
-    {
-        hit_ld = hit_check(index_ld, tag_ld, hit_way_ld);
+        if (io.cpu_ld->req == true&&state_ld==DCACHE_IDLE)
+        {
+            hit_ld = hit_check(index_ld, tag_ld, hit_way_ld);
+        }
+        if (io.cpu_st->req == true&&state_st==DCACHE_IDLE)
+        {
+            hit_st = hit_check(index_st, tag_st, hit_way_st);
+        }
+
+        if(hit_ld && io.cpu_ld->req==true && state_ld==DCACHE_IDLE){
+            updatelru(index_ld);
+            uselru(index_ld, hit_way_ld);
+            rdata = read_cache_line(index_ld, hit_way_ld, offset_ld);
+            hit_num++;
+        }else if(!hit_ld && io.cpu_ld->req==true && state_ld==DCACHE_IDLE){
+            miss_deal(index_ld, hit_way_ld, tag_ld, hit_way_ld, dirty_writeback_ld);
+            miss_num++;
+        }
+
+        if(hit_st && io.cpu_st->req==true && state_st==DCACHE_IDLE){
+            updatelru(index_st);
+            uselru(index_st, hit_way_st);
+            write_cache_line(index_st, hit_way_st, offset_st, io.cpu_st->wdata, io.cpu_st->wstrb);
+            hit_num++;
+        }else if(!hit_st && io.cpu_st->req==true && state_st==DCACHE_IDLE){
+            miss_deal(index_st, hit_way_st, tag_st, hit_way_st, dirty_writeback_st);
+            miss_num++;
+        }
     }
-    if (io.cpu_st->req == true&&state_st==DCACHE_IDLE)
-    {
-        hit_st = hit_check(index_st, tag_st, hit_way_st);
+    
+    if(state_ld!=DCACHE_IDLE){
+        flush_flag_ld = io.flush;
+    }else{
+        flush_flag_ld = false;
+    }
+    if(state_st!=DCACHE_IDLE){
+        flush_flag_st = io.flush;
+    }else{
+        flush_flag_st = false;
     }
 
-    if(hit_ld && io.cpu_ld->req==true && state_ld==DCACHE_IDLE){
-        updatelru(index_ld);
-        uselru(index_ld, hit_way_ld);
-        rdata = read_cache_line(index_ld, hit_way_ld, offset_ld);
-        hit_num++;
-    }else if(!hit_ld && io.cpu_ld->req==true && state_ld==DCACHE_IDLE){
-        miss_deal(index_ld, hit_way_ld, tag_ld, hit_way_ld, dirty_writeback_ld);
-        miss_num++;
+    change_state(state_ld,io.cpu_ld->req&!io.flush,hit_ld,io.mem_ld->data.last,dirty_writeback_ld,io.flush_flag_ld);
+    change_state(state_st,io.cpu_st->req&!io.flush,hit_st,io.mem_st->data.last,dirty_writeback_st,io.flush_flag_st);
+
+    
+
+    if(state_ld == DCACHE_WRITE){
+        write_cache_line(index_ld, hit_way_ld, offset_id_ld, write_data_ld, io.mem_ld->data.done, io.mem_ld->data.last);
+        if(io.mem_ld->data.last){
+            dirty_writeback_ld = false;
+            dcache_tag[index_ld][hit_way_ld] = tag_ld;
+            dcache_valid[index_ld][hit_way_ld] = false;
+            dcache_dirty[index_ld][hit_way_ld] = false;
+        }
+    }else if(state_ld == DCACHE_READ){
+        read_cache_line(index_ld, hit_way_ld, offset_id_ld, io.mem_ld->data.data, io.mem_ld->data.done, io.mem_ld->data.last);
+        if(io.mem_ld->data.last){
+            dcache_valid[index_ld][hit_way_ld] = true;
+        }
     }
 
-    if(hit_st && io.cpu_st->req==true && state_st==DCACHE_IDLE){
-        updatelru(index_st);
-        uselru(index_st, hit_way_st);
-        write_cache_line(index_st, hit_way_st, offset_st, io.cpu_st->wdata, io.cpu_st->wstrb);
-        hit_num++;
-    }else if(!hit_st && io.cpu_st->req==true && state_st==DCACHE_IDLE){
-        miss_deal(index_st, hit_way_st, tag_st, hit_way_st, dirty_writeback_st);
-        miss_num++;
-    }
+    if(state_st == DCACHE_WRITE){
+        write_cache_line(index_st, hit_way_st, offset_id_st, write_data_st, io.mem_st->data.done, io.mem_st->data.last);
 
-    change_state(state_ld,io.cpu_ld->req,hit_ld,io.mem_ld->data.last,dirty_writeback_ld);
-    change_state(state_st,io.cpu_st->req,hit_st,io.mem_st->data.last,dirty_writeback_st);
+        if(io.mem_st->data.last){
+            dirty_writeback_st = false;
+            dcache_tag[index_st][hit_way_st] = tag_st;
+            dcache_valid[index_st][hit_way_st] = false;
+            dcache_dirty[index_st][hit_way_st] = false;
+        }
 
-    if(state_ld == DCACHE_READ){
-        transfer_cache_line(index_ld, hit_way_ld, offset_id_ld, io.mem_ld->data.data, io.mem_ld->data.done, io.mem_ld->data.last);
-    }
-    if(state_st == DCACHE_READ){
-        transfer_cache_line(index_st, hit_way_st, offset_id_st, io.mem_st->data.data, io.mem_st->data.done, io.mem_st->data.last);
+    }else if(state_st == DCACHE_READ){
+        read_cache_line(index_st, hit_way_st, offset_id_st, io.mem_st->data.data, io.mem_st->data.done, io.mem_st->data.last);
+        if(io.mem_st->data.last){
+            dcache_valid[index_st][hit_way_st] = true;
+        }
     }
 }

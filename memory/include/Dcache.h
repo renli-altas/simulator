@@ -47,9 +47,15 @@ public:
   uint32_t hit_num;
   uint32_t miss_num;
 
+  uint32_t write_data_st;
+  uint32_t write_data_ld;
+
   bool dirty_writeback_ld;
   bool dirty_writeback_st;
 
   uint32_t offset_id_ld;
   uint32_t offset_id_st;
+
+  bool flush_flag_ld;
+  bool flush_flag_st;
 };
