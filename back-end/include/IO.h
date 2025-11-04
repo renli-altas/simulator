@@ -203,3 +203,7 @@ typedef struct{
   bool data_ok;
 
 }MSHR_IO;
+
+typedef struct{
+  bool flush;
+}Exe_Cache;

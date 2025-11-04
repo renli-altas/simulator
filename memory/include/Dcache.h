@@ -12,7 +12,7 @@ public:
   Mem_IO *cpu_st;
   EXMem_IO *mem_ld;
   EXMem_IO *mem_st;
-  bool flush;
+  Exe_Cache *control;
 };
 
 class Dcache

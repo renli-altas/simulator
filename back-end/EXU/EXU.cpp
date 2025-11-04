@@ -135,7 +135,7 @@ void EXU::comb_exec()
     io.exe2prf->entry[i].uop = inst_r[i].uop;
     if (inst_r[i].valid)
     {
-      fu[i].exec(io.exe2prf->entry[i].uop, io.exe2cache, io.dec_bcast->mispred|io.rob_bcast->flush);
+      fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache, io.dec_bcast->mispred|io.rob_bcast->flush);
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&
             ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask)))
@@ -167,6 +167,8 @@ void EXU::comb_exec()
   {
     io.exe2stq->data_entry.valid = false;
   }
+
+  io.exe2cache->flush = io.dec_bcast->mispred||io.rob_bcast->flush;
 }
 
 void EXU::comb_to_csr()

@@ -16,7 +16,8 @@ public:
 
   Exe_Csr *exe2csr;
   Csr_Exe *csr2exe;
-  Mem_IO *exe2cache;
+  Mem_IO *ldq2cache;
+  Exe_Cache *exe2cache;
 };
 
 class EXU {

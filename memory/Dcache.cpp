@@ -18,7 +18,11 @@ void Dcache::init()
     offset_id_ld = 0;
     offset_id_st = 0;
 
+    dirty_writeback_ld = false;
+    dirty_writeback_st = false;
 
+    flush_flag_ld = false;
+    flush_flag_st = false;
 }
 
 void Dcache::comb()
@@ -70,7 +74,7 @@ void Dcache::comb()
 }
 void Dcache::seq()
 {   
-    if(!io.flush){
+    if(!io.control->flush){
         
         if(state_ld==DCACHE_IDLE&&io.cpu_ld->req==true){
             get_addr_info(io.cpu_ld->addr, tag_ld, index_ld, offset_ld);
@@ -110,18 +114,18 @@ void Dcache::seq()
     }
     
     if(state_ld!=DCACHE_IDLE){
-        flush_flag_ld = io.flush;
+        flush_flag_ld = io.control->flush;
     }else{
         flush_flag_ld = false;
     }
     if(state_st!=DCACHE_IDLE){
-        flush_flag_st = io.flush;
+        flush_flag_st = io.control->flush;
     }else{
         flush_flag_st = false;
     }
 
-    change_state(state_ld,io.cpu_ld->req&!io.flush,hit_ld,io.mem_ld->data.last,dirty_writeback_ld,io.flush_flag_ld);
-    change_state(state_st,io.cpu_st->req&!io.flush,hit_st,io.mem_st->data.last,dirty_writeback_st,io.flush_flag_st);
+    change_state(state_ld,io.cpu_ld->req&!io.control->flush,hit_ld,io.mem_ld->data.last,dirty_writeback_ld,flush_flag_ld);
+    change_state(state_st,io.cpu_st->req&!io.control->flush,hit_st,io.mem_st->data.last,dirty_writeback_st,flush_flag_st);
 
     
 
@@ -134,6 +138,7 @@ void Dcache::seq()
             dcache_dirty[index_ld][hit_way_ld] = false;
         }
     }else if(state_ld == DCACHE_READ){
+        printf("state_ld READ done:%d last:%d\n",io.mem_ld->data.done,io.mem_ld->data.last);
         read_cache_line(index_ld, hit_way_ld, offset_id_ld, io.mem_ld->data.data, io.mem_ld->data.done, io.mem_ld->data.last);
         if(io.mem_ld->data.last){
             dcache_valid[index_ld][hit_way_ld] = true;
@@ -155,5 +160,14 @@ void Dcache::seq()
         if(io.mem_st->data.last){
             dcache_valid[index_st][hit_way_st] = true;
         }
+    }
+
+    if(DCACHE_LOG){
+        printf("\n\nDcache state_ld:%d state_st:%d flush_ld:%d flush_st:%d flush:%d\n",state_ld,state_st,flush_flag_ld,flush_flag_st,io.control->flush);
+        printf("ld req:%d addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x hit:%d hit_way:%2d dirty_writeback:%d control->flush:%d offset_id_ld:%d\n",io.cpu_ld->req,io.cpu_ld->addr,tag_ld,index_ld,offset_ld,hit_ld,hit_way_ld,dirty_writeback_ld,flush_flag_ld,offset_id_ld);
+        printf("st req:%d addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x hit:%d hit_way:%2d dirty_writeback:%d control->flush:%d offset_id_st:%d\n",io.cpu_st->req,io.cpu_st->addr,tag_st,index_st,offset_st,hit_st,hit_way_st,dirty_writeback_st,flush_flag_st,offset_id_st);
+        printf("ld rdata:0x%08x data_ok:%d\n",io.cpu_ld->rdata,io.cpu_ld->data_ok);
+        printf("st data_ok:%d\n",io.cpu_st->data_ok);
+        printf("Dcache hit num:%d miss num:%d\n",hit_num,miss_num);
     }
 }

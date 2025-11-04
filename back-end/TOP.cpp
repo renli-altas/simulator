@@ -108,13 +108,14 @@ Stq_Dis stq2dis;
 
 Csr_Exe csr2exe;
 Exe_Csr exe2csr;
-Mem_IO exe2cache;
+Mem_IO ldq2cache;
 Mem_IO stq2cache;
 EXMem_IO arbiter2mem;
 
 EXMem_IO arbiter2cache_ld;
 EXMem_IO arbiter2cache_st;
 
+Exe_Cache exe2cache;
 
 void Back_Top::init() {
 
@@ -177,6 +178,7 @@ void Back_Top::init() {
   exu.io.exe2csr = &exe2csr;
   exu.io.csr2exe = &csr2exe;
 
+  exu.io.ldq2cache = &ldq2cache;
   exu.io.exe2cache = &exe2cache;
 
   rob.io.dis2rob = &dis2rob;
@@ -196,10 +198,11 @@ void Back_Top::init() {
 
   stq.io.stq2cache = &stq2cache;
 
-  dcache.io.cpu_ld = &exe2cache;
+  dcache.io.cpu_ld = &ldq2cache;
   dcache.io.cpu_st = &stq2cache;
   dcache.io.mem_ld = &arbiter2cache_ld;
   dcache.io.mem_st = &arbiter2cache_st;
+  dcache.io.control = &exe2cache;
   arbiter.io.mem = &arbiter2mem;
 
   pmemory.io.mem = &arbiter2mem;

@@ -52,6 +52,7 @@ using namespace std;
 #define LOG (1 && (sim_time >= LOG_START))
 #define MEM_LOG (1 && (sim_time >= LOG_START))
 #define ARB_LOG (1 && (sim_time >= LOG_START))
+#define DCACHE_LOG (1 && (sim_time >= LOG_START))
 
 extern long long sim_time;
 
