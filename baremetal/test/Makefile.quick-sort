@@ -1,0 +1,4 @@
+COMMON_DIR = ..
+TARGET = quick-sort
+C_SRCS = cpu-tests/quick-sort.c
+include ../common.mk

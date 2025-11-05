@@ -75,7 +75,10 @@ void get_addr_info(uint32_t addr, uint32_t &tag, uint32_t &index, uint32_t &offs
     index = ((addr >> 2) >> DCACHE_OFFSET_BITS) & ((1 << DCACHE_INDEX_BITS) - 1);
     offset = (addr >> 2) & ((1 << DCACHE_OFFSET_BITS) - 1);
 }
-
+uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset)
+{
+    return (tag << (DCACHE_INDEX_BITS + DCACHE_OFFSET_BITS) | index << DCACHE_OFFSET_BITS | offset) << 2;
+}
 void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty,bool flush)
 {
     if(state==DCACHE_IDLE){

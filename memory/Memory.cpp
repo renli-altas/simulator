@@ -18,7 +18,7 @@ void MEMORY::comb()
    if(data_cnt>0){
         //开始计数
         io.mem->data.done = true;
-        io.mem->data.last = data_cnt == io.mem->control.len;
+        io.mem->data.last = data_cnt == io.mem->control.len+1;
         io.mem->data.data = rdata;
         // printf("memory data.data:%08x data.last:%d\n",io.mem->data.data,io.mem->data.last);
    }
@@ -62,19 +62,6 @@ void MEMORY::seq()
         }
     }
     
-    
-    
-
-    if(io.mem->control.en == true && Latency_cnt == 0 && state == MEM_IDLE){
-        state = LATENCY;
-    }else if(io.mem->control.en == true && Latency_cnt == Latency && state == LATENCY){
-        state = TRANSFER;
-    }else if(io.mem->control.en == true && data_cnt == io.mem->control.len && state == TRANSFER){ //AXI优化
-        state = MEM_IDLE;
-    }else if(io.mem->control.en == false){
-        state = MEM_IDLE;
-    }
-
     if(state == LATENCY){
         Latency_cnt++;
     }
@@ -86,4 +73,20 @@ void MEMORY::seq()
     }else{
         data_cnt =0;
     }
+    
+    if(MEM_LOG){
+        printf("memory state:%d Latency_cnt:%d data_cnt:%d\n",state,Latency_cnt,data_cnt);
+    }
+
+    if(io.mem->control.en == true && Latency_cnt == 0 && state == MEM_IDLE){
+        state = LATENCY;
+    }else if(io.mem->control.en == true && Latency_cnt == Latency && state == LATENCY){
+        state = TRANSFER;
+    }else if(io.mem->control.en == true && data_cnt == io.mem->control.len + 1 && state == TRANSFER){ //AXI优化
+        state = MEM_IDLE;
+    }else if(io.mem->control.en == false){
+        state = MEM_IDLE;
+    }
+
+    
 }

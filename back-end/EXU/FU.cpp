@@ -254,15 +254,7 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
   }
   else
   {
-    if (io->req == false)
-    {
-      io->req = true;
-      io->wr = 0;
-      io->wdata = 0;
-      io->wstrb = 0;
-      io->addr = p_addr;
-    }
-    else if (io->data_ok == true)
+    if (io->req==true && io->data_ok == true)
     {
       data = io->rdata;
       io->req = false;

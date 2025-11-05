@@ -44,3 +44,5 @@ void transfer_zero(EXMem_IO* &mem);
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset);
 void write_data(EXMem_IO* &mem,uint32_t data,uint32_t addr,uint32_t offset);
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback);
+
+uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset);

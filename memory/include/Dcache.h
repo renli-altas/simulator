@@ -59,4 +59,7 @@ public:
 
   bool flush_flag_ld;
   bool flush_flag_st;
+
+  bool req_ld_reg;
+  bool req_st_reg;
 };
