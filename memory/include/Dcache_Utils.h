@@ -22,27 +22,24 @@ extern bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
 enum Dcache_State
 {
     DCACHE_IDLE = 0,
-    DCACHE_WRITE = 1,
-    DCACHE_READ = 2
+    DCACHE_WAIT = 1
 };
 
-void updatelru(int linenum);
+void updatelru(int linenum,int way);
 int getlru(int linenum);
-void uselru(int linenum,int way);
 
 void write_cache_data(uint32_t index,uint32_t way,uint32_t offset,uint32_t wdata,uint8_t wstrb);
 uint32_t read_cache_data(uint32_t index,uint32_t way,uint32_t offset);
 bool hit_check(uint32_t index,uint32_t tag,uint32_t &hit_way);
 
 void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset);
-void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty,bool flush);
+void change_state(Dcache_State &state,bool io_req,bool hit,bool done,bool flush);
 
 void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t data, bool done,bool last);
 void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data, bool done,bool last);
 
-void transfer_zero(EXMem_IO* &mem);
-void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset);
-void write_data(EXMem_IO* &mem,uint32_t data,uint32_t addr,uint32_t offset);
+void transfer_zero(MSHR_INFO* &mshrio);
+void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,bool ready);
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback);
 
 uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset);

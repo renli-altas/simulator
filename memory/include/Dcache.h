@@ -10,8 +10,9 @@ class Dcache_IO
 public:
   Mem_IO *cpu_ld;
   Mem_IO *cpu_st;
-  EXMem_IO *mem_ld;
-  EXMem_IO *mem_st;
+  MSHR_INFO* mshr_ld;
+  MSHR_INFO* mshr_st;
+  Cache_Mshr *mshr_control;
   Exe_Cache *control;
 };
 
@@ -54,12 +55,9 @@ public:
   bool dirty_writeback_ld;
   bool dirty_writeback_st;
 
-  uint32_t offset_id_ld;
-  uint32_t offset_id_st;
-
-  bool flush_flag_ld;
-  bool flush_flag_st;
+  bool flush_flag;
 
   bool req_ld_reg;
-  bool req_st_reg;
+
+  bool type;
 };

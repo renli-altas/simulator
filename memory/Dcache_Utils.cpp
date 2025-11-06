@@ -6,12 +6,13 @@ uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_valid[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 
-void updatelru(int linenum)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+void updatelru(int linenum,int way)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 {
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
         dcache_lru[linenum][i]++;
     }
+    dcache_lru[linenum][way] = 0;
 }
 int getlru(int linenum)
 { 
@@ -28,11 +29,6 @@ int getlru(int linenum)
     dcache_lru[linenum][way] = 0;
     return way;
 }
-void uselru(int linenum, int way)
-{
-    dcache_lru[linenum][way] = 0;
-}
-
 uint32_t read_cache_data(uint32_t index, uint32_t way, uint32_t offset)
 {
     return dcache_data[index][way][offset];
@@ -79,25 +75,14 @@ uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset)
 {
     return (tag << (DCACHE_INDEX_BITS + DCACHE_OFFSET_BITS) | index << DCACHE_OFFSET_BITS | offset) << 2;
 }
-void change_state(Dcache_State &state,bool io_req,bool hit,bool io_last,bool dirty,bool flush)
+void change_state(Dcache_State &state,bool io_req,bool hit,bool done,bool flush)
 {
     if(state==DCACHE_IDLE){
-        if(io_req==true&&!hit&&dirty==true){
-            state = DCACHE_WRITE;
+        if(io_req==true&&!hit){
+            state = DCACHE_WAIT;
         }
-        else if(io_req==true&&!hit&&dirty==false){
-            state = DCACHE_READ;
-        }
-    }else if(state==DCACHE_WRITE){
-        if(flush==true&&io_last==true){
-            state = DCACHE_IDLE; 
-        }
-        else if(io_last==true){
-            state = DCACHE_READ; 
-        }
-    }
-    else if(state==DCACHE_READ){
-        if(io_last==true){
+    }else if(state==DCACHE_WAIT){
+        if(flush==true||done==true){
             state = DCACHE_IDLE; 
         }
     }
@@ -121,27 +106,29 @@ void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t dat
         offset=0;
     }
 }
-void transfer_zero(EXMem_IO* &mem)
+void transfer_zero(MSHR_INFO* &mshrio)
 {
-    mem->control.en = false;
-    mem->control.wen = false;
-    mem->control.addr = 0;
-    mem->control.wdata = 0;
-    mem->control.sel = 0;
-    mem->control.len = 0;
-    mem->control.size = 0;
-    mem->control.last = true;
+    mshrio->valid = false;
+    mshrio->addr = 0;
+    mshrio->wdata = 0;
+    mshrio->wr = false;
+    mshrio->wstrb = 0;
+    mshrio->tag = 0;
+    mshrio->index = 0;
+    mshrio->offset = 0;
 }
-void write_data(EXMem_IO* &mem,uint32_t data,uint32_t addr,uint32_t offset)
+void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,bool ready)
 {
-    mem->control.en = true;
-    mem->control.wen = true;
-    mem->control.addr = addr;
-    mem->control.wdata = data;
-    mem->control.sel = 0b1111;
-    mem->control.len = DCACHE_OFFSET_NUM - 1;
-    mem->control.size = 0b10;
-    mem->control.last = offset == DCACHE_OFFSET_NUM - 1;
+    mshrio->valid = ready;
+    mshrio->addr = cpu->addr;
+    mshrio->wdata = cpu->wdata;
+    mshrio->wr = cpu->wr;
+    mshrio->wstrb = cpu->wstrb;
+    mshrio->tag = tag;
+    mshrio->index = index;
+    mshrio->offset = offset;
+    mshrio->dirty=dirty;
+    mshrio->way=way;
 }
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 {

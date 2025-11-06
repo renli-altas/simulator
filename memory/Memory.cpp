@@ -87,6 +87,6 @@ void MEMORY::seq()
     }else if(io.mem->control.en == false){
         state = MEM_IDLE;
     }
-
+    
     
 }
