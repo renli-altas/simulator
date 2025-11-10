@@ -163,6 +163,7 @@ typedef struct{
   bool wen;
   uint8_t sel;
   uint8_t len;
+  bool done;
   bool last;
   uint8_t size;
   uint32_t addr;
@@ -192,17 +193,24 @@ typedef struct{
 typedef struct{
   bool valid;
   uint32_t addr;
+  uint32_t paddr;
   uint32_t wdata;
   bool wr;
   uint8_t wstrb;
   uint32_t tag;
   uint32_t index;
   uint32_t offset;
-  uint32_t lru_num;
+  uint32_t way;
+  bool dirty;
 
-  bool data_ok;
+  bool done;
+  uint32_t rdata;
+}MSHR_INFO;
 
-}MSHR_IO;
+typedef struct{
+  bool flush;
+  bool ready;
+}Cache_Mshr;
 
 typedef struct{
   bool flush;

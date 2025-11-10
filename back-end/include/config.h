@@ -49,11 +49,17 @@ using namespace std;
 #define BRU_NUM 2
 
 #define LOG_START 0 //357912703
+
+// #define LOG (0 && (sim_time >= LOG_START))
+// #define MEM_LOG (0 && (sim_time >= LOG_START))
+// #define ARB_LOG (0 && (sim_time >= LOG_START))
+// #define DCACHE_LOG (0 && (sim_time >= LOG_START))
+// #define TRACE_LOG (0 && (sim_time >= LOG_START))
 #define LOG (1 && (sim_time >= LOG_START))
 #define MEM_LOG (1 && (sim_time >= LOG_START))
 #define ARB_LOG (1 && (sim_time >= LOG_START))
 #define DCACHE_LOG (1 && (sim_time >= LOG_START))
-
+#define TRACE_LOG (1 && (sim_time >= LOG_START))
 extern long long sim_time;
 
 #define CONFIG_DIFFTEST

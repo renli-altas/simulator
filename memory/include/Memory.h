@@ -33,7 +33,6 @@ public:
     reg32_t data_cnt;
     reg32_t rdata;
 
-    reg1_t lastreg;
-
+    reg1_t donereg;
     void init();
 };

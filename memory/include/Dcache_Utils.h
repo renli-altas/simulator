@@ -36,10 +36,10 @@ void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset)
 void change_state(Dcache_State &state,bool io_req,bool hit,bool done,bool flush);
 
 void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t data, bool done,bool last);
-void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data, bool done,bool last);
+void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data,bool& wdone, bool done,bool last);
 
 void transfer_zero(MSHR_INFO* &mshrio);
-void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,bool ready);
-void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback);
+void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready);
+void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr);
 
 uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset);

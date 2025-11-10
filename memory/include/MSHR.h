@@ -12,26 +12,29 @@ typedef struct{
     uint32_t tag;
     uint32_t index;
     uint32_t way;
-    bool issued;
+    uint32_t paddr;
+    bool dirty;
 }mshr_entry;
 
 typedef struct{
     bool valid;
     uint32_t entry;
     bool type;
-    bool dirty;
     uint32_t offset;
+    uint32_t wdata;
+    uint8_t wstrb;
 }table_entry;
 
 enum MSHR_STATE{
-    IDLE,
-    WAIT_READ,
-    WAIT_WRITE, 
+    MSHR_IDLE,
+    MSHR_WAIT_WRITE, 
+    MSHR_WAIT_READ,
+    MSHR_TRAN
 };
 
-mshr_entry mshr_entries[MSHR_ENTRY_SIZE];
-table_entry mshr_table[MSHR_TABLE_SIZE];
-
+extern mshr_entry mshr_entries[MSHR_ENTRY_SIZE];
+extern table_entry mshr_table[MSHR_TABLE_SIZE];
+extern uint32_t free_table[MSHR_TABLE_SIZE];
 
 class MSHR_IO
 {
@@ -50,22 +53,30 @@ public:
     uint32_t mshr_tail;
     uint32_t table_head;
     uint32_t table_tail;
-    uint32_t count;
+    uint32_t count_mshr;
+    uint32_t count_table;
     uint32_t offset;
     uint32_t entry;
 
     uint32_t rdata;
+    uint32_t done;
+    bool wdone;
+    bool wdonelast;
+    uint32_t wdata;
+    bool wdata_valid;
+
+
 
 
     enum MSHR_STATE state;
 
     void init();
     void comb_in();
-    void comb_out1();
-    void comb_out2();
+    void comb_out();
     void seq();
     uint32_t find_entry(uint32_t tag,uint32_t index);
-    void add_entry(uint32_t tag,uint32_t index,uint32_t way);
-    void add_table_entry(bool type,uint32_t entry,bool dirty);
+    void add_entry(uint32_t tag,uint32_t index,uint32_t way,bool dirty,uint32_t paddr);
+    void add_free(uint32_t entry);
+    void add_table_entry(bool type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb);
 };
 

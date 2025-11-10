@@ -55,6 +55,9 @@ public:
   bool dirty_writeback_ld;
   bool dirty_writeback_st;
 
+  uint32_t paddr_ld;
+  uint32_t paddr_st;
+
   bool flush_flag;
 
   bool req_ld_reg;

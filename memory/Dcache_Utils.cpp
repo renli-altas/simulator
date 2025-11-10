@@ -56,6 +56,7 @@ bool hit_check(uint32_t index, uint32_t tag, uint32_t &hit_way)
     hit_way = -1;
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
+        printf("Tag:%08x Checking way %d: tag=0x%08x valid=%d data:%08x\n",tag, i, dcache_tag[index][i], dcache_valid[index][i], dcache_data[index][i][3]);
         if (dcache_tag[index][i] == tag && dcache_valid[index][i])
         {
             hit = true;
@@ -87,14 +88,26 @@ void change_state(Dcache_State &state,bool io_req,bool hit,bool done,bool flush)
         }
     }
 }
-void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data, bool done,bool last)
+void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data,bool&wdone, bool done,bool last)
 {
+
+    if(offset==0){
+        wdone=true;
+    }
+    else if(done){
+        wdone=false;
+    }
+    else {
+        wdone=true;
+    }
     if(done){
-        data = dcache_data[index][way][offset++];
+        offset++;
     }
     if(last){
-        offset=0;   
+        offset=0;  
+        wdone=false;
     }
+    data = dcache_data[index][way][offset];
 }
 void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t data, bool done,bool last)
 {
@@ -117,7 +130,7 @@ void transfer_zero(MSHR_INFO* &mshrio)
     mshrio->index = 0;
     mshrio->offset = 0;
 }
-void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,bool ready)
+void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready)
 {
     mshrio->valid = ready;
     mshrio->addr = cpu->addr;
@@ -129,6 +142,7 @@ void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,u
     mshrio->offset = offset;
     mshrio->dirty=dirty;
     mshrio->way=way;
+    mshrio->paddr = paddr;
 }
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 {
@@ -141,10 +155,11 @@ void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
     mem->control.size = 0b10;
     mem->control.last = offset == DCACHE_OFFSET_NUM - 1;
 }
-void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback)
+void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr)
 {
     hit_way = getlru(index);
     if(dcache_dirty[index][hit_way]){
         dirty_writeback=true;
+        paddr = get_addr(dcache_tag[index][hit_way], index, 0);
     }
 }

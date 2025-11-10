@@ -110,10 +110,16 @@ Csr_Exe csr2exe;
 Exe_Csr exe2csr;
 Mem_IO ldq2cache;
 Mem_IO stq2cache;
-EXMem_IO arbiter2mem;
 
-EXMem_IO arbiter2cache_ld;
-EXMem_IO arbiter2cache_st;
+MSHR_INFO cache_ld2mshr;
+MSHR_INFO cache_st2mshr;
+Cache_Mshr cache2mshr;
+
+EXMem_IO mshr2mem;
+// EXMem_IO arbiter2mem;
+
+// EXMem_IO arbiter2cache_ld;
+// EXMem_IO arbiter2cache_st;
 
 Exe_Cache exe2cache;
 
@@ -200,19 +206,21 @@ void Back_Top::init() {
 
   dcache.io.cpu_ld = &ldq2cache;
   dcache.io.cpu_st = &stq2cache;
-  dcache.io.mem_ld = &arbiter2cache_ld;
-  dcache.io.mem_st = &arbiter2cache_st;
+  dcache.io.mshr_ld = &cache_ld2mshr;
+  dcache.io.mshr_st = &cache_st2mshr;
   dcache.io.control = &exe2cache;
-  arbiter.io.mem = &arbiter2mem;
+  dcache.io.mshr_control = &cache2mshr;
 
-  pmemory.io.mem = &arbiter2mem;
+  pmemory.io.mem = &mshr2mem;
 
   csr.io.exe2csr = &exe2csr;
   csr.io.csr2exe = &csr2exe;
   csr.io.rob_bcast = &rob_bcast;
 
-  arbiter.io.cpu_ld = &arbiter2cache_ld;
-  arbiter.io.cpu_st = &arbiter2cache_st;
+  mshr.io.dcache_ld = &cache_ld2mshr;
+  mshr.io.dcache_st = &cache_st2mshr;
+  mshr.io.control = &cache2mshr;
+  mshr.io.mem = &mshr2mem;
 
   idu.init();
   isu.init();
@@ -220,7 +228,7 @@ void Back_Top::init() {
   exu.init();
   csr.init();
   rob.init();
-  arbiter.init();
+  mshr.init();
   dcache.init();
   pmemory.init();
 }
@@ -284,9 +292,9 @@ void Back_Top::Back_comb() {
   exu.comb_pipeline();
   exu.comb_flush();
   dcache.comb_in();
-  arbiter.comb_in();
+  mshr.comb_in();
   pmemory.comb();
-  arbiter.comb_out();
+  mshr.comb_out();
   dcache.comb_out();
   prf.comb_write();
   prf.comb_branch();
@@ -342,7 +350,7 @@ void Back_Top::Back_seq() {
   stq.seq();
   csr.seq();
   dcache.seq();
-  arbiter.seq();
+  mshr.seq();
   pmemory.seq();
   for (int i = 0; i < FETCH_WIDTH; i++) {
     out.fire[i] = idu.io.dec2front->fire[i];

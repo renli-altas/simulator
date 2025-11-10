@@ -13,6 +13,7 @@
 #include <Memory.h>
 #include <Arbiter.h>
 #include <Dcache.h>
+#include <MSHR.h>
 typedef struct {
   uint32_t inst[FETCH_WIDTH];
   uint32_t pc[FETCH_WIDTH];
@@ -47,7 +48,8 @@ public:
   STQ stq;
   ROB rob;
 
-  Arbiter arbiter;
+  // Arbiter arbiter;
+  MSHR mshr;
   MEMORY pmemory;
   Dcache dcache;
 
