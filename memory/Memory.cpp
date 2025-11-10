@@ -81,7 +81,7 @@ void MEMORY::seq()
     {
         Latency_cnt = 0;
     }
-    if (state != TRANSFER)
+    if (state != TRANSFER || (io.mem->control.wen==1&&io.mem->control.done&&io.mem->control.last))
     {
         data_cnt = 0;
     }
@@ -101,8 +101,12 @@ void MEMORY::seq()
     {
         state = TRANSFER;
     }
-    else if (io.mem->control.en == true && data_cnt == io.mem->control.len + 1 && state == TRANSFER)
+    else if (io.mem->control.en == true && io.mem->control.wen==0 && data_cnt == io.mem->control.len + 1 && state == TRANSFER)
     { // AXI优化
+        state = MEM_IDLE;
+    }
+    else if(io.mem->control.en == true && io.mem->control.wen==1 && io.mem->control.done && io.mem->control.last && state == TRANSFER)
+    {
         state = MEM_IDLE;
     }
     else if (io.mem->control.en == false)

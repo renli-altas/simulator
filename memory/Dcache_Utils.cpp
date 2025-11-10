@@ -56,7 +56,6 @@ bool hit_check(uint32_t index, uint32_t tag, uint32_t &hit_way)
     hit_way = -1;
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
-        printf("Tag:%08x Checking way %d: tag=0x%08x valid=%d data:%08x\n",tag, i, dcache_tag[index][i], dcache_valid[index][i], dcache_data[index][i][3]);
         if (dcache_tag[index][i] == tag && dcache_valid[index][i])
         {
             hit = true;

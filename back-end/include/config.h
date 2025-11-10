@@ -48,7 +48,7 @@ using namespace std;
 #define ALU_NUM 2
 #define BRU_NUM 2
 
-#define LOG_START 0 //357912703
+#define LOG_START 626800 //357912703
 
 // #define LOG (0 && (sim_time >= LOG_START))
 // #define MEM_LOG (0 && (sim_time >= LOG_START))

@@ -39,7 +39,7 @@ void MSHR::comb_in()
         io.mem->control.len = DCACHE_OFFSET_NUM - 1;
         io.mem->control.size = 0b10;
         io.mem->control.sel = 0b1111;
-        io.mem->control.done = wdone;
+        io.mem->control.done = wdone&!io.mem->data.done;
         io.mem->control.last = offset == DCACHE_OFFSET_NUM - 1&wdone;
     }
     else if (state == MSHR_WAIT_READ)
