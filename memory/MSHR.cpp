@@ -22,8 +22,12 @@ void MSHR::init()
 
     for (int i = 0; i < MSHR_ENTRY_SIZE; i++)
     {
-        free_table[i] = i;
         mshr_entries[i].valid = false;
+    }
+    for (int i = 0; i < MSHR_TABLE_SIZE; i++)
+    {
+        mshr_table[i].valid = false;
+        free_table[i] = i;
     }
 }
 
@@ -155,12 +159,17 @@ void MSHR::seq()
 
     if (io.control->flush)//优化
     {
+        uint32_t imax=0;
+        uint32_t index=0;
         for(int i=0;i<MSHR_TABLE_SIZE;i++){
-            if(mshr_table[i].valid&&mshr_table[i].type==0)
-            {   
-                mshr_table[i].valid=false;
-                add_free(i);
+            if(mshr_table[i].valid&&mshr_table[i].type==0&&mshr_table[i].priority>imax){
+                imax=mshr_table[i].priority;
+                index=i;
             }
+        }
+        if(imax!=0){
+            mshr_table[index].valid=false;
+            add_free(index);
         }
     }
     if (state == MSHR_WAIT_WRITE)
@@ -188,25 +197,29 @@ void MSHR::seq()
         done=0;
         wdata=0;
         wdata_valid = false;
+        uint32_t index=0;
+        uint32_t imin=MSHR_TABLE_SIZE+1;
         for(int i=0;i<MSHR_TABLE_SIZE;i++){
-            uint32_t index = (table_head + i) % MSHR_TABLE_SIZE;
-            if(mshr_table[index].valid&&mshr_table[index].entry==mshr_head){
-                if(mshr_table[index].type==0){
-                    rdata=read_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset);
-                }
-                else{
-                    write_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset, mshr_table[index].wdata, mshr_table[index].wstrb);
-                    rdata=0;
-                    if(DCACHE_LOG)
-                    printf("MSHR write cache data addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
-                }
-                done=mshr_table[index].type+1;
-                table_head=index;
-                add_free(index);
-                break;
+            if(mshr_table[i].valid&&mshr_table[i].entry==mshr_head&&mshr_table[i].priority<=imin){
+                imin=mshr_table[i].priority;
+                index=i;
             }
         }
-        if(done==0){
+        if(imin!=MSHR_TABLE_SIZE+1){
+            if(mshr_table[index].type==0){
+                rdata=read_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset);
+            }
+            else{
+                write_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset, mshr_table[index].wdata, mshr_table[index].wstrb);
+                rdata=0;
+                if(DCACHE_LOG)
+                printf("MSHR write cache data addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
+            }
+            done=mshr_table[index].type+1;
+            add_free(index);
+        }
+        else{
+            done=0;
             offset=0;
             mshr_entries[mshr_head].valid=false;
             mshr_head=(mshr_head+1)%MSHR_ENTRY_SIZE;
@@ -267,11 +280,17 @@ void MSHR::seq()
         printf("MSHR Table:\n");
         for (int i = 0; i < MSHR_TABLE_SIZE; i++)
         {
-            printf("Table %d: Valid: %d Entry: %d Type: %d  Offset:%d\n", i, mshr_table[i].valid, mshr_table[i].entry, mshr_table[i].type, mshr_table[i].offset);
+            printf("Table %d: Valid: %d Entry: %d Type: %d  Offset:%d Priority:%d\n", i, mshr_table[i].valid, mshr_table[i].entry, mshr_table[i].type, mshr_table[i].offset, mshr_table[i].priority);
         }
         printf("MSHR Mem IO Control: En: %d Wen: %d Addr: 0x%08x Wdata: 0x%08x Len: %d Size: %d Sel: %02x Done: %d Last: %d\n", io.mem->control.en, io.mem->control.wen, io.mem->control.addr, io.mem->control.wdata, io.mem->control.len, io.mem->control.size, io.mem->control.sel,io.mem->control.done,io.mem->control.last);
         printf("MSHR Mem IO Data: Data: 0x%08x Done: %d Last: %d\n", io.mem->data.data, io.mem->data.done, io.mem->data.last);
         printf("\n");
+        
+    }
+    if(count_table ==3){
+        printf("MSHR ERROR: count_table==3\n");
+        printf("%lld",sim_time);
+        exit(1);
     }
 }
 
@@ -308,6 +327,7 @@ void MSHR::add_table_entry(bool type, uint32_t entry, uint32_t offset_table,uint
     mshr_table[index].offset = offset_table;
     mshr_table[index].wdata = wdata;
     mshr_table[index].wstrb = wstrb;
+    mshr_table[index].priority = count_table+1;
     count_table++;
 }
 void MSHR::add_free(uint32_t entry)

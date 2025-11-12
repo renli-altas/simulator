@@ -98,6 +98,9 @@ void Dcache::seq()
     if (state_st == DCACHE_IDLE && io.cpu_st->req == true)
     {
         get_addr_info(io.cpu_st->addr, tag_st, index_st, offset_st);
+        if(tag_st == 0x002020cf && index_st==0x23 && offset_st==0x2){
+            printf("Dcache store req addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x wdata:0x%08x wstrb:0x%02x\n", io.cpu_st->addr, tag_st, index_st, offset_st, io.cpu_st->wdata, io.cpu_st->wstrb);
+        }
     }
 
     //================================================================================
@@ -132,6 +135,7 @@ void Dcache::seq()
         miss_num++;
     }
 
+
     
 
     if (hit_st && io.cpu_st->req == true && state_st == DCACHE_IDLE)
@@ -158,10 +162,15 @@ void Dcache::seq()
     {
         req_ld_reg = true;
     }
-
+    // if(io.cpu_st->req==true&&io.cpu_st->addr==0x808b6c00){
+    //     printf("Dcache store req addr:0x%08x wdata:0x%08x wstrb:%02x hit:%d data_ok:%d\n", io.cpu_st->addr, io.cpu_st->wdata, io.cpu_st->wstrb, hit_st, io.cpu_st->data_ok);
+    // }
+        
     if (DCACHE_LOG)
     {
-        printf("\n\nDcache state_ld:%d state_st:%d flush:%d\n", state_ld, state_st, io.control->flush);
+        printf("\n\n");
+        printf("========== Dcache Status ==========\n");
+        printf("Dcache state_ld:%d state_st:%d flush:%d rdata:%08x\n", state_ld, state_st, io.control->flush, rdata);
         printf("ld req:%d addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x hit:%d hit_way:%2d dirty_writeback:%d \n", io.cpu_ld->req, io.cpu_ld->addr, tag_ld, index_ld, offset_ld, hit_ld, hit_way_ld, dirty_writeback_ld);
         printf("st req:%d addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x hit:%d hit_way:%2d dirty_writeback:%d \n", io.cpu_st->req, io.cpu_st->addr, tag_st, index_st, offset_st, hit_st, hit_way_st, dirty_writeback_st);
         printf("ld rdata:0x%08x data_ok:%d\n", io.cpu_ld->rdata, io.cpu_ld->data_ok);

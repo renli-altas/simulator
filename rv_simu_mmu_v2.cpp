@@ -17,8 +17,8 @@
 #include <Memory.h>
 using namespace std;
 
-bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
-           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory);
+// bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
+//            bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory,bool dut_flag=true);
 void front_cycle(bool, bool, bool, front_top_in &, front_top_out &, uint32_t &,
                  bool &);
 void back2front_comb(front_top_in &front_in, front_top_out &front_out);
@@ -174,7 +174,7 @@ SIM_END:
 }
 
 bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
-           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory) {
+           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory, bool dut_flag=true) {
   uint32_t d = 24;
   uint32_t a = 25;
   uint32_t g = 26;
@@ -189,7 +189,14 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
   uint32_t mpp = cvt_bit_to_number_unsigned(mstatus + 19 * sizeof(bool), 2);
 
   uint32_t pte1_addr = (satp << 12) | ((v_addr >> 20) & 0xFFC);
+  uint32_t pte1_entry_cache;
+  bool pte1_in_cache =
+      dcache_read(pte1_addr, pte1_entry_cache); // 尝试从DCache读取PTE1
   uint32_t pte1_entry = p_memory[uint32_t(pte1_addr / 4)];
+
+  if(pte1_in_cache&& dut_flag){
+    pte1_entry = pte1_entry_cache;
+  }
 
   bool bit_pte1_entry[32];
   cvt_number_to_bit_unsigned(bit_pte1_entry, pte1_entry, 32);
@@ -231,7 +238,15 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
   uint32_t pte2_addr =
       ((pte1_entry << 2) & 0xFFFFF000) | ((v_addr >> 10) & 0xFFC);
+  uint32_t pte2_entry_cache;
+  bool pte2_in_cache =
+      dcache_read(pte2_addr, pte2_entry_cache); // 尝试从DCache读取PTE2
+
   uint32_t pte2_entry = p_memory[uint32_t(pte2_addr / 4)];
+
+  if(pte2_in_cache && dut_flag){
+    pte2_entry = pte2_entry_cache;
+  }
 
   bool bit_pte2_stored[32];
   cvt_number_to_bit_unsigned(bit_pte2_stored, pte2_entry, 32);

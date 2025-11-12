@@ -23,6 +23,7 @@ typedef struct{
     uint32_t offset;
     uint32_t wdata;
     uint8_t wstrb;
+    uint32_t priority;
 }table_entry;
 
 enum MSHR_STATE{

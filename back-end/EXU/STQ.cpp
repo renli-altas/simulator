@@ -191,6 +191,7 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx) {
   int i = deq_ptr;
   while (i != commit_ptr) {
     if ((entry[i].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC)) {
+
       uint32_t wdata = entry[i].data;
       uint32_t waddr = entry[i].addr;
       uint32_t wstrb;
@@ -216,6 +217,7 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx) {
         mask |= 0xFF000000;
 
       data = (mask & wdata) | (~mask & data);
+
     }
     LOOP_INC(i, STQ_NUM);
   }
@@ -254,6 +256,7 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx) {
           mask |= 0xFF000000;
 
         data = (mask & wdata) | (~mask & data);
+
       }
     }
     LOOP_INC(idx, ROB_NUM);

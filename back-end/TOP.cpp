@@ -228,8 +228,8 @@ void Back_Top::init() {
   exu.init();
   csr.init();
   rob.init();
-  mshr.init();
   dcache.init();
+  mshr.init();
   pmemory.init();
 }
 

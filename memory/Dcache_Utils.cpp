@@ -1,5 +1,6 @@
 #include "Dcache_Utils.h"
 #include <cstdio>
+extern long long sim_time;
 uint32_t dcache_data[DCACHE_LINE_NUM][DCACHE_WAY_NUM][DCACHE_OFFSET_NUM] = {0};
 uint32_t dcache_lru[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
@@ -161,4 +162,16 @@ void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_write
         dirty_writeback=true;
         paddr = get_addr(dcache_tag[index][hit_way], index, 0);
     }
+}
+bool dcache_read(uint32_t addr, uint32_t &data)
+{
+    uint32_t tag, index, offset;
+    get_addr_info(addr, tag, index, offset);
+    uint32_t hit_way;
+    if (hit_check(index, tag, hit_way))
+    {
+        data = read_cache_data(index, hit_way, offset);
+        return true;
+    }
+    return false;
 }

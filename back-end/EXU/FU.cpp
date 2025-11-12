@@ -9,7 +9,7 @@ extern Back_Top back;
 extern int commit_num;
 bool load_data(uint32_t &data, uint32_t v_addr, int rob_idx);
 bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
-           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory);
+           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory, bool dut_flag=true);
 
 enum STATE { IDLE, RECV };
 
@@ -231,6 +231,9 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
 
     ret = va2pa(p_addr, addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
                 sstatus, back.csr.privilege, p_memory);
+    if(LOG){
+      printf("va2pa in ldu:v_addr:0x%08x p_addr:0x%08x page_fault:%d\n",addr,p_addr,!ret);
+    }
   }
   if (p_addr == 0x1fd0e000)
   {

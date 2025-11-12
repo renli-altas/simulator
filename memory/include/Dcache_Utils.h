@@ -43,3 +43,4 @@ void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,u
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr);
 
 uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset);
+bool dcache_read(uint32_t addr, uint32_t &data);
