@@ -57,6 +57,11 @@ static void checkregs() {
 
     if (dut_cpu.store_addr != ref_cpu.state.store_addr)
       goto fault;
+
+    // if(dut_cpu.store_addr == 0x80833e38 || ref_cpu.state.store_addr == 0x80833e38){
+    //   printf("ref_addr:%08x ref_data:%08x\n",ref_cpu.state.store_addr, ref_cpu.state.store_data);
+    //   printf("Store to 0x80833e38: data=0x%08x\n",dut_cpu.store_data);
+    // }
   }
 
   return;

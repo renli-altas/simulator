@@ -48,18 +48,23 @@ using namespace std;
 #define ALU_NUM 2
 #define BRU_NUM 2
 
-#define LOG_START 2162966 //357912703
+#define LOG_START 415282432//383810621
 
-// #define LOG (0 && (sim_time >= LOG_START))
-// #define MEM_LOG (0 && (sim_time >= LOG_START))
-// #define ARB_LOG (0 && (sim_time >= LOG_START))
-// #define DCACHE_LOG (0 && (sim_time >= LOG_START))
-// #define TRACE_LOG (0 && (sim_time >= LOG_START))
-#define LOG (1 && (sim_time >= LOG_START))
-#define MEM_LOG (1 && (sim_time >= LOG_START))
-#define ARB_LOG (1 && (sim_time >= LOG_START))
-#define DCACHE_LOG (1 && (sim_time >= LOG_START))
-#define TRACE_LOG (1 && (sim_time >= LOG_START))
+// #define LOG_ENABLE 
+
+#ifndef LOG_ENABLE
+  #define LOG (0 && (sim_time >= LOG_START))
+  #define MEM_LOG (0 && (sim_time >= LOG_START))
+  #define ARB_LOG (0 && (sim_time >= LOG_START))
+  #define DCACHE_LOG (0 && (sim_time >= LOG_START))
+  #define TRACE_LOG (0 && (sim_time >= LOG_START))
+#else
+  #define LOG (1 && (sim_time >= LOG_START))
+  #define MEM_LOG (1 && (sim_time >= LOG_START))
+  #define ARB_LOG (1 && (sim_time >= LOG_START))
+  #define DCACHE_LOG (1 && (sim_time >= LOG_START))
+  #define TRACE_LOG (1 && (sim_time >= LOG_START))
+#endif
 extern long long sim_time;
 
 #define CONFIG_DIFFTEST

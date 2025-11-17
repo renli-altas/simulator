@@ -110,6 +110,7 @@ void MSHR::seq()
             //命中直接写回
             st_done=true;
             write_cache_data(io.dcache_st->index, hit_way, io.dcache_st->offset, io.dcache_st->wdata, io.dcache_st->wstrb);
+               
             if (DCACHE_LOG)
             printf("MSHR direct write cache data addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", io.dcache_st->addr, dcache_data[io.dcache_st->index][hit_way][io.dcache_st->offset], io.dcache_st->wstrb, io.dcache_st->index, io.dcache_st->offset, hit_way);
         }
@@ -168,6 +169,10 @@ void MSHR::seq()
             }
         }
         if(imax!=0){
+            if(mshr_head!=(mshr_table[index].entry)){
+                mshr_entries[mshr_table[index].entry].valid=false;
+                count_mshr--;
+            }
             mshr_table[index].valid=false;
             add_free(index);
         }
@@ -180,7 +185,8 @@ void MSHR::seq()
         printf("MSHR write back data addr:0x%08x wdata:0x%08x index:%d offset:%d way:%d\n", get_addr(dcache_tag[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way], mshr_entries[mshr_head].index, offset), wdata, mshr_entries[mshr_head].index, offset, mshr_entries[mshr_head].way);
         if(io.mem->data.last){
             dcache_dirty[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 0;
-            dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 0;
+            // dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 0;
+            dcache_issued[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 0;
         }
     }
     else if (state == MSHR_WAIT_READ)
@@ -241,6 +247,13 @@ void MSHR::seq()
             else
             {
                 state = MSHR_WAIT_WRITE;
+                dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 0;
+                dcache_issued[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 1;
+            }
+        }
+        else {
+            if(mshr_head != mshr_tail){
+                mshr_head=(mshr_head+1)%MSHR_ENTRY_SIZE;
             }
         }
     }
@@ -249,7 +262,9 @@ void MSHR::seq()
         if (io.mem->data.last)
         {
             if (mshr_entries[mshr_head].valid)
+            {
                 state = MSHR_WAIT_READ;
+            }
             
         }
     }
@@ -289,7 +304,24 @@ void MSHR::seq()
     }
     if(count_table ==3){
         printf("MSHR ERROR: count_table==3\n");
-        printf("%lld",sim_time);
+        printf("MSHR State: %d Count_MSHR: %d Count_Table: %d flush:%d Table Head: %d Table Tail: %d MSHR Head:%d MSHR Tail:%d rdata:%08x offset:%d done:%d\n", state, count_mshr, count_table, io.control->flush, table_head, table_tail, mshr_head, mshr_tail, rdata, offset, done);
+        printf("MSHR io.dcache_ld: Valid:%d Tag:0x%08x Index:0x%02x Way:%d Dirty:%d Rdata:0x%08x Done:%d\n", io.dcache_ld->valid, io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty, io.dcache_ld->rdata, io.dcache_ld->done);
+        printf("MSHR io.dcache_st: Valid:%d Tag:0x%08x Index:0x%02x Way:%d Dirty:%d Rdata:0x%08x Done:%d\n", io.dcache_st->valid, io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty, io.dcache_st->rdata, io.dcache_st->done);
+
+        printf("MSHR Entries:\n");
+        for (int i = 0; i < MSHR_ENTRY_SIZE; i++)
+        {
+            printf("Entry %d: Valid: %d Tag: 0x%08x Index: 0x%02x Way: %d Dirty: %d\n", i, mshr_entries[i].valid, mshr_entries[i].tag, mshr_entries[i].index, mshr_entries[i].way, mshr_entries[i].dirty);
+        }
+        printf("MSHR Table:\n");
+        for (int i = 0; i < MSHR_TABLE_SIZE; i++)
+        {
+            printf("Table %d: Valid: %d Entry: %d Type: %d  Offset:%d Priority:%d\n", i, mshr_table[i].valid, mshr_table[i].entry, mshr_table[i].type, mshr_table[i].offset, mshr_table[i].priority);
+        }
+        printf("MSHR Mem IO Control: En: %d Wen: %d Addr: 0x%08x Wdata: 0x%08x Len: %d Size: %d Sel: %02x Done: %d Last: %d\n", io.mem->control.en, io.mem->control.wen, io.mem->control.addr, io.mem->control.wdata, io.mem->control.len, io.mem->control.size, io.mem->control.sel,io.mem->control.done,io.mem->control.last);
+        printf("MSHR Mem IO Data: Data: 0x%08x Done: %d Last: %d\n", io.mem->data.data, io.mem->data.done, io.mem->data.last);
+        printf("\n");
+        printf("%lld\n",sim_time);
         exit(1);
     }
 }

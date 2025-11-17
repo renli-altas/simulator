@@ -66,7 +66,7 @@ void Dcache::comb_out()
         io.cpu_ld->rdata = rdata;
         io.cpu_ld->data_ok = true;
     }
-    else
+    else  
     {
         if (state_ld == DCACHE_WAIT && io.mshr_ld->done)
         {
@@ -94,13 +94,18 @@ void Dcache::seq()
     if (state_ld == DCACHE_IDLE && io.cpu_ld->req == true)
     {
         get_addr_info(io.cpu_ld->addr, tag_ld, index_ld, offset_ld);
+        // if (io.cpu_ld->addr==0x8fdfd044)
+        // {
+        //     printf("Dcache load req sim_time:%lld addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x\n", sim_time, io.cpu_ld->addr, tag_ld, index_ld, offset_ld);
+        // }
+        
     }
     if (state_st == DCACHE_IDLE && io.cpu_st->req == true)
     {
         get_addr_info(io.cpu_st->addr, tag_st, index_st, offset_st);
-        if(tag_st == 0x002020cf && index_st==0x23 && offset_st==0x2){
-            printf("Dcache store req addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x wdata:0x%08x wstrb:0x%02x\n", io.cpu_st->addr, tag_st, index_st, offset_st, io.cpu_st->wdata, io.cpu_st->wstrb);
-        }
+        // if(tag_st == 0x00203004 && index_st==0x21 && offset_st==0x3 ){
+        //     printf("Dcache store req sim_time:%lld addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x wdata:0x%08x wstrb:0x%02x\n", sim_time, io.cpu_st->addr, tag_st, index_st, offset_st, io.cpu_st->wdata, io.cpu_st->wstrb);
+        // }
     }
 
     //================================================================================
@@ -171,13 +176,13 @@ void Dcache::seq()
         printf("\n\n");
         printf("========== Dcache Status ==========\n");
         printf("Dcache state_ld:%d state_st:%d flush:%d rdata:%08x\n", state_ld, state_st, io.control->flush, rdata);
-        printf("ld req:%d addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x hit:%d hit_way:%2d dirty_writeback:%d \n", io.cpu_ld->req, io.cpu_ld->addr, tag_ld, index_ld, offset_ld, hit_ld, hit_way_ld, dirty_writeback_ld);
-        printf("st req:%d addr:0x%08x tag:0x%08x index:0x%02x offset:0x%02x hit:%d hit_way:%2d dirty_writeback:%d \n", io.cpu_st->req, io.cpu_st->addr, tag_st, index_st, offset_st, hit_st, hit_way_st, dirty_writeback_st);
+        printf("ld req:%d addr:0x%08x tag:0x%08x index:0x%02x hit_way:%2d offset:0x%02x hit:%d dirty_writeback:%d \n", io.cpu_ld->req, io.cpu_ld->addr, tag_ld, index_ld, hit_way_ld, offset_ld, hit_ld, dirty_writeback_ld);
+        printf("st req:%d addr:0x%08x tag:0x%08x index:0x%02x hit_way:%2d offset:0x%02x hit:%d dirty_writeback:%d \n", io.cpu_st->req, io.cpu_st->addr, tag_st, index_st, hit_way_st, offset_st, hit_st, dirty_writeback_st);
         printf("ld rdata:0x%08x data_ok:%d\n", io.cpu_ld->rdata, io.cpu_ld->data_ok);
         printf("st wdata:0x%08x data_ok:%d\n", io.cpu_st->wdata, io.cpu_st->data_ok);
         printf("Dcache hit num:%d miss num:%d\n\n", hit_num, miss_num);
     }
     //================================================================================
-    change_state(state_ld, io.cpu_ld->req & !io.control->flush, hit_ld, io.mshr_ld->done, io.control->flush);
-    change_state(state_st, io.cpu_st->req , hit_st, io.mshr_st->done, false);
+    change_state(state_ld, io.cpu_ld->req & !io.control->flush & !io.cpu_ld->data_ok, hit_ld, io.mshr_ld->done, io.control->flush);
+    change_state(state_st, io.cpu_st->req & !io.cpu_st->data_ok, hit_st, io.mshr_st->done, false);
 }

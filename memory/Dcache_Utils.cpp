@@ -6,6 +6,7 @@ uint32_t dcache_lru[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_valid[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
+bool dcache_issued[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 
 void updatelru(int linenum,int way)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 {
@@ -62,6 +63,27 @@ bool hit_check(uint32_t index, uint32_t tag, uint32_t &hit_way)
             hit = true;
             hit_way = i;
         }
+    }
+    if(!hit){
+        hit_way = getlru(index);
+    }
+    return hit;
+}
+
+bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
+{
+    bool hit = false;
+    hit_way = -1;
+    for (int i = 0; i < DCACHE_WAY_NUM; i++)
+    {
+        if (dcache_tag[index][i] == tag && (dcache_valid[index][i]||dcache_issued[index][i]))
+        {
+            hit = true;
+            hit_way = i;
+        }
+    }
+    if(!hit){
+        hit_way = getlru(index);
     }
     return hit;
 }
@@ -157,20 +179,26 @@ void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 }
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr)
 {
-    hit_way = getlru(index);
-    if(dcache_dirty[index][hit_way]){
+    if(dcache_dirty[index][hit_way]&&dcache_valid[index][hit_way]){
         dirty_writeback=true;
         paddr = get_addr(dcache_tag[index][hit_way], index, 0);
     }
+    // hit_way = getlru(index);
 }
 bool dcache_read(uint32_t addr, uint32_t &data)
 {
     uint32_t tag, index, offset;
     get_addr_info(addr, tag, index, offset);
+    if(DCACHE_LOG){
+        printf("MMU Dcache read addr:0x%08x tag:0x%08x index:%d offset:%d\n", addr, tag, index, offset);
+    }
     uint32_t hit_way;
-    if (hit_check(index, tag, hit_way))
+    if (hit_check_mmu(index, tag, hit_way))
     {
         data = read_cache_data(index, hit_way, offset);
+        if(DCACHE_LOG){
+            printf("MMU Dcache read hit addr:0x%08x tag:0x%08x index:%d offset:%d way:%d data:%08x\n", addr, tag, index, offset, hit_way, data);
+        }
         return true;
     }
     return false;

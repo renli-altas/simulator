@@ -27,7 +27,8 @@ class STQ {
 public:
   STQ_IO io;
   void comb();
-  void st2ld_fwd(uint32_t, uint32_t &, int rob_idx);
+  void st2ld_fwd(uint32_t, uint32_t &, int rob_idx,bool &stall_load);
+  void stq_print();
   void seq();
 
   void init();
@@ -37,6 +38,6 @@ public:
   STQ_entry entry[STQ_NUM];
   int commit_ptr = 0;
   int count = 0;
-
+  int commit_count = 0;
   bool write_flag = 0;
 };

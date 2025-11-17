@@ -65,6 +65,9 @@ void MEMORY::seq()
 
                 p_memory[addr_offset>>2] = (mask & io.mem->control.wdata) | (~mask & old_data);
 
+                // if(addr_offset == 0x80833d8c){
+                //     printf("Store to 0x80833d8c: data=0x%08x sim_time:%lld\n",p_memory[addr_offset>>2], sim_time);
+                // }
                 if (MEM_LOG)
                 {
                     printf("\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n", p_memory[addr_offset>>2], addr_offset, addr_offset >> 2, io.mem->control.sel, old_data);

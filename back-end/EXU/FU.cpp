@@ -197,8 +197,9 @@ void alu(Inst_uop &inst) {
   }
 }
 
-void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
+bool ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
   uint32_t addr = inst.src1_rdata + inst.imm;
+  bool stall_load=false;
 
   if (addr == 0x1fd0e000) {
     inst.difftest_skip = true;
@@ -231,9 +232,9 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
 
     ret = va2pa(p_addr, addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
                 sstatus, back.csr.privilege, p_memory);
-    if(LOG){
-      printf("va2pa in ldu:v_addr:0x%08x p_addr:0x%08x page_fault:%d\n",addr,p_addr,!ret);
-    }
+    // if(LOG){
+    //   printf("va2pa in ldu:v_addr:0x%08x p_addr:0x%08x page_fault:%d\n",addr,p_addr,!ret);
+    // }
   }
   if (p_addr == 0x1fd0e000)
   {
@@ -259,13 +260,16 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
   {
     if (io->req==true && io->data_ok == true)
     {
+      if(DCACHE_LOG){
+        back.stq.stq_print();
+      }
       data = io->rdata;
       io->req = false;
       io->wr = 0;
       io->wdata = 0;
       io->wstrb = 0;
       io->addr = 0;
-      back.stq.st2ld_fwd(p_addr, data, inst.rob_idx);
+      back.stq.st2ld_fwd(p_addr, data, inst.rob_idx,stall_load);
     }
     else
     {
@@ -303,6 +307,7 @@ void ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
     inst.page_fault_load = true;
     inst.result = addr;
   }
+  return !stall_load&&io->data_ok;
 }
 
 void stu_addr(Inst_uop &inst) {

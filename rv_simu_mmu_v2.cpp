@@ -190,6 +190,9 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
   uint32_t pte1_addr = (satp << 12) | ((v_addr >> 20) & 0xFFC);
   uint32_t pte1_entry_cache;
+  if(DCACHE_LOG){
+      printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
+  }
   bool pte1_in_cache =
       dcache_read(pte1_addr, pte1_entry_cache); // 尝试从DCache读取PTE1
   uint32_t pte1_entry = p_memory[uint32_t(pte1_addr / 4)];
@@ -239,6 +242,9 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
   uint32_t pte2_addr =
       ((pte1_entry << 2) & 0xFFFFF000) | ((v_addr >> 10) & 0xFFC);
   uint32_t pte2_entry_cache;
+  if(DCACHE_LOG){
+      printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
+  }
   bool pte2_in_cache =
       dcache_read(pte2_addr, pte2_entry_cache); // 尝试从DCache读取PTE2
 

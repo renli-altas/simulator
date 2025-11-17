@@ -17,6 +17,7 @@ extern uint32_t dcache_data[DCACHE_LINE_NUM][DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];
 extern uint32_t dcache_lru[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
 extern uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM];// sv3
 extern bool dcache_valid[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
+extern bool dcache_issued[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
 extern bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM];
 
 enum Dcache_State
@@ -31,6 +32,7 @@ int getlru(int linenum);
 void write_cache_data(uint32_t index,uint32_t way,uint32_t offset,uint32_t wdata,uint8_t wstrb);
 uint32_t read_cache_data(uint32_t index,uint32_t way,uint32_t offset);
 bool hit_check(uint32_t index,uint32_t tag,uint32_t &hit_way);
+bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way);
 
 void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset);
 void change_state(Dcache_State &state,bool io_req,bool hit,bool done,bool flush);

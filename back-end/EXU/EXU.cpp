@@ -10,7 +10,7 @@ extern uint32_t *p_memory;
 
 void alu(Inst_uop &inst);
 void bru(Inst_uop &inst);
-void ldu(Inst_uop &inst, Mem_IO *&io, bool &flag);
+bool ldu(Inst_uop &inst, Mem_IO *&io, bool &flag);
 void stu_addr(Inst_uop &inst);
 void stu_data(Inst_uop &inst);
 void mul(Inst_uop &inst);
@@ -58,15 +58,15 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
   {
     if (is_load)
     {
-      ldu(inst, io, flag);
-      if (io->data_ok || flag)
+      bool load_complete = ldu(inst, io, flag);
+      if (load_complete || flag)
       {
         complete = true;
         cycle = 0;
       }
       else
       {
-        if (!io->data_ok)latency++;
+        if (!load_complete)latency++;
         complete = false;
       }
     }
