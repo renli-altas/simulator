@@ -3,20 +3,22 @@
 #include <config.h>
 #include <cstdint>
 
-class STQ_IN {
+class LDQ_IN {
 public:
-  Dis_Stq *dis2stq;
-  Exe_Stq *exe2stq;
-  Rob_Commit *rob_commit;
+  Dis_Ldq *dis2ldq;
+  Exe_Ldq *exe2ldq;
+  // Rob_Commit *rob_commit;
   Dec_Broadcast *dec_bcast;
   Rob_Broadcast *rob_bcast;
-  Mem_Data *cache2stq;
+
+  Mem_Data * cache2ldq;
 };
 
-class STQ_OUT {
+class LDQ_OUT {
 public:
-  Stq_Dis *stq2dis;
-  Mem_Control * stq2cache;
+  Ldq_Dis *ldq2dis;
+  Ldq_Prf *ldq2prf;
+  Mem_Control * ldq2cache;
 };
 
 // typedef struct {
@@ -27,24 +29,21 @@ public:
 //   uint32_t wdata;
 //   uint32_t waddr;
 //   uint32_t wstrb;
-// } STQ_out;
+// } LDQ_out;
 
-class STQ {
+class LDQ {
 public:
-  STQ_IN in;
-  STQ_OUT out;
+  LDQ_IN in;
+  LDQ_OUT out;
   void comb();
-  void st2ld_fwd(uint32_t, uint32_t &, int rob_idx, bool &);
   void seq();
 
   void init();
   int enq_ptr;
   int deq_ptr;
 
-  STQ_entry entry[STQ_NUM];
+  LDQ_entry entry[LDQ_NUM];
   int commit_ptr = 0;
   int count = 0;
   int commit_count = 0;
-
-  bool write_flag = 0;
 };

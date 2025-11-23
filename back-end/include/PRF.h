@@ -15,6 +15,7 @@ class PRF_IN {
 public:
   Iss_Prf *iss2prf;
   Exe_Prf *exe2prf;
+  Ldq_Prf *ldq2prf;
   Dec_Broadcast *dec_bcast;
   Rob_Broadcast *rob_bcast;
 };
@@ -24,6 +25,7 @@ public:
   PRF_IN in;
   PRF_OUT out;
 
+  void comb_load();
   void comb_br_check();
   void comb_branch();
   void comb_complete();

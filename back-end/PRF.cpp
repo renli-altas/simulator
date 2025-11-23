@@ -45,8 +45,14 @@ void PRF::comb_br_check() {
     // 任意，以代码简单为准
   }
 }
-
 void PRF::comb_read() {
+  
+  
+  // load queue
+  if( in.ldq2prf->data_valid) {
+    in.exe2prf->entry[IQ_LD].uop.result = in.ldq2prf->rdata;
+  }
+
   // bypass
   for (int i = 0; i < ISSUE_WAY; i++) {
     out.prf2exe->iss_entry[i] = in.iss2prf->iss_entry[i];

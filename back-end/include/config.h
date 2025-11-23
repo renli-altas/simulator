@@ -50,6 +50,7 @@ using namespace std;
 #define ROB_LINE_NUM (ROB_NUM / ROB_BANK_NUM)
 
 #define STQ_NUM 16
+#define LDQ_NUM 16
 #define ALU_NUM 2
 #define BRU_NUM 2
 
@@ -162,6 +163,7 @@ typedef struct Inst_uop {
   wire12_t csr_idx;
   wire7_t rob_idx;
   wire4_t stq_idx;
+  wire4_t ldq_idx;
   wire16_t pre_sta_mask;
   wire16_t pre_std_mask;
 

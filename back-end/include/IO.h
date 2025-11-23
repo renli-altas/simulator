@@ -17,6 +17,23 @@ typedef struct {
 } STQ_entry;
 
 typedef struct {
+  reg32_t addr;
+  reg32_t size;
+  reg32_t data;
+
+  reg32_t preg;//可优化
+
+  reg1_t complete;
+  reg1_t valid;
+  reg1_t data_valid;
+  reg4_t tag;
+  reg1_t stall_load;
+
+  reg7_t rob_idx;
+
+} LDQ_entry;
+
+typedef struct {
   Inst_uop_wire uop[FETCH_WIDTH]; // 3 2 2 2
   wire1_t valid[FETCH_WIDTH];
 } Dec_Ren;
@@ -126,6 +143,12 @@ typedef struct {
 } Exe_Prf;
 
 typedef struct {
+  bool data_valid;
+  reg32_t rdata;
+  reg32_t preg;
+} Ldq_Prf;
+
+typedef struct {
   wire1_t ready[ISSUE_WAY];
 } Exe_Iss;
 
@@ -152,11 +175,26 @@ typedef struct {
 } Stq_Dis;
 
 typedef struct {
+  wire4_t tag[FETCH_WIDTH];
+  wire1_t valid[FETCH_WIDTH];
+  wire1_t dis_fire[FETCH_WIDTH];
+} Dis_Ldq;
+
+typedef struct {
+  wire1_t ready[2];
+  wire4_t ldq_idx;
+} Ldq_Dis;
+
+typedef struct {
   // 地址写入
   Inst_entry addr_entry;
   // 数据写入
   Inst_entry data_entry;
 } Exe_Stq;
+
+typedef struct {
+  Inst_entry entry;
+} Exe_Ldq;
 
 typedef struct {
   wire1_t we;
@@ -176,7 +214,21 @@ typedef struct {
   wire32_t trap_pc;
 } Csr_Rob;
 
+
 typedef struct {
   wire1_t interrupt_resp;
   wire1_t commit;
 } Rob_Csr;
+
+typedef struct{
+  uint32_t rdata;
+  bool data_valid;
+}Mem_Data;
+
+typedef struct{
+  bool req;
+  uint32_t addr;
+  uint32_t wdata;
+  bool wr;
+  uint8_t wstrb;
+}Mem_Control;

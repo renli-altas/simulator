@@ -42,60 +42,43 @@ void STQ::comb() {
     wstrb = wstrb << offset;
     wdata = wdata << (offset * 8);
 
-    uint32_t old_data = p_memory[waddr / 4];
-    uint32_t mask = 0;
-    if (wstrb & 0b1)
-      mask |= 0xFF;
-    if (wstrb & 0b10)
-      mask |= 0xFF00;
-    if (wstrb & 0b100)
-      mask |= 0xFF0000;
-    if (wstrb & 0b1000)
-      mask |= 0xFF000000;
-
-    cache.cache_access(waddr);
-
-    p_memory[waddr / 4] = (mask & wdata) | (~mask & old_data);
-
+    write_flag=0;
     if (waddr == UART_BASE) {
       char temp;
       temp = wdata & 0x000000ff;
       p_memory[0x10000000 / 4] = p_memory[0x10000000 / 4] & 0xffffff00;
       cout << temp;
-
-      if (temp == '?') {
-        if (perf.perf_start) {
-          perf.perf_print();
-        } else {
-          cout << " perf counter start" << endl;
-          perf.perf_start = true;
-          perf.perf_reset();
-        }
-      }
     }
 
-    if (waddr == 0x10000001 && (entry[deq_ptr].data & 0x000000ff) == 7) {
+    else if (waddr == 0x10000001 && (wdata & 0x000000ff) == 7) {
       p_memory[0xc201004 / 4] = 0xa;
       p_memory[0x10000000 / 4] = p_memory[0x10000000 / 4] & 0xfff0ffff;
     }
-    if (waddr == 0x10000001 && (entry[deq_ptr].data & 0x000000ff) == 5) {
+    else if (waddr == 0x10000001 && (wdata & 0x000000ff) == 5) {
       p_memory[0x10000000 / 4] =
-          p_memory[0x10000000 / 4] & 0xfff0ffff | 0x00030000;
+      p_memory[0x10000000 / 4] & 0xfff0ffff | 0x00030000;
     }
-    if (waddr == 0xc201004 && (entry[deq_ptr].data & 0x000000ff) == 0xa) {
+    else if (waddr == 0xc201004 && (wdata & 0x000000ff) == 0xa) {
       p_memory[0xc201004 / 4] = 0x0;
+    }else {
+      out.stq2cache->req = true;
+      out.stq2cache->wr = true;
+      out.stq2cache->wstrb = wstrb;
+      out.stq2cache->wdata = wdata;
+      out.stq2cache->addr = waddr;
+      write_flag = 1;
     }
 
-    if (MEM_LOG) {
-      cout << "store data " << hex << ((mask & wdata) | (~mask & old_data))
-           << " in " << (waddr & 0xFFFFFFFC) << endl;
+    if(write_flag==0||(write_flag==1&&out.stq2cache->req && in.cache2stq->data_valid))
+    {
+      entry[deq_ptr].valid = false;
+      entry[deq_ptr].commit  = false;
+      LOOP_INC(deq_ptr, STQ_NUM);
+      count--;
+      commit_count--;
+      out.stq2cache->req = false;
+      out.stq2cache->wr = false;
     }
-
-    entry[deq_ptr].valid = false;
-    entry[deq_ptr].commit = false;
-    LOOP_INC(deq_ptr, STQ_NUM);
-    count--;
-    commit_count--;
   }
 
   // commit标记为可执行
