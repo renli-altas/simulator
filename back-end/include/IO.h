@@ -188,6 +188,12 @@ typedef struct{
 
   uint32_t rdata;
   bool data_ok;
+  bool ready;
+
+  uint32_t tag;
+  uint32_t preg;
+  uint32_t rob_idx;
+
 }Mem_IO;
 
 typedef struct{
@@ -215,3 +221,10 @@ typedef struct{
 typedef struct{
   bool flush;
 }Exe_Cache;
+
+typedef struct{
+  bool valid;
+  uint32_t preg;
+  uint32_t rob_idx;
+  uint32_t tag;
+}Lsu_Prf;

@@ -7,10 +7,9 @@
 extern Back_Top back;
 extern uint32_t *p_memory;
 
-
 void alu(Inst_uop &inst);
 void bru(Inst_uop &inst);
-bool ldu(Inst_uop &inst, Mem_IO *&io, bool &flag);
+bool ldu(Inst_uop &inst, Mem_IO *&io);
 void stu_addr(Inst_uop &inst);
 void stu_data(Inst_uop &inst);
 void mul(Inst_uop &inst);
@@ -40,33 +39,27 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
   }
 
   cycle++;
-  bool is_load = is_load_uop(inst.op);
-  bool flag = false;
   if (mispred)
   {
-    complete = false;
+    complete = true;
     cycle = 0;
     latency = 0;
-    io->req = false;
-    io->wr = 0;
-    io->wdata = 0;
-    io->wstrb = 0;
-    io->addr = 0;
     return;
   }
   if (cycle == latency)
   {
-    if (is_load)
+    if (is_load_uop(inst.op))
     {
-      bool load_complete = ldu(inst, io, flag);
-      if (load_complete || flag)
+      bool load_complete = ldu(inst, io);
+      if (load_complete == false)
       {
         complete = true;
         cycle = 0;
       }
       else
       {
-        if (!load_complete)latency++;
+        if (!load_complete)
+          latency++;
         complete = false;
       }
     }
@@ -121,7 +114,6 @@ void EXU::comb_ready()
   {
     io.exe2iss->ready[i] =
         (!inst_r[i].valid || fu[i].complete) && !io.dec_bcast->mispred;
-    
   }
 }
 
@@ -133,7 +125,7 @@ void EXU::comb_exec()
     io.exe2prf->entry[i].uop = inst_r[i].uop;
     if (inst_r[i].valid)
     {
-      fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache, io.dec_bcast->mispred|io.rob_bcast->flush);
+      fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache, io.dec_bcast->mispred | io.rob_bcast->flush);
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&
             ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask)))
@@ -166,7 +158,7 @@ void EXU::comb_exec()
     io.exe2stq->data_entry.valid = false;
   }
 
-  io.exe2cache->flush = io.dec_bcast->mispred||io.rob_bcast->flush;
+  io.exe2cache->flush = io.dec_bcast->mispred || io.rob_bcast->flush;
 }
 
 void EXU::comb_to_csr()

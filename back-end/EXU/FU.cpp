@@ -9,9 +9,13 @@ extern Back_Top back;
 extern int commit_num;
 bool load_data(uint32_t &data, uint32_t v_addr, int rob_idx);
 bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
-           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory, bool dut_flag=true);
+           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory, bool dut_flag = true);
 
-enum STATE { IDLE, RECV };
+enum STATE
+{
+  IDLE,
+  RECV
+};
 
 #define SUB 0b000
 #define SLL 0b001
@@ -29,21 +33,27 @@ enum STATE { IDLE, RECV };
 #define BLTU 0b110
 #define BGEU 0b111
 
-void mul(Inst_uop &inst) {
-  switch (inst.func3) {
-  case 0: { // mul
+void mul(Inst_uop &inst)
+{
+  switch (inst.func3)
+  {
+  case 0:
+  { // mul
     inst.result = (int32_t)inst.src1_rdata * (int32_t)inst.src2_rdata;
     break;
   }
-  case 1: { // mulh
+  case 1:
+  { // mulh
     inst.result = ((int64_t)inst.src1_rdata * (int64_t)inst.src2_rdata) >> 32;
     break;
   }
-  case 2: { // mulsu
+  case 2:
+  { // mulsu
     inst.result = ((int32_t)inst.src1_rdata * (uint32_t)inst.src2_rdata);
     break;
   }
-  case 3: { // mulhu
+  case 3:
+  { // mulhu
     inst.result = ((uint64_t)inst.src1_rdata * (uint64_t)inst.src2_rdata) >> 32;
     break;
   }
@@ -53,32 +63,39 @@ void mul(Inst_uop &inst) {
   }
 }
 
-void div(Inst_uop &inst) {
-  switch (inst.func3) {
+void div(Inst_uop &inst)
+{
+  switch (inst.func3)
+  {
 
-  case 4: { // div
+  case 4:
+  { // div
     inst.result = ((int32_t)inst.src1_rdata / (int32_t)inst.src2_rdata);
     break;
   }
-  case 5: { // divu
+  case 5:
+  { // divu
     inst.result = ((uint32_t)inst.src1_rdata / (uint32_t)inst.src2_rdata);
     break;
   }
-  case 6: { // rem
+  case 6:
+  { // rem
     inst.result = ((int32_t)inst.src1_rdata % (int32_t)inst.src2_rdata);
     break;
   }
-  case 7: { // remu
+  case 7:
+  { // remu
     inst.result = ((uint32_t)inst.src1_rdata % (uint32_t)inst.src2_rdata);
     break;
   }
   default:
     assert(0);
     break;
-  } 
+  }
 }
 
-void bru(Inst_uop &inst) {
+void bru(Inst_uop &inst)
+{
   uint32_t operand1, operand2;
   operand1 = inst.src1_rdata;
   operand2 = inst.src2_rdata;
@@ -87,8 +104,10 @@ void bru(Inst_uop &inst) {
   bool br_taken = true;
 
   assert(is_branch_uop(inst.op));
-  if (inst.op == UOP_BR) {
-    switch (inst.func3) {
+  if (inst.op == UOP_BR)
+  {
+    switch (inst.func3)
+    {
     case BEQ:
       br_taken = (operand1 == operand2);
       break;
@@ -110,7 +129,8 @@ void bru(Inst_uop &inst) {
     }
   }
 
-  switch (inst.op) {
+  switch (inst.op)
+  {
   case UOP_BR:
     break;
   case UOP_JUMP:
@@ -123,9 +143,12 @@ void bru(Inst_uop &inst) {
   }
 
   if (br_taken && inst.pred_br_taken && inst.pred_br_pc == pc_br ||
-      !br_taken && !inst.pred_br_taken) {
+      !br_taken && !inst.pred_br_taken)
+  {
     inst.mispred = false;
-  } else {
+  }
+  else
+  {
     inst.mispred = true;
   }
 
@@ -137,24 +160,33 @@ void bru(Inst_uop &inst) {
     inst.pc_next = inst.pc + 4;
 }
 
-void alu(Inst_uop &inst) {
+void alu(Inst_uop &inst)
+{
   uint32_t operand1, operand2;
   if (inst.src1_is_pc)
     operand1 = inst.pc;
   else
     operand1 = inst.src1_rdata;
 
-  if (inst.src2_is_imm) {
+  if (inst.src2_is_imm)
+  {
     operand2 = inst.imm;
-  } else if (inst.op == UOP_JUMP) {
+  }
+  else if (inst.op == UOP_JUMP)
+  {
     operand2 = 4;
-  } else {
+  }
+  else
+  {
     operand2 = inst.src2_rdata;
   }
 
-  switch (inst.op) {
-  case UOP_ADD: {
-    switch (inst.func3) {
+  switch (inst.op)
+  {
+  case UOP_ADD:
+  {
+    switch (inst.func3)
+    {
     case SUB:
       if (inst.func7_5 && !inst.src2_is_imm)
         inst.result = operand1 - operand2;
@@ -190,18 +222,21 @@ void alu(Inst_uop &inst) {
     }
     break;
   }
-  default: {
+  default:
+  {
     inst.result = operand1 + operand2;
     break;
   }
   }
 }
 
-bool ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
+bool ldu(Inst_uop &inst, Mem_IO *&io)
+{
   uint32_t addr = inst.src1_rdata + inst.imm;
-  bool stall_load=false;
+  bool stall_load = false;
 
-  if (addr == 0x1fd0e000) {
+  if (addr == 0x1fd0e000)
+  {
     inst.difftest_skip = true;
   }
 
@@ -210,7 +245,8 @@ bool ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
   uint32_t mask = 0;
   uint32_t sign = 0;
 
-  if (inst.amoop != AMONONE) {
+  if (inst.amoop != AMONONE)
+  {
     size = 0b10;
     offset = 0b0;
   }
@@ -236,81 +272,94 @@ bool ldu(Inst_uop &inst,Mem_IO* &io,bool &flag) {
     //   printf("va2pa in ldu:v_addr:0x%08x p_addr:0x%08x page_fault:%d\n",addr,p_addr,!ret);
     // }
   }
-  if (p_addr == 0x1fd0e000)
+  if (!ret)
   {
-    data = commit_num;
-    flag=true;
+    inst.page_fault_load = true;
+    inst.result = addr;
     io->req = false;
     io->wr = 0;
     io->wdata = 0;
     io->wstrb = 0;
     io->addr = 0;
+    return false;
+  }
+  if (p_addr == 0x1fd0e000)
+  {
+    data = commit_num;
+    io->req = false;
+    io->wr = 0;
+    io->wdata = 0;
+    io->wstrb = 0;
+    io->addr = 0;
+    io->tag = inst.tag;
+    io->preg = inst.dest_preg;
+    io->rob_idx = inst.rob_idx;
   }
   else if (p_addr == 0x1fd0e004)
   {
     data = 0;
-    flag=true;
     io->req = false;
     io->wr = 0;
     io->wdata = 0;
     io->wstrb = 0;
     io->addr = 0;
+    io->tag = inst.tag;
+    io->preg = inst.dest_preg;
+    io->rob_idx = inst.rob_idx;
   }
-  else
+  else if(io->ready==true)
   {
-    if (io->req==true && io->data_ok == true)
-    {
-      if(DCACHE_LOG){
-        back.stq.stq_print();
-      }
-      data = io->rdata;
-      io->req = false;
-      io->wr = 0;
-      io->wdata = 0;
-      io->wstrb = 0;
-      io->addr = 0;
-      back.stq.st2ld_fwd(p_addr, data, inst.rob_idx,stall_load);
-    }
-    else
-    {
-      io->req = true;
-      io->wr = 0;
-      io->wdata = 0;
-      io->wstrb = 0;
-      io->addr = p_addr;
-    }
+    io->req = true;
+    io->wr = 0;
+    io->wdata = 0;
+    io->wstrb = 0;
+    io->addr = p_addr;
+    io->tag = inst.tag;
+    io->preg = inst.dest_preg;
+    io->rob_idx = inst.rob_idx;
+  }else {
+    io->req = false;
+    io->wr = 0;
+    io->wdata = 0;
+    io->wstrb = 0;
+    io->addr = 0;
+    io->tag = inst.tag;
+    io->preg = inst.dest_preg;
+    io->rob_idx = inst.rob_idx;
+    return true;
+
   }
-  bool page_fault = !ret;
+  // bool page_fault = !ret;
 
-  if (!page_fault) {
-    data = data >> (offset * 8);
-    if (size == 0) {
-      mask = 0xFF;
-      if (data & 0x80)
-        sign = 0xFFFFFF00;
-    } else if (size == 0b01) {
-      mask = 0xFFFF;
-      if (data & 0x8000)
-        sign = 0xFFFF0000;
-    } else {
-      mask = 0xFFFFFFFF;
-    }
+  // if (!page_fault) {
+  //   data = data >> (offset * 8);
+  //   if (size == 0) {
+  //     mask = 0xFF;
+  //     if (data & 0x80)
+  //       sign = 0xFFFFFF00;
+  //   } else if (size == 0b01) {
+  //     mask = 0xFFFF;
+  //     if (data & 0x8000)
+  //       sign = 0xFFFF0000;
+  //   } else {
+  //     mask = 0xFFFFFFFF;
+  //   }
 
-    data = data & mask;
+  //   data = data & mask;
 
-    // 有符号数
-    if (!(inst.func3 & 0b100)) {
-      data = data | sign;
-    }
-    inst.result = data;
-  } else {
-    inst.page_fault_load = true;
-    inst.result = addr;
-  }
-  return !stall_load&&io->data_ok;
+  //   // 有符号数
+  //   if (!(inst.func3 & 0b100)) {
+  //     data = data | sign;
+  //   }
+  //   inst.result = data;
+  // } else {
+
+  // }
+  return false;
 }
 
-void stu_addr(Inst_uop &inst) {
+void stu_addr(Inst_uop &inst)
+{
 
   uint32_t v_addr = inst.src1_rdata + inst.imm;
 
@@ -318,7 +367,8 @@ void stu_addr(Inst_uop &inst) {
   bool page_fault = false;
 
   if (back.csr.CSR_RegFile[number_satp] & 0x80000000 &&
-      back.csr.privilege != 3) {
+      back.csr.privilege != 3)
+  {
     bool mstatus[32], sstatus[32];
     cvt_number_to_bit_unsigned(mstatus, back.csr.CSR_RegFile[number_mstatus],
                                32);
@@ -330,57 +380,71 @@ void stu_addr(Inst_uop &inst) {
                         mstatus, sstatus, back.csr.privilege, p_memory);
   }
 
-  if (page_fault) {
+  if (page_fault)
+  {
     inst.page_fault_store = true;
     inst.result = v_addr;
-  } else {
+  }
+  else
+  {
     inst.result = p_addr;
   }
 }
 
-void stu_data(Inst_uop &inst) {
+void stu_data(Inst_uop &inst)
+{
 
-  switch (inst.amoop) {
-  case AMOADD: { // amoadd.w
+  switch (inst.amoop)
+  {
+  case AMOADD:
+  { // amoadd.w
     inst.result = inst.src1_rdata + inst.src2_rdata;
     break;
   }
-  case AMOSWAP: { // amoswap.w
+  case AMOSWAP:
+  { // amoswap.w
     inst.result = inst.src2_rdata;
     break;
   }
-  case AMOXOR: { // amoxor.w
+  case AMOXOR:
+  { // amoxor.w
     inst.result = inst.src1_rdata ^ inst.src2_rdata;
     break;
   }
-  case AMOOR: { // amoor.w
+  case AMOOR:
+  { // amoor.w
 
     inst.result = inst.src1_rdata | inst.src2_rdata;
     break;
   }
-  case AMOAND: { // amoand.w
+  case AMOAND:
+  { // amoand.w
     inst.result = inst.src1_rdata & inst.src2_rdata;
     break;
   }
-  case AMOMIN: { // amomin.w
+  case AMOMIN:
+  { // amomin.w
     inst.result = ((int)inst.src1_rdata > (int)inst.src2_rdata)
                       ? inst.src2_rdata
                       : inst.src1_rdata;
     break;
   }
-  case AMOMAX: { // amomax.w
+  case AMOMAX:
+  { // amomax.w
     inst.result = ((int)inst.src1_rdata > (int)inst.src2_rdata)
                       ? inst.src1_rdata
                       : inst.src2_rdata;
     break;
   }
-  case AMOMINU: { // amominu.w
+  case AMOMINU:
+  { // amominu.w
     inst.result = ((uint32_t)inst.src1_rdata > (uint32_t)inst.src2_rdata)
                       ? inst.src2_rdata
                       : inst.src1_rdata;
     break;
   }
-  case AMOMAXU: { // amomaxu.w
+  case AMOMAXU:
+  { // amomaxu.w
     inst.result = ((uint32_t)inst.src1_rdata > (uint32_t)inst.src2_rdata)
                       ? inst.src1_rdata
                       : inst.src2_rdata;

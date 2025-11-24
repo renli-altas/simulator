@@ -13,6 +13,8 @@ public:
   Prf_Awake *prf_awake;
   Dec_Broadcast *dec_bcast;
   Rob_Broadcast *rob_bcast;
+
+  Lsu_Prf *lsu2prf;
 };
 
 class PRF {
