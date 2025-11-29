@@ -43,25 +43,14 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
   {
     complete = true;
     cycle = 0;
-    latency = 0;
     return;
   }
+  bool fu_stall = false;
   if (cycle == latency)
   {
     if (is_load_uop(inst.op))
     {
-      bool load_complete = ldu(inst, io);
-      if (load_complete == false)
-      {
-        complete = true;
-        cycle = 0;
-      }
-      else
-      {
-        if (!load_complete)
-          latency++;
-        complete = false;
-      }
+      fu_stall = ldu(inst, io, mispred);
     }
     else if (is_sta_uop(inst.op))
     {
@@ -92,10 +81,14 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
     else
       alu(inst);
 
-    if (!is_load)
+    if (!fu_stall)
     {
       complete = true;
       cycle = 0;
+    }
+    else{
+      complete = false;
+      latency++;
     }
   }
 }

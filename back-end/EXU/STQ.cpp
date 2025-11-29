@@ -6,6 +6,20 @@
 #include <util.h>
 
 extern Back_Top back;
+void STQ::init(){
+  free_queue_head = 0;
+  free_queue_tail = 0;
+  work_queue_head = 0;
+  work_queue_tail = 0;
+  work_queue_used = 0;
+  count = 0;
+  commit_count = 0;
+  for(int i=0;i<STQ_NUM;i++){
+    entry[i].valid = false;
+    free_queue[i]=i;
+    work_queue[i]=0;
+  }
+}
 void STQ::comb() {
   int num = count;
 
@@ -23,19 +37,19 @@ void STQ::comb() {
   }
 
   // 写端口 同时给ld_IQ发送唤醒信息
-  if (entry[deq_ptr].valid && entry[deq_ptr].complete) {
+  if (entry[write_ptr].valid && entry[write_ptr].complete) {
     extern uint32_t *p_memory;
-    uint32_t wdata = entry[deq_ptr].data;
-    uint32_t waddr = entry[deq_ptr].addr;
+    uint32_t wdata = entry[write_ptr].data;
+    uint32_t waddr = entry[write_ptr].addr;
     uint32_t wstrb;
-    if (entry[deq_ptr].size == 0b00)
+    if (entry[write_ptr].size == 0b00)
       wstrb = 0b1;
-    else if (entry[deq_ptr].size == 0b01)
+    else if (entry[write_ptr].size == 0b01)
       wstrb = 0b11;
     else
       wstrb = 0b1111;
 
-    int offset = entry[deq_ptr].addr & 0x3;
+    int offset = entry[write_ptr].addr & 0x3;
     wstrb = wstrb << offset;
     wdata = wdata << (offset * 8);
 
@@ -57,80 +71,39 @@ void STQ::comb() {
     }
     else if (waddr == 0xc201004 && (wdata & 0x000000ff) == 0xa) {
       p_memory[0xc201004 / 4] = 0x0;
-    }else {
+    }else if(io.stq2cache->ready==true){
       io.stq2cache->req = true;
       io.stq2cache->wr = true;
       io.stq2cache->wstrb = wstrb;
       io.stq2cache->wdata = wdata;
       io.stq2cache->addr = waddr;
+      io.stq2cache->tag = entry[write_ptr].tag;
+      io.stq2cache->preg = write_ptr;
+      io.stq2cache->rob_idx = entry[write_ptr].index;
       write_flag = 1;
     }
+    else{
+      io.stq2cache->req = false;
+      io.stq2cache->wr = false;
+      io.stq2cache->wstrb = 0;
+      io.stq2cache->wdata = 0;
+      io.stq2cache->addr = 0;
+      io.stq2cache->tag = 0;
+      io.stq2cache->preg = 0;
+      io.stq2cache->rob_idx = 0;
+      write_flag = 2;
+    }
 
-    if(write_flag==0||(write_flag==1&&io.stq2cache->req && io.stq2cache->data_ok))
+    if(write_flag!=2)
     {
-      entry[deq_ptr].valid = false;
-      entry[deq_ptr].complete = false;
-      LOOP_INC(deq_ptr, STQ_NUM);
+      entry[write_ptr].valid = write_flag==1 ? true : false;
+      entry[write_ptr].complete = false;
+      LOOP_INC(write_ptr, STQ_NUM);
       count--;
       commit_count--;
       io.stq2cache->req = false;
       io.stq2cache->wr = false;
     }
-
-    // uint32_t old_data = p_memory[waddr / 4];
-    // uint32_t mask = 0;
-    // if (wstrb & 0b1)
-    //   mask |= 0xFF;
-    // if (wstrb & 0b10)
-    //   mask |= 0xFF00;
-    // if (wstrb & 0b100)
-    //   mask |= 0xFF0000;
-    // if (wstrb & 0b1000)
-    //   mask |= 0xFF000000;
-
-    // cache.cache_access(waddr);
-
-    // p_memory[waddr / 4] = (mask & wdata) | (~mask & old_data);
-
-    // if (waddr == UART_BASE) {
-    //   char temp;
-    //   temp = wdata & 0x000000ff;
-    //   p_memory[0x10000000 / 4] = p_memory[0x10000000 / 4] & 0xffffff00;
-    //   cout << temp;
-
-    //   if (temp == '?') {
-    //     if (perf.perf_start) {
-    //       perf.perf_print();
-    //     } else {
-    //       cout << " perf counter start" << endl;
-    //       perf.perf_start = true;
-    //       perf.perf_reset();
-    //     }
-    //   }
-    // }
-
-    // if (waddr == 0x10000001 && (entry[deq_ptr].data & 0x000000ff) == 7) {
-    //   p_memory[0xc201004 / 4] = 0xa;
-    //   p_memory[0x10000000 / 4] = p_memory[0x10000000 / 4] & 0xfff0ffff;
-    // }
-    // if (waddr == 0x10000001 && (entry[deq_ptr].data & 0x000000ff) == 5) {
-    //   p_memory[0x10000000 / 4] =
-    //       p_memory[0x10000000 / 4] & 0xfff0ffff | 0x00030000;
-    // }
-    // if (waddr == 0xc201004 && (entry[deq_ptr].data & 0x000000ff) == 0xa) {
-    //   p_memory[0xc201004 / 4] = 0x0;
-    // }
-
-    // if (MEM_LOG) {
-    //   cout << "store data " << hex << ((mask & wdata) | (~mask & old_data))
-    //        << " in " << (waddr & 0xFFFFFFFC) << endl;
-    // }
-
-    // entry[deq_ptr].valid = false;
-    // entry[deq_ptr].commit = false;
-    // LOOP_INC(deq_ptr, STQ_NUM);
-    // count--;
-    // commit_count--;
   }
 
   // commit标记为可执行
@@ -150,12 +123,12 @@ void STQ::seq() {
   // 入队
   for (int i = 0; i < 2; i++) {
     if (io.dis2stq->dis_fire[i] && io.dis2stq->valid[i]) {
-      entry[enq_ptr].tag = io.dis2stq->tag[i];
-      entry[enq_ptr].valid = true;
-      entry[enq_ptr].addr_valid = false;
-      entry[enq_ptr].data_valid = false;
+      entry[free_queue[free_queue_head]].tag = io.dis2stq->tag[i];
+      entry[free_queue[free_queue_head]].valid = true;
+      entry[free_queue[free_queue_head]].addr_valid = false;
+      entry[free_queue[free_queue_head]].data_valid = false;
       count++;
-      LOOP_INC(enq_ptr, STQ_NUM);
+      LOOP_INC(free_queue_head, STQ_NUM);
     }
   }
 
@@ -177,30 +150,37 @@ void STQ::seq() {
   }
 
   // 分支清空
-  if (io.dec_bcast->mispred) {
-    for (int i = 0; i < STQ_NUM; i++) {
-      if (entry[i].valid && !entry[i].complete &&
-          (io.dec_bcast->br_mask & (1 << entry[i].tag))) {
-        entry[i].valid = false;
-        entry[i].complete = false;
+  if (io.dec_bcast->mispred) {//可能有问题
+    uint32_t count_for = count;
+    for (int i = 0; i < count_for; i++) {
+      uint32_t work_queue_index=work_queue[(i+work_queue_head)%STQ_NUM];
+      if (entry[work_queue_index].valid && !entry[work_queue_index].complete &&
+          (io.dec_bcast->br_mask & (1 << entry[work_queue_index].tag))) {
+        entry[work_queue_index].valid = false;
         count--;
-        LOOP_DEC(enq_ptr, STQ_NUM);
+        free_queue[free_queue_tail] = work_queue_index;
+        work_queue[(i+work_queue_head)%STQ_NUM]=0;
+        LOOP_DEC(work_queue_tail,STQ_NUM);
+        LOOP_INC(free_queue_tail, STQ_NUM);
       }
     }
   }
 
   if (io.rob_bcast->flush) {
-    for (int i = 0; i < STQ_NUM; i++) {
-      if (entry[i].valid && !entry[i].complete) {
+    uint32_t count_for = count;
+    for (int i = 0; i < count_for; i++) {
+      uint32_t work_queue_index=work_queue[(i+work_queue_head)%STQ_NUM];
+      if (entry[work_queue_index].valid && !entry[work_queue_index].complete) {
         entry[i].valid = false;
-        entry[i].complete = false;
         count--;
-        LOOP_DEC(enq_ptr, STQ_NUM);
+        free_queue[free_queue_tail] = i;
+        LOOP_INC(free_queue_tail, STQ_NUM);
       }
     }
   }
 
-  io.stq2dis->stq_idx = enq_ptr;
+  io.stq2dis->stq_idx1 = free_queue[free_queue_head];
+  io.stq2dis->stq_idx2 = free_queue[(free_queue_head+1)%STQ_NUM];
 }
 
 extern uint32_t *p_memory;

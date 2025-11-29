@@ -268,67 +268,36 @@ bool ldu(Inst_uop &inst, Mem_IO *&io)
 
     ret = va2pa(p_addr, addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
                 sstatus, back.csr.privilege, p_memory);
-    // if(LOG){
-    //   printf("va2pa in ldu:v_addr:0x%08x p_addr:0x%08x page_fault:%d\n",addr,p_addr,!ret);
-    // }
   }
+
+  data = 0;
   if (!ret)
   {
-    inst.page_fault_load = true;
-    inst.result = addr;
-    io->req = false;
-    io->wr = 0;
-    io->wdata = 0;
-    io->wstrb = 0;
-    io->addr = 0;
-    return false;
+    data = addr;
   }
   if (p_addr == 0x1fd0e000)
   {
     data = commit_num;
-    io->req = false;
-    io->wr = 0;
-    io->wdata = 0;
-    io->wstrb = 0;
-    io->addr = 0;
-    io->tag = inst.tag;
-    io->preg = inst.dest_preg;
-    io->rob_idx = inst.rob_idx;
   }
   else if (p_addr == 0x1fd0e004)
   {
     data = 0;
-    io->req = false;
-    io->wr = 0;
-    io->wdata = 0;
-    io->wstrb = 0;
-    io->addr = 0;
-    io->tag = inst.tag;
-    io->preg = inst.dest_preg;
-    io->rob_idx = inst.rob_idx;
   }
   else if(io->ready==true)
   {
     io->req = true;
-    io->wr = 0;
-    io->wdata = 0;
-    io->wstrb = 0;
-    io->addr = p_addr;
-    io->tag = inst.tag;
-    io->preg = inst.dest_preg;
-    io->rob_idx = inst.rob_idx;
   }else {
     io->req = false;
-    io->wr = 0;
-    io->wdata = 0;
-    io->wstrb = 0;
-    io->addr = 0;
-    io->tag = inst.tag;
-    io->preg = inst.dest_preg;
-    io->rob_idx = inst.rob_idx;
-    return true;
-
   }
+  io->wr = 0;
+  io->wdata = data;
+  io->wstrb = 0;
+  io->addr = p_addr;
+  io->tag = inst.tag;
+  io->preg = inst.dest_preg;
+  io->rob_idx = inst.rob_idx;
+  io->page_fault = !ret;
+  return io->ready == false;
   // bool page_fault = !ret;
 
   // if (!page_fault) {
@@ -355,7 +324,6 @@ bool ldu(Inst_uop &inst, Mem_IO *&io)
   // } else {
 
   // }
-  return false;
 }
 
 void stu_addr(Inst_uop &inst)

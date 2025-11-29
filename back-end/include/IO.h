@@ -148,7 +148,8 @@ typedef struct {
 
 typedef struct {
   wire1_t ready[2];
-  wire4_t stq_idx;
+  wire4_t stq_idx1;
+  wire4_t stq_idx2;
 } Stq_Dis;
 
 typedef struct {
@@ -193,6 +194,7 @@ typedef struct{
   uint32_t tag;
   uint32_t preg;
   uint32_t rob_idx;
+  bool page_fault;
 
 }Mem_IO;
 
