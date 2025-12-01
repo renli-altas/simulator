@@ -16,7 +16,7 @@ public:
 
   Exe_Csr *exe2csr;
   Csr_Exe *csr2exe;
-  Mem_IO *ldq2cache;
+  Mem_IN *ldq2cache;
   Exe_Cache *exe2cache;
 };
 

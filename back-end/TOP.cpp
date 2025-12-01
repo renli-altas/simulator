@@ -108,8 +108,8 @@ Stq_Dis stq2dis;
 
 Csr_Exe csr2exe;
 Exe_Csr exe2csr;
-Mem_IO ldq2cache;
-Mem_IO stq2cache;
+Mem_IN ldq2cache;
+Mem_IN stq2cache;
 
 MSHR_INFO cache_ld2mshr;
 MSHR_INFO cache_st2mshr;
@@ -204,12 +204,12 @@ void Back_Top::init() {
 
   stq.io.stq2cache = &stq2cache;
 
-  dcache.io.cpu_ld = &ldq2cache;
-  dcache.io.cpu_st = &stq2cache;
-  dcache.io.mshr_ld = &cache_ld2mshr;
-  dcache.io.mshr_st = &cache_st2mshr;
-  dcache.io.control = &exe2cache;
-  dcache.io.mshr_control = &cache2mshr;
+  dcache.io1.cpu_ld_in = &ldq2cache;
+  dcache.io1.cpu_st_in = &stq2cache;
+  dcache.io1.mshr_ld = &cache_ld2mshr;
+  dcache.io1.mshr_st = &cache_st2mshr;
+  dcache.io1.control = &exe2cache;
+  dcache.io1.mshr_control = &cache2mshr;
 
   pmemory.io.mem = &mshr2mem;
 

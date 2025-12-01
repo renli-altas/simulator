@@ -53,10 +53,22 @@ void PRF::comb_read() {
             entry->uop.src1_rdata = inst_r[j].uop.result;
         }
 
-        for (int j = 0; j < ALU_NUM + 1; j++) {
+        for (int j = 0; j < ALU_NUM ; j++) {
           if (io.exe2prf->entry[j].valid && io.exe2prf->entry[j].uop.dest_en &&
               io.exe2prf->entry[j].uop.dest_preg == entry->uop.src1_preg)
             entry->uop.src1_rdata = io.exe2prf->entry[j].uop.result;
+        }
+
+        if(io.cache2prf->valid){
+          if(io.cache2prf->preg == entry->uop.src1_preg){
+            entry->uop.src1_rdata = io.cache2prf->data;
+          }
+        }
+
+        if(io.mshr2prf->valid&&!io.mshr2prf->wr){
+          if(io.mshr2prf->preg == entry->uop.src1_preg){
+            entry->uop.src1_rdata = io.mshr2prf->data;
+          }
         }
       }
 
@@ -68,10 +80,20 @@ void PRF::comb_read() {
             entry->uop.src2_rdata = inst_r[j].uop.result;
         }
 
-        for (int j = 0; j < ALU_NUM + 1; j++) {
+        for (int j = 0; j < ALU_NUM ; j++) {
           if (io.exe2prf->entry[j].valid && io.exe2prf->entry[j].uop.dest_en &&
               io.exe2prf->entry[j].uop.dest_preg == entry->uop.src2_preg)
             entry->uop.src2_rdata = io.exe2prf->entry[j].uop.result;
+        }
+        if(io.cache2prf->valid){
+          if(io.cache2prf->preg == entry->uop.src2_preg){
+            entry->uop.src2_rdata = io.cache2prf->data;
+          }
+        }
+        if(io.mshr2prf->valid&&!io.mshr2prf->wr){
+          if(io.mshr2prf->preg == entry->uop.src2_preg){
+            entry->uop.src2_rdata = io.mshr2prf->data;
+          }
         }
       }
     }
@@ -127,9 +149,19 @@ void PRF::comb_write() {
 
 void PRF::comb_pipeline() {
   for (int i = 0; i < ISSUE_WAY; i++) {
-    if (io.exe2prf->entry[i].valid && io.prf2exe->ready[i]) {
+
+    if (i!=IQ_LD&&io.exe2prf->entry[i].valid && io.prf2exe->ready[i]) {
       inst_r_1[i] = io.exe2prf->entry[i];
-    } else {
+    }
+    else if(i==IQ_LD&&io.prf2exe->ready[i]){
+      inst_r_1[i].valid = io.cache2prf->valid;
+      inst_r_1[i].uop.dest_areg = io.cache2prf->preg;
+      inst_r_1[i].uop.result = io.cache2prf->data;
+      inst_r_1[i].uop.page_fault_load = io.cache2prf->page_fault;
+      inst_r_1[i].uop.tag = io.cache2prf->tag; 
+      inst_r_1[i].uop.rob_idx = io.cache2prf->rob_idx;
+    }
+    else {
       inst_r_1[i].valid = false;
     }
   }

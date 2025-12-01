@@ -15,6 +15,9 @@ public:
   Rob_Broadcast *rob_bcast;
 
   Lsu_Prf *lsu2prf;
+
+  Mem_OUT *cache2prf;
+  Mem_OUT *mshr2prf;
 };
 
 class PRF {

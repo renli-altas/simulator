@@ -23,6 +23,9 @@ typedef struct{
     uint32_t offset;
     uint32_t wdata;
     uint8_t wstrb;
+    uint32_t tag;
+    uint32_t preg;
+    uint32_t rob_idx;
     uint32_t priority;
 }table_entry;
 
@@ -44,6 +47,7 @@ public:
     MSHR_INFO* dcache_st;
     Cache_Mshr* control;
     EXMem_IO* mem;
+    Mem_OUT* cpu;
 };
 class MSHR
 {
@@ -60,15 +64,15 @@ public:
     uint32_t entry;
 
     uint32_t rdata;
+    uint32_t rpreg;
+    uint32_t rrob_idx;
+    uint32_t rtag;
     uint32_t done;
     bool wdone;
     bool wdonelast;
     uint32_t wdata;
     bool wdata_valid;
-
-
-
-
+    
     enum MSHR_STATE state;
 
     void init();
@@ -78,6 +82,6 @@ public:
     uint32_t find_entry(uint32_t tag,uint32_t index);
     void add_entry(uint32_t tag,uint32_t index,uint32_t way,bool dirty,uint32_t paddr);
     void add_free(uint32_t entry);
-    void add_table_entry(bool type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb);
+    void add_table_entry(bool type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb,uint32_t tag,uint32_t preg,uint32_t rob_idx);
 };
 

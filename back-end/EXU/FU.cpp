@@ -230,7 +230,7 @@ void alu(Inst_uop &inst)
   }
 }
 
-bool ldu(Inst_uop &inst, Mem_IO *&io)
+bool ldu(Inst_uop &inst, Mem_IN *&io)
 {
   uint32_t addr = inst.src1_rdata + inst.imm;
   bool stall_load = false;
@@ -283,11 +283,9 @@ bool ldu(Inst_uop &inst, Mem_IO *&io)
   {
     data = 0;
   }
-  else if(io->ready==true)
-  {
+  else {
     io->req = true;
-  }else {
-    io->req = false;
+    // io->req = false;
   }
   io->wr = 0;
   io->wdata = data;

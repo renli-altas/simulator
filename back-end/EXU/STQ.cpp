@@ -6,20 +6,6 @@
 #include <util.h>
 
 extern Back_Top back;
-void STQ::init(){
-  free_queue_head = 0;
-  free_queue_tail = 0;
-  work_queue_head = 0;
-  work_queue_tail = 0;
-  work_queue_used = 0;
-  count = 0;
-  commit_count = 0;
-  for(int i=0;i<STQ_NUM;i++){
-    entry[i].valid = false;
-    free_queue[i]=i;
-    work_queue[i]=0;
-  }
-}
 void STQ::comb() {
   int num = count;
 
@@ -37,19 +23,19 @@ void STQ::comb() {
   }
 
   // 写端口 同时给ld_IQ发送唤醒信息
-  if (entry[write_ptr].valid && entry[write_ptr].complete) {
+  if (entry[deq_ptr].valid && entry[deq_ptr].complete) {
     extern uint32_t *p_memory;
-    uint32_t wdata = entry[write_ptr].data;
-    uint32_t waddr = entry[write_ptr].addr;
+    uint32_t wdata = entry[deq_ptr].data;
+    uint32_t waddr = entry[deq_ptr].addr;
     uint32_t wstrb;
-    if (entry[write_ptr].size == 0b00)
+    if (entry[deq_ptr].size == 0b00)
       wstrb = 0b1;
-    else if (entry[write_ptr].size == 0b01)
+    else if (entry[deq_ptr].size == 0b01)
       wstrb = 0b11;
     else
       wstrb = 0b1111;
 
-    int offset = entry[write_ptr].addr & 0x3;
+    int offset = entry[deq_ptr].addr & 0x3;
     wstrb = wstrb << offset;
     wdata = wdata << (offset * 8);
 
@@ -71,38 +57,38 @@ void STQ::comb() {
     }
     else if (waddr == 0xc201004 && (wdata & 0x000000ff) == 0xa) {
       p_memory[0xc201004 / 4] = 0x0;
-    }else if(io.stq2cache->ready==true){
+    }else{
       io.stq2cache->req = true;
       io.stq2cache->wr = true;
       io.stq2cache->wstrb = wstrb;
       io.stq2cache->wdata = wdata;
       io.stq2cache->addr = waddr;
-      io.stq2cache->tag = entry[write_ptr].tag;
-      io.stq2cache->preg = write_ptr;
-      io.stq2cache->rob_idx = entry[write_ptr].index;
+      io.stq2cache->tag = entry[deq_ptr].tag;
+      io.stq2cache->preg = deq_ptr;
+      io.stq2cache->rob_idx = (back.rob.deq_ptr << 2);
       write_flag = 1;
     }
-    else{
-      io.stq2cache->req = false;
-      io.stq2cache->wr = false;
-      io.stq2cache->wstrb = 0;
-      io.stq2cache->wdata = 0;
-      io.stq2cache->addr = 0;
-      io.stq2cache->tag = 0;
-      io.stq2cache->preg = 0;
-      io.stq2cache->rob_idx = 0;
-      write_flag = 2;
-    }
 
-    if(write_flag!=2)
+    if(write_flag==0)
     {
-      entry[write_ptr].valid = write_flag==1 ? true : false;
-      entry[write_ptr].complete = false;
-      LOOP_INC(write_ptr, STQ_NUM);
-      count--;
+      entry[deq_ptr].valid = false;
+      entry[deq_ptr].complete = false;
+    }
+    if(io.stq2cache->ready||write_flag==0){
+      LOOP_INC(deq_ptr, STQ_NUM);
+    }
+    if(io.cache2stq->valid){
+      entry[io.cache2stq->preg].valid = false;
+      entry[io.cache2stq->preg].complete = false;
+    }
+    if(io.mshr2stq->valid&&io.mshr2stq->wr){
+      entry[io.mshr2stq->preg].valid = false;
+      entry[io.mshr2stq->preg].complete = false;
+    }
+    if(entry[fwd_ptr].valid==false){
+      LOOP_INC(fwd_ptr, STQ_NUM);
       commit_count--;
-      io.stq2cache->req = false;
-      io.stq2cache->wr = false;
+      count--;
     }
   }
 
@@ -123,12 +109,12 @@ void STQ::seq() {
   // 入队
   for (int i = 0; i < 2; i++) {
     if (io.dis2stq->dis_fire[i] && io.dis2stq->valid[i]) {
-      entry[free_queue[free_queue_head]].tag = io.dis2stq->tag[i];
-      entry[free_queue[free_queue_head]].valid = true;
-      entry[free_queue[free_queue_head]].addr_valid = false;
-      entry[free_queue[free_queue_head]].data_valid = false;
+      entry[enq_ptr].tag = io.dis2stq->tag[i];
+      entry[enq_ptr].valid = true;
+      entry[enq_ptr].addr_valid = false;
+      entry[enq_ptr].data_valid = false;
       count++;
-      LOOP_INC(free_queue_head, STQ_NUM);
+      LOOP_INC(enq_ptr, STQ_NUM);
     }
   }
 
@@ -150,46 +136,39 @@ void STQ::seq() {
   }
 
   // 分支清空
-  if (io.dec_bcast->mispred) {//可能有问题
-    uint32_t count_for = count;
-    for (int i = 0; i < count_for; i++) {
-      uint32_t work_queue_index=work_queue[(i+work_queue_head)%STQ_NUM];
-      if (entry[work_queue_index].valid && !entry[work_queue_index].complete &&
-          (io.dec_bcast->br_mask & (1 << entry[work_queue_index].tag))) {
-        entry[work_queue_index].valid = false;
+  if (io.dec_bcast->mispred) {
+    for (int i = 0; i < STQ_NUM; i++) {
+      if (entry[i].valid && !entry[i].complete &&
+          (io.dec_bcast->br_mask & (1 << entry[i].tag))) {
+        entry[i].valid = false;
+        entry[i].complete = false;
         count--;
-        free_queue[free_queue_tail] = work_queue_index;
-        work_queue[(i+work_queue_head)%STQ_NUM]=0;
-        LOOP_DEC(work_queue_tail,STQ_NUM);
-        LOOP_INC(free_queue_tail, STQ_NUM);
+        LOOP_DEC(enq_ptr, STQ_NUM);
       }
     }
   }
 
   if (io.rob_bcast->flush) {
-    uint32_t count_for = count;
-    for (int i = 0; i < count_for; i++) {
-      uint32_t work_queue_index=work_queue[(i+work_queue_head)%STQ_NUM];
-      if (entry[work_queue_index].valid && !entry[work_queue_index].complete) {
+    for (int i = 0; i < STQ_NUM; i++) {
+      if (entry[i].valid && !entry[i].complete) {
         entry[i].valid = false;
+        entry[i].complete = false;
         count--;
-        free_queue[free_queue_tail] = i;
-        LOOP_INC(free_queue_tail, STQ_NUM);
+        LOOP_DEC(enq_ptr, STQ_NUM);
       }
     }
   }
 
-  io.stq2dis->stq_idx1 = free_queue[free_queue_head];
-  io.stq2dis->stq_idx2 = free_queue[(free_queue_head+1)%STQ_NUM];
+  io.stq2dis->stq_idx = enq_ptr;
 }
 
 extern uint32_t *p_memory;
 void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx){//, bool &stall_load) {
 
-  int i = deq_ptr;
+  int i = fwd_ptr;
   int count = commit_count;
   while (count != 0) {
-    if ((entry[i].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC)) {
+    if ((entry[i].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC)&&entry[i].valid) {
       
       if(DCACHE_LOG)
       printf("STQ Load Forwarding from STQ entry %d address %08x wdata %08x\n", i, entry[i].addr, entry[i].data);
@@ -237,7 +216,7 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx){//, bool &stall_
       //   stall_load = true;
       //   return;
       // }
-      if ((entry[stq_idx].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC)) {
+      if ((entry[stq_idx].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC)&&entry[stq_idx].valid) {
         if (DCACHE_LOG)
         printf("STQ Load Forwarding from STQ entry %d for ROB entry %d address %08x wdata %08x\n", stq_idx, idx, entry[stq_idx].addr, entry[stq_idx].data);
         
@@ -273,7 +252,7 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx){//, bool &stall_
 }
 void STQ::stq_print(){
   printf("-----STQ Print-----\n");
-  printf("stq enq_ptr:%d deq_ptr:%d commit_ptr:%d count:%d commit_count:%d\n",enq_ptr,deq_ptr,commit_ptr,count,commit_count);
+  printf("stq enq_ptr:%d deq_ptr:%d commit_ptr:%d fwd_ptr:%d count:%d commit_count:%d\n",enq_ptr,deq_ptr,commit_ptr,fwd_ptr,count,commit_count);
   for(int i=0;i!=STQ_NUM;i=i+1){
       printf("STQ entry %d valid:%d addr:%08x data:%08x size:%d tag:%d addr_valid:%d data_valid:%d complete:%d\n",i, entry[i].valid, entry[i].addr, entry[i].data, entry[i].size, entry[i].tag, entry[i].addr_valid, entry[i].data_valid, entry[i].complete);
       

@@ -10,7 +10,9 @@ typedef struct {
   Rob_Commit *rob_commit;
   Dec_Broadcast *dec_bcast;
   Rob_Broadcast *rob_bcast;
-  Mem_IO * stq2cache;
+  Mem_IN * stq2cache;
+  Mem_OUT * cache2stq;
+  Mem_OUT * mshr2stq;
 } STQ_IO;
 
 typedef struct {
@@ -32,20 +34,12 @@ public:
   void seq();
 
   void init();
-  // int enq_ptr;
-  // int deq_ptr;
-  // int write_ptr;
+  int enq_ptr;
+  int deq_ptr;
 
   STQ_entry entry[STQ_NUM];
-  uint32_t free_queue[STQ_NUM];
-  uint32_t free_queue_head;
-  uint32_t free_queue_tail;
-  uint32_t work_queue[STQ_NUM];
-  uint32_t work_queue_head;
-  uint32_t work_queue_tail;
-  uint32_t work_queue_use;
-
   int commit_ptr = 0;
+  int fwd_ptr = 0;
   int count = 0;
   int commit_count = 0;
   bool write_flag = 0;

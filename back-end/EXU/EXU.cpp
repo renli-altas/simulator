@@ -9,13 +9,13 @@ extern uint32_t *p_memory;
 
 void alu(Inst_uop &inst);
 void bru(Inst_uop &inst);
-bool ldu(Inst_uop &inst, Mem_IO *&io);
+bool ldu(Inst_uop &inst, Mem_IN *&io);
 void stu_addr(Inst_uop &inst);
 void stu_data(Inst_uop &inst);
 void mul(Inst_uop &inst);
 void div(Inst_uop &inst);
 
-void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
+void FU::exec(Inst_uop &inst, Mem_IN *&io, bool mispred)
 {
 
   if (cycle == 0)
@@ -50,7 +50,7 @@ void FU::exec(Inst_uop &inst, Mem_IO *&io, bool mispred)
   {
     if (is_load_uop(inst.op))
     {
-      fu_stall = ldu(inst, io, mispred);
+      fu_stall = ldu(inst, io);
     }
     else if (is_sta_uop(inst.op))
     {

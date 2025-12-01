@@ -24,10 +24,7 @@ void Dispatch::comb_alloc() {
     // 每周期只能dispatch 2个store
     if (inst_r[i].valid && is_store(inst_r[i].uop)) {
       if (store_num < 2) {
-        if(store_num==0)
-        inst_alloc[i].uop.stq_idx = (io.stq2dis->stq_idx1 + store_num) % STQ_NUM;
-        else
-        inst_alloc[i].uop.stq_idx = (io.stq2dis->stq_idx2 + store_num) % STQ_NUM;
+        inst_alloc[i].uop.stq_idx = (io.stq2dis->stq_idx + store_num) % STQ_NUM;
         io.dis2stq->valid[store_num] = true;
         io.dis2stq->tag[store_num] = inst_r[i].uop.tag;
         pre_store_mask = pre_store_mask | (1 << inst_alloc[i].uop.stq_idx);

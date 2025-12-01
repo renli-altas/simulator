@@ -8,12 +8,15 @@
 class Dcache_IO
 {
 public:
-  Mem_IO *cpu_ld;
-  Mem_IO *cpu_st;
+  Mem_IN *cpu_ld_in;
+  Mem_IN *cpu_st_in;
+  Mem_OUT *cpu_ld_out;
+  Mem_OUT *cpu_st_out;
   MSHR_INFO* mshr_ld;
   MSHR_INFO* mshr_st;
   Cache_Mshr *mshr_control;
   Exe_Cache *control;
+  Mem_OUT *mshr_out;
 };
 
 class Dcache
@@ -27,24 +30,36 @@ public:
   void init();
 
 
-  uint32_t tag_ld;
-  uint32_t index_ld;
-  uint32_t offset_ld;
+  uint32_t tag_ld1;
+  uint32_t index_ld1;
+  uint32_t offset_ld1;
 
-  uint32_t tag_st;
-  uint32_t index_st;
-  uint32_t offset_st;
+  uint32_t tag_ld2;
+  uint32_t index_ld2;
+  uint32_t offset_ld2;
+
+  uint32_t tag_st1;
+  uint32_t index_st1;
+  uint32_t offset_st1;
   
-  bool hit_ld;
-  uint32_t hit_way_ld;
+  uint32_t tag_st2;
+  uint32_t index_st2;
+  uint32_t offset_st2;
+
+  bool hit_ld1;
+  bool hit_ld2;
+  uint32_t hit_way_ld1;
+  uint32_t hit_way_ld2;
   uint32_t rdata;
 
-  bool hit_st;
-  uint32_t hit_way_st;
+  bool hit_st1;
+  bool hit_st2;
+  uint32_t hit_way_st1;
+  uint32_t hit_way_st2;
 
-  Dcache_IO io;
-  Dcache_State state_ld;
-  Dcache_State state_st;
+
+  Dcache_IO io1;
+  Dcache_IO io2;
 
   uint32_t hit_num;
   uint32_t miss_num;
@@ -57,10 +72,4 @@ public:
 
   uint32_t paddr_ld;
   uint32_t paddr_st;
-
-  bool flush_flag;
-
-  bool req_ld_reg;
-
-  bool type;
 };
