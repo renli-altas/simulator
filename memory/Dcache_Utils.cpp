@@ -64,12 +64,20 @@ bool hit_check(uint32_t index, uint32_t tag, uint32_t &hit_way)
             hit_way = i;
         }
     }
-    if(!hit){
-        hit_way = getlru(index);
-    }
     return hit;
 }
-
+void hit_check(uint32_t index, uint32_t tag, uint32_t offset, uint32_t tag_way[DCACHE_WAY_NUM], uint32_t data_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM], bool &hit, uint32_t &data,uint32_t &hit_way)
+{
+    for (int i = 0; i < DCACHE_WAY_NUM; i++)
+    {
+        if (tag_way[i] == tag && dcache_valid[index][i])
+        {
+            hit = true;
+            data = data_way[i][offset];
+            hit_way = i;
+        }
+    }
+}
 bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
 {
     bool hit = false;
@@ -188,11 +196,12 @@ void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 }
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr)
 {
-    if(dcache_dirty[index][hit_way]&&dcache_valid[index][hit_way]){
-        dirty_writeback=true;
+    if(dcache_valid[index][hit_way]){
+        dirty_writeback=dcache_dirty[index][hit_way];
         paddr = get_addr(dcache_tag[index][hit_way], index, 0);
+        dcache_dirty[index][hit_way]=0;
+        dcache_valid[index][hit_way]=0;
     }
-    // hit_way = getlru(index);
 }
 bool dcache_read(uint32_t addr, uint32_t &data)
 {
@@ -211,4 +220,13 @@ bool dcache_read(uint32_t addr, uint32_t &data)
         return true;
     }
     return false;
+}
+void tag_and_data_read(uint32_t index,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM])
+{
+    for(int i=0;i<DCACHE_WAY_NUM;i++){
+        tag[i] = dcache_tag[index][i];
+        for(int j=0;j<DCACHE_OFFSET_NUM;j++){
+            data[i][j] = dcache_data[index][i][j];
+        }
+    }
 }

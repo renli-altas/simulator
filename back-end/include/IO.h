@@ -228,6 +228,8 @@ typedef struct{
 typedef struct{
   bool flush;
   bool ready;
+  bool st_out;
+  bool ld_out;
 }Cache_Mshr;
 
 typedef struct{
