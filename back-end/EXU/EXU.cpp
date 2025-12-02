@@ -81,6 +81,10 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io, bool mispred)
     else
       alu(inst);
 
+    if(!is_load_uop(inst.op)){
+      io->req = false;
+    }
+
     if (!fu_stall)
     {
       complete = true;
@@ -121,7 +125,7 @@ void EXU::comb_exec()
       fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache, io.dec_bcast->mispred | io.rob_bcast->flush);
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&
-            ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask)))
+            ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask))&& i!=IQ_LD)
       {
         io.exe2prf->entry[i].valid = true;
       }
@@ -202,6 +206,9 @@ void EXU::comb_pipeline()
       fu[i].complete = false;
       fu[i].cycle = 0;
     }
+    // if(DCACHE_LOG){
+    //   printf("i:%d io.prf2exe->iss_entry.valid:%d io.exe2iss->ready:%d io.exe2prf->entry.valid:%d io.prf2exe->ready:%d inst_r_1.valid:%d fu.complete:%d fu.cycle:%d\n",i,io.prf2exe->iss_entry[i].valid,io.exe2iss->ready[i],io.exe2prf->entry[i].valid,io.prf2exe->ready[i],inst_r_1[i].valid,fu[i].complete,fu[i].cycle);
+    // }
   }
 }
 

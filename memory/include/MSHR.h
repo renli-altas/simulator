@@ -26,6 +26,9 @@ typedef struct{
     uint32_t tag;
     uint32_t preg;
     uint32_t rob_idx;
+    uint32_t fun3;
+    uint32_t size;
+    uint32_t offset_load;
     uint32_t priority;
 }table_entry;
 
@@ -67,11 +70,15 @@ public:
     uint32_t rpreg;
     uint32_t rrob_idx;
     uint32_t rtag;
+    uint32_t raddr;
     uint32_t done;
     bool wdone;
     bool wdonelast;
     uint32_t wdata;
     bool wdata_valid;
+    uint32_t rfun3;
+    uint32_t rsize;
+    uint32_t roffset;
     
     enum MSHR_STATE state;
 
@@ -82,6 +89,6 @@ public:
     uint32_t find_entry(uint32_t tag,uint32_t index);
     void add_entry(uint32_t tag,uint32_t index,uint32_t way,bool dirty,uint32_t paddr);
     void add_free(uint32_t entry);
-    void add_table_entry(bool type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb,uint32_t tag,uint32_t preg,uint32_t rob_idx);
+    void add_table_entry(bool type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb,uint32_t tag,uint32_t preg,uint32_t rob_idx,uint32_t fun3,uint32_t size,uint32_t offset_load);
 };
 

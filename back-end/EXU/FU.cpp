@@ -288,6 +288,9 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
     // io->req = false;
   }
   io->wr = 0;
+  io->fun3 = inst.func3;
+  io->size = size;
+  io->offset = offset;
   io->wdata = data;
   io->wstrb = 0;
   io->addr = p_addr;
@@ -299,26 +302,7 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
   // bool page_fault = !ret;
 
   // if (!page_fault) {
-  //   data = data >> (offset * 8);
-  //   if (size == 0) {
-  //     mask = 0xFF;
-  //     if (data & 0x80)
-  //       sign = 0xFFFFFF00;
-  //   } else if (size == 0b01) {
-  //     mask = 0xFFFF;
-  //     if (data & 0x8000)
-  //       sign = 0xFFFF0000;
-  //   } else {
-  //     mask = 0xFFFFFFFF;
-  //   }
-
-  //   data = data & mask;
-
-  //   // 有符号数
-  //   if (!(inst.func3 & 0b100)) {
-  //     data = data | sign;
-  //   }
-  //   inst.result = data;
+  
   // } else {
 
   // }

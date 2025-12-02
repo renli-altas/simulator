@@ -190,6 +190,9 @@ typedef struct{
   bool data_ok;
   bool ready;
 
+  uint32_t fun3;
+  uint32_t size;
+  uint32_t offset;
   uint32_t tag;
   uint32_t preg;
   uint32_t rob_idx;
@@ -202,6 +205,10 @@ typedef struct{
   uint32_t data;
   bool wr;
 
+  uint32_t addr;
+  uint32_t fun3;
+  uint32_t size;
+  uint32_t offset;
   uint32_t tag;
   uint32_t preg;
   uint32_t rob_idx;
@@ -223,6 +230,9 @@ typedef struct{
   uint32_t tag_out;
   uint32_t preg;
   uint32_t rob_idx;
+  uint32_t fun3;
+  uint32_t size;
+  uint32_t offset_load;
 }MSHR_INFO;
 
 typedef struct{

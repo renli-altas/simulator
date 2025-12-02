@@ -12,7 +12,6 @@ typedef struct {
   Rob_Broadcast *rob_bcast;
   Mem_IN * stq2cache;
   Mem_OUT * cache2stq;
-  Mem_OUT * mshr2stq;
 } STQ_IO;
 
 typedef struct {

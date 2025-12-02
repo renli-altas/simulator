@@ -10,11 +10,10 @@
 class Dcache_IO
 {
 public:
-  Dcache_Pipeline_IO* pipeline;
-  Mem_IN cpu_ld_in;
-  Mem_IN cpu_st_in;
-  Mem_OUT cpu_ld_out;
-  Mem_OUT cpu_st_out;
+  Mem_IN *cpu_ld_in;
+  Mem_IN *cpu_st_in;
+  Mem_OUT *cpu_ld_out;
+  Mem_OUT *cpu_st_out;
   MSHR_INFO* mshr_ld;
   MSHR_INFO* mshr_st;
   Cache_Mshr *mshr_control;
@@ -31,7 +30,7 @@ public:
   void seq();
 
   void init();
-  void output(Mem_OUT*out,bool valid,bool wr,uint32_t data,uint32_t tag,uint32_t preg,uint32_t rob_idx,bool page_fault);
+  void output(Mem_OUT*out,bool valid,bool wr,uint32_t data,uint32_t addr,uint32_t fun3,uint32_t size, uint32_t offset_load,uint32_t tag,uint32_t preg,uint32_t rob_idx,bool page_fault);
   uint32_t tag_ld_way[DCACHE_WAY_NUM];
   uint32_t tag_st_way[DCACHE_WAY_NUM];
   uint32_t data_ld_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];
@@ -47,7 +46,16 @@ public:
   
   bool hit_ld;
   bool hit_st;
+  uint32_t hit_way_ld;
+  uint32_t hit_way_st;
 
+  uint32_t tag_st;
+  uint32_t index_st;
+  uint32_t offset_st;
+  
+  uint32_t tag_ld;
+  uint32_t index_ld;
+  uint32_t offset_ld;
 
   uint32_t hit_num;
   uint32_t miss_num;

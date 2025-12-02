@@ -81,10 +81,6 @@ void STQ::comb() {
       entry[io.cache2stq->preg].valid = false;
       entry[io.cache2stq->preg].complete = false;
     }
-    if(io.mshr2stq->valid&&io.mshr2stq->wr){
-      entry[io.mshr2stq->preg].valid = false;
-      entry[io.mshr2stq->preg].complete = false;
-    }
     if(entry[fwd_ptr].valid==false){
       LOOP_INC(fwd_ptr, STQ_NUM);
       commit_count--;

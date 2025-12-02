@@ -42,10 +42,12 @@ void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t dat
 void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& data,bool& wdone, bool done,bool last);
 
 void transfer_zero(MSHR_INFO* &mshrio);
-void transfer_data(MSHR_INFO* &mshrio,Mem_IO* cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready);
+void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready);
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr);
 
 
 void tag_and_data_read(uint32_t index);
 uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset);
-void tag_and_data_read(uint32_t index,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM])
+void tag_and_data_read(uint32_t index,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM]);
+void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset);
+bool dcache_read(uint32_t addr, uint32_t &data);

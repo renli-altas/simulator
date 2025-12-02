@@ -64,12 +64,6 @@ void PRF::comb_read() {
             entry->uop.src1_rdata = io.cache2prf->data;
           }
         }
-
-        if(io.mshr2prf->valid&&!io.mshr2prf->wr){
-          if(io.mshr2prf->preg == entry->uop.src1_preg){
-            entry->uop.src1_rdata = io.mshr2prf->data;
-          }
-        }
       }
 
       if (entry->uop.src2_en) {
@@ -88,11 +82,6 @@ void PRF::comb_read() {
         if(io.cache2prf->valid){
           if(io.cache2prf->preg == entry->uop.src2_preg){
             entry->uop.src2_rdata = io.cache2prf->data;
-          }
-        }
-        if(io.mshr2prf->valid&&!io.mshr2prf->wr){
-          if(io.mshr2prf->preg == entry->uop.src2_preg){
-            entry->uop.src2_rdata = io.mshr2prf->data;
           }
         }
       }
@@ -153,10 +142,36 @@ void PRF::comb_pipeline() {
     if (i!=IQ_LD&&io.exe2prf->entry[i].valid && io.prf2exe->ready[i]) {
       inst_r_1[i] = io.exe2prf->entry[i];
     }
-    else if(i==IQ_LD&&io.prf2exe->ready[i]){
+    else if(i==IQ_LD&&io.prf2exe->ready[i]&&io.cache2prf->valid){ 
+      if(DCACHE_LOG){
+        printf("Load Return: valid:%d addr:0x%x data:0x%x page_fault:%d\n",io.cache2prf->valid,io.cache2prf->addr,io.cache2prf->data,io.cache2prf->page_fault);
+      }
+      uint32_t size = io.cache2prf->size;
+      uint32_t mask = 0;
+      uint32_t sign = 0;
+      uint32_t data = io.cache2prf->data;
+      io.cache2prf->data = io.cache2prf->data >> (io.cache2prf->offset * 8);
+      if (size == 0) {
+        mask = 0xFF;
+        if (data & 0x80)
+          sign = 0xFFFFFF00;
+      } else if (size == 0b01) {
+        mask = 0xFFFF;
+        if (data & 0x8000)
+          sign = 0xFFFF0000;
+      } else {
+        mask = 0xFFFFFFFF;
+      }
+
+      data = data & mask;
+
+      // 有符号数
+      if (!(io.cache2prf->fun3 & 0b100)) {
+        data = data | sign;
+      }
       inst_r_1[i].valid = io.cache2prf->valid;
       inst_r_1[i].uop.dest_areg = io.cache2prf->preg;
-      inst_r_1[i].uop.result = io.cache2prf->data;
+      inst_r_1[i].uop.result = io.cache2prf->page_fault ? io.cache2prf->data : data;
       inst_r_1[i].uop.page_fault_load = io.cache2prf->page_fault;
       inst_r_1[i].uop.tag = io.cache2prf->tag; 
       inst_r_1[i].uop.rob_idx = io.cache2prf->rob_idx;

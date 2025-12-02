@@ -111,6 +111,11 @@ Exe_Csr exe2csr;
 Mem_IN ldq2cache;
 Mem_IN stq2cache;
 
+Mem_OUT cache2prf;
+Mem_OUT cache2stq;
+
+Mem_OUT mshr2cache;
+
 MSHR_INFO cache_ld2mshr;
 MSHR_INFO cache_st2mshr;
 Cache_Mshr cache2mshr;
@@ -174,6 +179,7 @@ void Back_Top::init() {
   prf.io.prf2dec = &prf2dec;
   prf.io.dec_bcast = &dec_bcast;
   prf.io.rob_bcast = &rob_bcast;
+  prf.io.cache2prf = &cache2prf;
 
   exu.io.prf2exe = &prf2exe;
   exu.io.dec_bcast = &dec_bcast;
@@ -201,15 +207,19 @@ void Back_Top::init() {
   stq.io.stq2dis = &stq2dis;
   stq.io.dec_bcast = &dec_bcast;
   stq.io.rob_bcast = &rob_bcast;
+  stq.io.cache2stq = &cache2stq;
 
   stq.io.stq2cache = &stq2cache;
 
-  dcache.io1.cpu_ld_in = &ldq2cache;
-  dcache.io1.cpu_st_in = &stq2cache;
-  dcache.io1.mshr_ld = &cache_ld2mshr;
-  dcache.io1.mshr_st = &cache_st2mshr;
-  dcache.io1.control = &exe2cache;
-  dcache.io1.mshr_control = &cache2mshr;
+  dcache.io.cpu_ld_in = &ldq2cache;
+  dcache.io.cpu_st_in = &stq2cache;
+  dcache.io.cpu_ld_out = &cache2prf;
+  dcache.io.cpu_st_out = &cache2stq;
+  dcache.io.mshr_ld = &cache_ld2mshr;
+  dcache.io.mshr_st = &cache_st2mshr;
+  dcache.io.control = &exe2cache;
+  dcache.io.mshr_control = &cache2mshr;
+  dcache.io.mshr_out = &mshr2cache;
 
   pmemory.io.mem = &mshr2mem;
 
@@ -221,6 +231,7 @@ void Back_Top::init() {
   mshr.io.dcache_st = &cache_st2mshr;
   mshr.io.control = &cache2mshr;
   mshr.io.mem = &mshr2mem;
+  mshr.io.cpu = &mshr2cache;
 
   idu.init();
   isu.init();

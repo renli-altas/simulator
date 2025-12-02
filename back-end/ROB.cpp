@@ -131,10 +131,10 @@ void ROB::comb_commit() {
     cout << "ROB deq inst:" << endl;
     for (int i = 0; i < ROB_BANK_NUM; i++) {
       if (entry[i][deq_ptr].valid) {
-        cout << hex << entry[i][deq_ptr].uop.instruction
-             << " cmp_num: " << entry[i][deq_ptr].uop.cmp_num
-             << "is_page_fault: " << is_page_fault(entry[i][deq_ptr].uop)
-             << endl;
+        printf("bank:%d col:%d inst:0x%08x cmp_num:%d is_page_fault:%d\n", i, deq_ptr,
+               entry[i][deq_ptr].uop.instruction,
+               entry[i][deq_ptr].uop.cmp_num,
+               is_page_fault(entry[i][deq_ptr].uop));
       }
     }
     exit(1);
@@ -144,12 +144,17 @@ void ROB::comb_commit() {
 void ROB::comb_complete() {
   //  执行完毕的标记
   for (int i = 0; i < ISSUE_WAY; i++) {
+    printf("ROB complete checking i:%d valid:%d bank_idx:%d line_idx:%d inst:0x%08x\n", i, io.prf2rob->entry[i].valid, io.prf2rob->entry[i].uop.rob_idx & 0b11, io.prf2rob->entry[i].uop.rob_idx >> 2, io.prf2rob->entry[i].uop.instruction);
     if (io.prf2rob->entry[i].valid) {
       int bank_idx = io.prf2rob->entry[i].uop.rob_idx & 0b11;
       int line_idx = io.prf2rob->entry[i].uop.rob_idx >> 2;
       entry_1[bank_idx][line_idx].uop.cmp_num++;
+      printf("ROB complete inst:0x%08x bank_idx:%d line_idx:%d cmp_num:%d\n",
+             io.prf2rob->entry[i].uop.instruction, bank_idx, line_idx,
+             entry_1[bank_idx][line_idx].uop.cmp_num);
 
       if (i == IQ_LD) {
+        printf("LOAD io.prf2rob->entry[i].uop.result:0x%08x bank_idx:%d line_idx:%d\n",io.prf2rob->entry[i].uop.result, bank_idx, line_idx);
         if (is_page_fault(io.prf2rob->entry[i].uop)) {
           entry_1[bank_idx][line_idx].uop.result =
               io.prf2rob->entry[i].uop.result;
@@ -246,4 +251,10 @@ void ROB::init() {
   deq_ptr = 0;
   enq_ptr = 0;
   count = 0;
+  for (int i = 0; i < ROB_BANK_NUM; i++) {
+    for (int j = 0; j < ROB_LINE_NUM; j++) {
+      entry[i][j].valid = false;
+      entry[i][j].uop.cmp_num = 0;
+    }
+  }
 }
