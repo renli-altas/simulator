@@ -3,6 +3,7 @@
 #include <ISU.h>
 #include <util.h>
 #include <vector>
+#include <cstdio>
 
 extern Back_Top back;
 

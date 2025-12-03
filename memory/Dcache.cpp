@@ -13,7 +13,7 @@ void Dcache::init()
 
 void Dcache::comb_in()
 {
-    if (cpu_ld_in.req == true && io.mshr_control->ready == true && io.control->flush == false)
+    if (cpu_ld_in.req == true && io.mshr_control->ready == true && io.control->flush == false && io.control->misprad == false)
     {
         if (hit_ld == true)
         {
@@ -29,7 +29,7 @@ void Dcache::comb_in()
         transfer_zero(io.mshr_ld);
     }
 
-    if (cpu_st_in.req == true && io.mshr_control->ready == true && io.control->flush == false)
+    if (cpu_st_in.req == true && io.mshr_control->ready == true && io.control->flush == false && io.control->misprad == false)
     {
         if (hit_st == true)
         {
@@ -46,41 +46,39 @@ void Dcache::comb_in()
     }
 
     io.mshr_control->flush = io.control->flush;
+    io.mshr_control->misprad = io.control->misprad;
+    io.mshr_control->br_mask = io.control->br_mask;
+
 }
 //================================================================================
 void Dcache::comb_out()
 {
     if (io.mshr_control->st_out)
     {
-        output(io.cpu_st_out, true, true, 0, io.mshr_out->addr,io.mshr_out->fun3, io.mshr_out->size, io.mshr_out->offset, io.mshr_out->tag, io.mshr_out->preg, io.mshr_out->rob_idx, false);
+        output(io.cpu_st_out, true, true, 0, io.mshr_out->addr, io.mshr_out->uop);
     }
     else
     {
-        output(io.cpu_st_out, hit_st == true && io.cpu_st_in->req && !io.control->flush, true, 0, cpu_st_in.addr,cpu_st_in.fun3, cpu_st_in.size, cpu_st_in.offset, cpu_st_in.tag, cpu_st_in.preg, cpu_st_in.rob_idx, cpu_st_in.page_fault);
+        output(io.cpu_st_out, hit_st == true && io.cpu_st_in->req && !io.control->flush && !io.control->misprad, true, 0, cpu_st_in.addr, cpu_st_in.uop);
     }
 
     if (io.mshr_control->ld_out)
     {
-        output(io.cpu_ld_out, true, false, io.mshr_out->data,io.mshr_out->addr, io.mshr_out->fun3, io.mshr_out->size, io.mshr_out->offset, io.mshr_out->tag, io.mshr_out->preg, io.mshr_out->rob_idx, false);
+        output(io.cpu_ld_out, true, false, io.mshr_out->data,io.mshr_out->addr, io.mshr_out->uop);
     }
     else
     {
-        output(io.cpu_ld_out, (hit_ld == true || io.cpu_ld_in->page_fault) && io.cpu_ld_in->req && !io.control->flush, false, data_ld, cpu_ld_in.addr, cpu_ld_in.fun3, cpu_ld_in.size, cpu_ld_in.offset, cpu_ld_in.tag, cpu_ld_in.preg, cpu_ld_in.rob_idx, cpu_ld_in.page_fault);
+        output(io.cpu_ld_out, (hit_ld == true || io.cpu_ld_in->uop.page_fault_load) && io.cpu_ld_in->req && !io.control->flush && !io.control->misprad, false, data_ld, cpu_ld_in.addr, cpu_ld_in.uop);
     }
 
-    io.cpu_ld_in->ready = io.mshr_control->ready && ((hit_ld == false && !io.cpu_ld_in->page_fault) || (hit_ld == true && !io.mshr_control->ld_out) || (io.cpu_ld_in->page_fault && !io.mshr_control->ld_out));
+    io.cpu_ld_in->ready = io.mshr_control->ready && ((hit_ld == false && !io.cpu_ld_in->uop.page_fault_load) || (hit_ld == true && !io.mshr_control->ld_out) || (io.cpu_ld_in->uop.page_fault_load && !io.mshr_control->ld_out));
     io.cpu_st_in->ready = io.mshr_control->ready && (hit_st == false || (hit_st == true && !io.mshr_control->st_out));
 
-    if (DCACHE_LOG)
-    {
-        printf("Dcache cpu_ld_in_ready:%d cpu_st_in_ready:%d\n", io.cpu_ld_in->ready, io.cpu_st_in->ready);
-        printf("Dcache hit_ld:%d hit_st:%d st_out:%d ld_out:%d\n", hit_ld, hit_st, io.mshr_control->st_out, io.mshr_control->ld_out);
-    }
 }
 void Dcache::seq()
 {
     //================================================================================
-    if (io.cpu_ld_in->req == true && io.cpu_ld_in->page_fault == false)
+    if (io.cpu_ld_in->req == true && io.cpu_ld_in->uop.page_fault_load == false)
     {
         uint32_t tag_ld_tmp;
         uint32_t index_ld_tmp;
@@ -97,12 +95,12 @@ void Dcache::seq()
         tag_and_data_read(index_st_tmp, tag_st_way, data_st_way);
     }
     //================================================================================
-    if (io.mshr_control->ready == true && io.control->flush == false)
+    if (io.mshr_control->ready == true && io.control->flush == false && io.control->misprad == false)
     {
         cpu_ld_in = !io.mshr_control->ld_out ? (*io.cpu_ld_in) : cpu_ld_in;
         cpu_st_in = !io.mshr_control->st_out ? (*io.cpu_st_in) : cpu_st_in;
     }
-    else if (io.control->flush == true)
+    else if (io.control->flush == true||io.control->misprad == true)
     {
         cpu_ld_in.req = false;
         cpu_st_in.req = false;
@@ -110,7 +108,7 @@ void Dcache::seq()
     //================================================================================
     if (cpu_ld_in.req == true)
     {
-        if (cpu_ld_in.page_fault == true)
+        if (cpu_ld_in.uop.page_fault_load == true)
         {
             data_ld = cpu_ld_in.rdata;
         }
@@ -171,29 +169,33 @@ void Dcache::seq()
     {
     }
 
-    if(DCACHE_LOG)
-    {
-        printf("Dcache seq io.cpu_ld_in.req:%d io.cpu_ld_in.page_fault:%d io.cpu_st_in.req:%d\n", io.cpu_ld_in->req, io.cpu_ld_in->page_fault, io.cpu_st_in->req);
-        printf("Dcache seq cpu_ld_in.req:%d cpu_ld_in.page_fault:%d cpu_st_in.req:%d\n", cpu_ld_in.req, cpu_ld_in.page_fault, cpu_st_in.req);
-        printf("Dcache seq io.cpu_lad_in.addr:0x%08x io.cpu_st_in.addr:0x%08x\n", io.cpu_ld_in->addr, io.cpu_st_in->addr);
-        printf("Dcache seq cpu_ld_in.addr:0x%08x cpu_st_in.addr:0x%08x\n", cpu_ld_in.addr, cpu_st_in.addr);
-        printf("Dcache seq hit_ld:%d hit_way_ld:%d hit_st:%d hit_way_st:%d\n", hit_ld, hit_way_ld, hit_st, hit_way_st);
-        printf("Dcache hit_num:%d miss_num:%d\n", hit_num, miss_num);
+    if(DCACHE_LOG){
+        printf("\n\n============================ Dcache Input ============================\n");
+        printf("Dcache Input io.cpu_ld_in->req:%d inst:0x%08x addr:0x%08x page_fault:%d      preg:%02d rob_idx:%02d \n", io.cpu_ld_in->req,io.cpu_ld_in->uop.instruction, io.cpu_ld_in->addr, io.cpu_ld_in->uop.page_fault_load, io.cpu_ld_in->uop.dest_preg, io.cpu_ld_in->uop.rob_idx);
+        printf("Dcache Input io.cpu_st_in->req:%d inst:0x%08x addr:0x%08x data:0x%08x   preg:%02d rob_idx:%02d\n", io.cpu_st_in->req,io.cpu_st_in->uop.instruction, io.cpu_st_in->addr, io.cpu_st_in->wdata, io.cpu_st_in->uop.dest_preg, io.cpu_st_in->uop.rob_idx);  
+        printf("Dcache Input cpu_ld_in.req:%d     inst:0x%08x addr:0x%08x page_fault:%d      preg:%02d rob_idx:%02d tag:0x%08x index:%d offset:%d\n", cpu_ld_in.req,cpu_ld_in.uop.instruction, cpu_ld_in.addr, cpu_ld_in.uop.page_fault_load, cpu_ld_in.uop.dest_preg, cpu_ld_in.uop.rob_idx, tag_ld, index_ld, offset_ld);
+        printf("Dcache Input cpu_st_in.req:%d     inst:0x%08x addr:0x%08x data:0x%08x   preg:%02d rob_idx:%02d tag:0x%08x index:%d offset:%d\n", cpu_st_in.req,cpu_st_in.uop.instruction, cpu_st_in.addr, cpu_st_in.wdata, cpu_st_in.uop.dest_preg, cpu_st_in.uop.rob_idx, tag_st, index_st, offset_st);  
+        printf("============================ Dcache Output ============================\n");
+        printf("Dcache Output io.cpu_ld_out->valid:%d inst:0x%08x addr:0x%08x data:0x%08x preg:%02d rob_idx:%02d\n", io.cpu_ld_out->valid, io.cpu_ld_out->uop.instruction, io.cpu_ld_out->addr, io.cpu_ld_out->data, io.cpu_ld_out->uop.dest_preg, io.cpu_ld_out->uop.rob_idx);
+        printf("Dcache Output io.cpu_st_out->valid:%d inst:0x%08x addr:0x%08x                 preg:%02d rob_idx:%02d\n", io.cpu_st_out->valid, io.cpu_st_out->uop.instruction, io.cpu_st_out->addr, io.cpu_st_out->uop.dest_preg, io.cpu_st_out->uop.rob_idx);
+        printf("Dcache Output io.mshr_out->valid:%d   inst:0x%08x addr:0x%08x data:0x%08x preg:%02d rob_idx:%02d\n", io.mshr_out->valid, io.mshr_out->uop.instruction, io.mshr_out->addr, io.mshr_out->data, io.mshr_out->uop.dest_preg, io.mshr_out->uop.rob_idx);
+        printf("Dcache Stats io.mshr_control->ld_out:%d io.mshr_control->st_out:%d\n", io.mshr_control->ld_out, io.mshr_control->st_out);
+        printf("============================ Dcache to MSHR ============================\n");
+        printf("Dcache to MSHR io.mshr_ld->valid:%d addr:0x%08x wr:%d preg:%02d rob_idx:%02d\n", io.mshr_ld->valid, io.mshr_ld->addr, io.mshr_ld->wr, io.mshr_ld->uop.dest_preg, io.mshr_ld->uop.rob_idx);
+        printf("Dcache to MSHR io.mshr_st->valid:%d addr:0x%08x wr:%d preg:%02d rob_idx:%02d\n", io.mshr_st->valid, io.mshr_st->addr, io.mshr_st->wr, io.mshr_st->uop.dest_preg, io.mshr_st->uop.rob_idx);
+        printf("============================ Dcache Stats ============================\n");
+        printf("Dcache Stats hit_ld:%d hit_way_ld:%d dirty_writeback_ld:%d paddr_ld:0x%08x\n", hit_ld, hit_way_ld, dirty_writeback_ld, paddr_ld);
+        printf("Dcache Stats hit_st:%d hit_way_st:%d dirty_writeback_st:%d paddr_st:0x%08x\n", hit_st, hit_way_st, dirty_writeback_st, paddr_st);
+        printf("Dcache Stats io.mshr_control->ready:%d io.control->flush:%d io.control->misprad:%d\n", io.mshr_control->ready, io.control->flush, io.control->misprad);
+        printf("Dcache Stats hit_num:%d miss_num:%d\n\n\n", hit_num, miss_num);
     }
 }
 
-void Dcache::output(Mem_OUT *out, bool valid, bool wr, uint32_t data, uint32_t addr, uint32_t fun3,uint32_t size, uint32_t offset_load, uint32_t tag, uint32_t preg, uint32_t rob_idx, bool page_fault)
+void Dcache::output(Mem_OUT *out, bool valid, bool wr, uint32_t data, uint32_t addr, Inst_uop uop)
 {
     out->valid = valid;
     out->wr = wr;
     out->data = data;
     out->addr = addr;
-    out->fun3 = fun3;
-    out->size = size;
-    out->offset = offset_load;
-    out->tag = tag;
-    out->preg = preg;
-    out->rob_idx = rob_idx;
-    out->page_fault = page_fault;
-    printf("Dcache output valid:%d wr:%d data:0x%08x addr:%x fun3:0x%08x size:%d offset:%d tag:0x%08x preg:%d rob_idx:%d page_fault:%d\n", valid, wr, data, addr, fun3, size, offset_load, tag, preg, rob_idx, page_fault);
+    out->uop=uop;
 }

@@ -190,13 +190,7 @@ typedef struct{
   bool data_ok;
   bool ready;
 
-  uint32_t fun3;
-  uint32_t size;
-  uint32_t offset;
-  uint32_t tag;
-  uint32_t preg;
-  uint32_t rob_idx;
-  bool page_fault;
+  Inst_uop uop;
 
 }Mem_IN;
 
@@ -206,13 +200,7 @@ typedef struct{
   bool wr;
 
   uint32_t addr;
-  uint32_t fun3;
-  uint32_t size;
-  uint32_t offset;
-  uint32_t tag;
-  uint32_t preg;
-  uint32_t rob_idx;
-  bool page_fault;
+  Inst_uop uop;
 }Mem_OUT;
 
 typedef struct{
@@ -227,23 +215,23 @@ typedef struct{
   uint32_t offset;
   uint32_t way;
   bool dirty;
-  uint32_t tag_out;
-  uint32_t preg;
-  uint32_t rob_idx;
-  uint32_t fun3;
-  uint32_t size;
-  uint32_t offset_load;
+  
+  Inst_uop uop;
 }MSHR_INFO;
 
 typedef struct{
   bool flush;
   bool ready;
+  bool misprad;
+  uint32_t br_mask;
   bool st_out;
   bool ld_out;
 }Cache_Mshr;
 
 typedef struct{
   bool flush;
+  bool misprad;
+  uint32_t br_mask;
 }Exe_Cache;
 
 typedef struct{

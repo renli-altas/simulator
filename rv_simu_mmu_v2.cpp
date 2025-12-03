@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
   // main loop
   for (sim_time = 0; sim_time < MAX_SIM_TIME; sim_time++) {
     if (LOG)
-      cout
+      cout<< endl<<endl
           << "****************************************************************"
           << dec << " cycle: " << sim_time
           << " ****************************************************************"

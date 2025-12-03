@@ -59,10 +59,8 @@ void PRF::comb_read() {
             entry->uop.src1_rdata = io.exe2prf->entry[j].uop.result;
         }
 
-        if(io.cache2prf->valid){
-          if(io.cache2prf->preg == entry->uop.src1_preg){
-            entry->uop.src1_rdata = io.cache2prf->data;
-          }
+        if(io.cache2prf->valid && io.cache2prf->uop.dest_preg == entry->uop.src1_preg){
+          entry->uop.src1_rdata = load_data;
         }
       }
 
@@ -79,22 +77,61 @@ void PRF::comb_read() {
               io.exe2prf->entry[j].uop.dest_preg == entry->uop.src2_preg)
             entry->uop.src2_rdata = io.exe2prf->entry[j].uop.result;
         }
-        if(io.cache2prf->valid){
-          if(io.cache2prf->preg == entry->uop.src2_preg){
-            entry->uop.src2_rdata = io.cache2prf->data;
-          }
+        if(io.cache2prf->valid && io.cache2prf->uop.dest_preg == entry->uop.src2_preg){
+          entry->uop.src2_rdata = load_data;
         }
       }
     }
   }
 }
+void PRF::comb_load(){
+  if(io.cache2prf->valid){
+    int addr = io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm;
+    int size = io.cache2prf->uop.func3 & 0b11;
+    int offset = addr & 0b11;
 
+
+    uint32_t mask = 0;
+    uint32_t sign = 0;
+
+    if (io.cache2prf->uop.amoop != AMONONE)
+    {
+      size = 0b10;
+      offset = 0b0;
+    }
+    uint32_t data = io.cache2prf->data;
+    data = data >> (offset * 8);
+    if (size == 0) {
+      mask = 0xFF;
+      if (data & 0x80)
+        sign = 0xFFFFFF00;
+    } else if (size == 0b01) {
+      mask = 0xFFFF;
+      if (data & 0x8000)
+        sign = 0xFFFF0000;
+    } else {
+      mask = 0xFFFFFFFF;
+    }
+
+    data = data & mask;
+
+    // 有符号数
+    if (!(io.cache2prf->uop.func3 & 0b100)) {
+      data = data | sign;
+    }
+    printf("comb_load addr:0x%08x size:%d offset:%d data:0x%08x cache2prf->data:0x%08x\n",addr,size,offset,data,io.cache2prf->data);
+    load_data = io.cache2prf->uop.page_fault_load ? io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm : data;
+  }
+}
 void PRF::comb_complete() {
   for (int i = 0; i < ISSUE_WAY; i++) {
     if (inst_r[i].valid)
       io.prf2rob->entry[i] = inst_r[i];
     else
       io.prf2rob->entry[i].valid = false;
+    // if(DCACHE_LOG){
+    //   printf("io.prf2rob->entry[%d]: valid:%d inst:0x%08x rob_idx:%d preg:%d\n",i,io.prf2rob->entry[i].valid,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg);
+    // }
   }
 }
 
@@ -143,38 +180,22 @@ void PRF::comb_pipeline() {
       inst_r_1[i] = io.exe2prf->entry[i];
     }
     else if(i==IQ_LD&&io.prf2exe->ready[i]&&io.cache2prf->valid){ 
-      if(DCACHE_LOG){
-        printf("Load Return: valid:%d addr:0x%x data:0x%x page_fault:%d\n",io.cache2prf->valid,io.cache2prf->addr,io.cache2prf->data,io.cache2prf->page_fault);
-      }
-      uint32_t size = io.cache2prf->size;
-      uint32_t mask = 0;
-      uint32_t sign = 0;
-      uint32_t data = io.cache2prf->data;
-      io.cache2prf->data = io.cache2prf->data >> (io.cache2prf->offset * 8);
-      if (size == 0) {
-        mask = 0xFF;
-        if (data & 0x80)
-          sign = 0xFFFFFF00;
-      } else if (size == 0b01) {
-        mask = 0xFFFF;
-        if (data & 0x8000)
-          sign = 0xFFFF0000;
-      } else {
-        mask = 0xFFFFFFFF;
-      }
-
-      data = data & mask;
-
-      // 有符号数
-      if (!(io.cache2prf->fun3 & 0b100)) {
-        data = data | sign;
-      }
+      
       inst_r_1[i].valid = io.cache2prf->valid;
-      inst_r_1[i].uop.dest_areg = io.cache2prf->preg;
-      inst_r_1[i].uop.result = io.cache2prf->page_fault ? io.cache2prf->data : data;
-      inst_r_1[i].uop.page_fault_load = io.cache2prf->page_fault;
-      inst_r_1[i].uop.tag = io.cache2prf->tag; 
-      inst_r_1[i].uop.rob_idx = io.cache2prf->rob_idx;
+      inst_r_1[i].uop.dest_en = true;
+      inst_r_1[i].uop.dest_preg = io.cache2prf->uop.dest_preg;  
+      inst_r_1[i].uop.result = load_data;
+      inst_r_1[i].uop.page_fault_load = io.cache2prf->uop.page_fault_load;
+      inst_r_1[i].uop.tag = io.cache2prf->uop.tag; 
+      inst_r_1[i].uop.rob_idx = io.cache2prf->uop.rob_idx;
+      inst_r_1[i].uop.instruction = io.cache2prf->uop.instruction;
+      uint32_t addr = io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm;
+      if (addr == 0x1fd0e000) {
+        inst_r_1[i].uop.difftest_skip = true;
+      }
+      if(DCACHE_LOG){
+        printf("\n\nLoad Return: valid:%d pc:0x%08x inst:0x%08x addr:0x%08x data:0x%x page_fault:%d rob_idx:%d preg:%d\n",io.cache2prf->valid,io.cache2prf->uop.pc,io.cache2prf->uop.instruction,addr,load_data,io.cache2prf->uop.page_fault_load, io.cache2prf->uop.rob_idx, io.cache2prf->uop.dest_preg);
+      }
     }
     else {
       inst_r_1[i].valid = false;

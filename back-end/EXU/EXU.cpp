@@ -51,6 +51,9 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io, bool mispred)
     if (is_load_uop(inst.op))
     {
       fu_stall = ldu(inst, io);
+      // if(DCACHE_LOG) {
+      //   printf("fu_stall:%d\n", fu_stall);
+      // }
     }
     else if (is_sta_uop(inst.op))
     {
@@ -116,6 +119,7 @@ void EXU::comb_ready()
 
 void EXU::comb_exec()
 {
+  io.ldq2cache->req = false;
   for (int i = 0; i < ISSUE_WAY; i++)
   {
     io.exe2prf->entry[i].valid = false;
@@ -125,7 +129,7 @@ void EXU::comb_exec()
       fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache, io.dec_bcast->mispred | io.rob_bcast->flush);
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&
-            ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask))&& i!=IQ_LD)
+            ((1 << inst_r[i].uop.tag) & io.dec_bcast->br_mask)))
       {
         io.exe2prf->entry[i].valid = true;
       }
@@ -155,7 +159,12 @@ void EXU::comb_exec()
     io.exe2stq->data_entry.valid = false;
   }
 
-  io.exe2cache->flush = io.dec_bcast->mispred || io.rob_bcast->flush;
+  io.exe2cache->flush = io.rob_bcast->flush;
+  io.exe2cache->misprad = io.dec_bcast->mispred;
+  io.exe2cache->br_mask = io.dec_bcast->br_mask;
+  if(io.exe2cache->flush||io.exe2cache->misprad){
+    printf("EXU flush triggered io.dec_bcast->mispred:%d io.rob_bcast->flush:%d\n", io.dec_bcast->mispred, io.rob_bcast->flush);
+  }
 }
 
 void EXU::comb_to_csr()

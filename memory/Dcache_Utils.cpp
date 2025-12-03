@@ -162,9 +162,6 @@ void transfer_zero(MSHR_INFO* &mshrio)
     mshrio->dirty=false;
     mshrio->way=0;
     mshrio->paddr = 0;
-    mshrio->preg = 0;
-    mshrio->rob_idx = 0;
-    mshrio->tag_out = 0;
 }
 void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready)
 {
@@ -179,12 +176,7 @@ void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,ui
     mshrio->dirty=dirty;
     mshrio->way=way;
     mshrio->paddr = paddr;
-    mshrio->preg = cpu.preg;
-    mshrio->rob_idx = cpu.rob_idx;
-    mshrio->fun3 = cpu.fun3;
-    mshrio->tag_out = cpu.tag;
-    mshrio->size = cpu.size;
-    mshrio->offset_load = cpu.offset;
+    mshrio->uop = cpu.uop;
 }
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 {

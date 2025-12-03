@@ -30,7 +30,7 @@ public:
   void seq();
 
   void init();
-  void output(Mem_OUT*out,bool valid,bool wr,uint32_t data,uint32_t addr,uint32_t fun3,uint32_t size, uint32_t offset_load,uint32_t tag,uint32_t preg,uint32_t rob_idx,bool page_fault);
+  void output(Mem_OUT*out,bool valid,bool wr,uint32_t data,uint32_t addr,Inst_uop uop);
   uint32_t tag_ld_way[DCACHE_WAY_NUM];
   uint32_t tag_st_way[DCACHE_WAY_NUM];
   uint32_t data_ld_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];

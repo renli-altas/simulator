@@ -99,7 +99,6 @@ void bru(Inst_uop &inst)
   uint32_t operand1, operand2;
   operand1 = inst.src1_rdata;
   operand2 = inst.src2_rdata;
-
   uint32_t pc_br = inst.pc + inst.imm;
   bool br_taken = true;
 
@@ -158,6 +157,7 @@ void bru(Inst_uop &inst)
     inst.pc_next = pc_br;
   else
     inst.pc_next = inst.pc + 4;
+  printf("bru operand1:0x%08x operand2:0x%08x pc:0x%08x mispred:%d pc_next:0x%08x idx:%02d\n",operand1,operand2,inst.pc,inst.mispred,inst.pc_next,inst.rob_idx);
 }
 
 void alu(Inst_uop &inst)
@@ -269,10 +269,10 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
     ret = va2pa(p_addr, addr, back.csr.CSR_RegFile[number_satp], 1, mstatus,
                 sstatus, back.csr.privilege, p_memory);
   }
-
   data = 0;
   if (!ret)
   {
+    inst.page_fault_load = true;
     data = addr;
   }
   if (p_addr == 0x1fd0e000)
@@ -288,16 +288,11 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
     // io->req = false;
   }
   io->wr = 0;
-  io->fun3 = inst.func3;
-  io->size = size;
-  io->offset = offset;
+  
   io->wdata = data;
   io->wstrb = 0;
   io->addr = p_addr;
-  io->tag = inst.tag;
-  io->preg = inst.dest_preg;
-  io->rob_idx = inst.rob_idx;
-  io->page_fault = !ret;
+  io->uop = inst;
   return io->ready == false;
   // bool page_fault = !ret;
 

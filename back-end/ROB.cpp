@@ -131,10 +131,14 @@ void ROB::comb_commit() {
     cout << "ROB deq inst:" << endl;
     for (int i = 0; i < ROB_BANK_NUM; i++) {
       if (entry[i][deq_ptr].valid) {
-        printf("bank:%d col:%d inst:0x%08x cmp_num:%d is_page_fault:%d\n", i, deq_ptr,
+        printf("bank:%d line:%d inst:0x%08x cmp_num:%d is_page_fault:%d src1_preg:%d src2_preg:%d uop_num:%d result:0x%08x\n", i, deq_ptr,
                entry[i][deq_ptr].uop.instruction,
                entry[i][deq_ptr].uop.cmp_num,
-               is_page_fault(entry[i][deq_ptr].uop));
+               is_page_fault(entry[i][deq_ptr].uop),
+               entry[i][deq_ptr].uop.src1_preg,
+               entry[i][deq_ptr].uop.src2_preg,
+              entry[i][deq_ptr].uop.uop_num,
+               entry[i][deq_ptr].uop.result);
       }
     }
     exit(1);
@@ -144,17 +148,15 @@ void ROB::comb_commit() {
 void ROB::comb_complete() {
   //  执行完毕的标记
   for (int i = 0; i < ISSUE_WAY; i++) {
-    printf("ROB complete checking i:%d valid:%d bank_idx:%d line_idx:%d inst:0x%08x\n", i, io.prf2rob->entry[i].valid, io.prf2rob->entry[i].uop.rob_idx & 0b11, io.prf2rob->entry[i].uop.rob_idx >> 2, io.prf2rob->entry[i].uop.instruction);
     if (io.prf2rob->entry[i].valid) {
       int bank_idx = io.prf2rob->entry[i].uop.rob_idx & 0b11;
       int line_idx = io.prf2rob->entry[i].uop.rob_idx >> 2;
       entry_1[bank_idx][line_idx].uop.cmp_num++;
-      printf("ROB complete inst:0x%08x bank_idx:%d line_idx:%d cmp_num:%d\n",
-             io.prf2rob->entry[i].uop.instruction, bank_idx, line_idx,
-             entry_1[bank_idx][line_idx].uop.cmp_num);
 
       if (i == IQ_LD) {
-        printf("LOAD io.prf2rob->entry[i].uop.result:0x%08x bank_idx:%d line_idx:%d\n",io.prf2rob->entry[i].uop.result, bank_idx, line_idx);
+        if(DCACHE_LOG){
+          printf("bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x rob_idx:%d preg:%d result:0x%08x page_fault_load:%d\n",bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result, io.prf2rob->entry[i].uop.page_fault_load);
+        }
         if (is_page_fault(io.prf2rob->entry[i].uop)) {
           entry_1[bank_idx][line_idx].uop.result =
               io.prf2rob->entry[i].uop.result;
@@ -237,8 +239,12 @@ void ROB::seq() {
   for (int i = 0; i < ROB_BANK_NUM; i++) {
     for (int j = 0; j < ROB_LINE_NUM; j++) {
       entry[i][j] = entry_1[i][j];
+      // if(DCACHE_LOG){
+      //   printf("ROB entry[%d][%d]: valid:%d inst:0x%08x cmp_num:%d uop_num:%d\n",i,j,entry[i][j].valid,entry[i][j].uop.instruction,entry[i][j].uop.cmp_num,entry[i][j].uop.uop_num);
+      // }
     }
   }
+
 
   deq_ptr = deq_ptr_1;
   enq_ptr = enq_ptr_1;

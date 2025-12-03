@@ -31,6 +31,7 @@ public:
   void comb_flush();
   void comb_write();
   void comb_pipeline();
+  void comb_load();
   void init();
   void seq();
 
@@ -40,4 +41,6 @@ public:
 
   wire32_t reg_file_1[PRF_NUM];
   Inst_entry inst_r_1[ISSUE_WAY];
+
+  uint32_t load_data;
 };

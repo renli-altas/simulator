@@ -309,6 +309,7 @@ void Back_Top::Back_comb() {
   dcache.comb_out();
   prf.comb_write();
   prf.comb_branch();
+  prf.comb_load();
   prf.comb_pipeline();
   prf.comb_flush();
   dis.comb_pipeline();
@@ -322,7 +323,7 @@ void Back_Top::Back_comb() {
   } else {
 
     if (LOG)
-      cout << "flush" << endl;
+      cout << "flush!!!!" << endl;
     back.out.mispred = true;
     if (rob.io.rob_bcast->mret || rob.io.rob_bcast->sret) {
       back.out.redirect_pc = csr.io.csr2exe->epc;
