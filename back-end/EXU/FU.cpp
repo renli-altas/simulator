@@ -291,7 +291,7 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
   
   io->wdata = data;
   io->wstrb = 0;
-  io->addr = p_addr;
+  inst.addr = p_addr;
   io->uop = inst;
   return io->ready == false;
   // bool page_fault = !ret;

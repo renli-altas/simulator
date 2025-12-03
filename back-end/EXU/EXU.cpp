@@ -84,10 +84,6 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io, bool mispred)
     else
       alu(inst);
 
-    if(!is_load_uop(inst.op)){
-      io->req = false;
-    }
-
     if (!fu_stall)
     {
       complete = true;

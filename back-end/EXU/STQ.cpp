@@ -31,7 +31,7 @@ void STQ::comb()
   }
 
   // 写端口 同时给ld_IQ发送唤醒信息
-  if (entry[deq_ptr].valid && entry[deq_ptr].complete)
+  if (entry[deq_ptr].valid&&entry[deq_ptr].issued && entry[deq_ptr].complete)
   {
     extern uint32_t *p_memory;
     uint32_t wdata = entry[deq_ptr].data;
@@ -85,7 +85,7 @@ void STQ::comb()
     }
     if (write_flag == 0)
     {
-      entry[deq_ptr].valid = false;
+      entry[deq_ptr].issued = false;
       entry[deq_ptr].complete = false;
     }
     if (io.stq2cache->ready || write_flag == 0)
@@ -100,11 +100,12 @@ void STQ::comb()
 
   if (io.cache2stq->valid)
   {
-    entry[io.cache2stq->uop.dest_preg].valid = false;
+    entry[io.cache2stq->uop.dest_preg].issued = false;
     entry[io.cache2stq->uop.dest_preg].complete = false;
   }
-  if (entry[fwd_ptr].valid == false)
+  if (entry[fwd_ptr].issued == false && entry[fwd_ptr].valid)
   {
+    entry[fwd_ptr].valid = false;    
     LOOP_INC(fwd_ptr, STQ_NUM);
     commit_count--;
     count--;
@@ -134,6 +135,7 @@ void STQ::seq()
     {
       entry[enq_ptr].tag = io.dis2stq->tag[i];
       entry[enq_ptr].valid = true;
+      entry[enq_ptr].issued = true;
       entry[enq_ptr].addr_valid = false;
       entry[enq_ptr].data_valid = false;
       count++;
@@ -169,6 +171,7 @@ void STQ::seq()
           (io.dec_bcast->br_mask & (1 << entry[i].tag)))
       {
         entry[i].valid = false;
+        entry[i].issued = false;
         entry[i].complete = false;
         count--;
         LOOP_DEC(enq_ptr, STQ_NUM);
@@ -183,6 +186,7 @@ void STQ::seq()
       if (entry[i].valid && !entry[i].complete)
       {
         entry[i].valid = false;
+        entry[i].issued = false;
         entry[i].complete = false;
         count--;
         LOOP_DEC(enq_ptr, STQ_NUM);
@@ -197,15 +201,17 @@ extern uint32_t *p_memory;
 void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx)
 { //, bool &stall_load) {
 
+
   int i = fwd_ptr;
   int count = commit_count;
   while (count != 0)
   {
+    if(DCACHE_LOG){
+      printf("STQ st2ld_fwd checking entry %d address %08x addr:%08x wdata %08x count:%d valid:%d issued:%d\n", i, entry[i].addr,addr, entry[i].data, count, entry[i].valid, entry[i].issued);
+    }
     if ((entry[i].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC) && entry[i].valid)
     {
 
-      if (DCACHE_LOG)
-        printf("STQ Load Forwarding from STQ entry %d address %08x wdata %08x\n", i, entry[i].addr, entry[i].data);
       uint32_t wdata = entry[i].data;
       uint32_t waddr = entry[i].addr;
       uint32_t wstrb;
@@ -231,6 +237,9 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx)
         mask |= 0xFF000000;
 
       data = (mask & wdata) | (~mask & data);
+      if (DCACHE_LOG)
+        printf("STQ Load Forwarding from STQ entry %d address %08x wdata %08x count:%d\n", i, entry[i].addr, data, count);
+      
     }
     LOOP_INC(i, STQ_NUM);
     count--;

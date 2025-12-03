@@ -145,6 +145,7 @@ typedef struct Inst_uop {
   wire7_t old_dest_preg;
   wire32_t src1_rdata, src2_rdata;
   wire32_t result;
+  wire32_t addr;
 
   // 分支预测信息
   wire1_t pred_br_taken;
