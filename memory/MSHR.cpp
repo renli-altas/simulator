@@ -95,7 +95,7 @@ void MSHR::comb_out()
 
 void MSHR::seq()
 {
-    if (count_mshr < MSHR_ENTRY_SIZE && count_table < MSHR_TABLE_SIZE &&!io.control->flush && !io.control->misprad)
+    if (count_mshr < MSHR_ENTRY_SIZE && count_table < MSHR_TABLE_SIZE)
     {
         if (io.dcache_st->valid)
         {
@@ -124,7 +124,6 @@ void MSHR::seq()
             add_table_entry(0, entry, io.dcache_ld->offset,0,0,io.dcache_ld->uop);
         }
     }
-
     if (io.control->flush)
     {
         for(int i=0;i<MSHR_TABLE_SIZE;i++){
@@ -133,7 +132,7 @@ void MSHR::seq()
             }
         }
     }
-    if(io.control->misprad){
+    if(io.control->mispred){
         for(int i=0;i<MSHR_TABLE_SIZE;i++){
             if(mshr_table[i].valid){
                 if(io.control->br_mask & (1 << mshr_table[i].uop.tag)){
@@ -192,7 +191,6 @@ void MSHR::seq()
     else {
         wdata_valid = false;
     }
-
     if (state == MSHR_IDLE)
     {
         if (mshr_entries[mshr_head].valid)
@@ -241,7 +239,6 @@ void MSHR::seq()
             state=MSHR_IDLE;
         }
     }
-
     if(DCACHE_LOG){
         printf("MSHR state:%d mshr_head:%d mshr_tail:%d count_mshr:%d count_table:%d offset:%d entry:%d done:%d wdone:%d wdonelast:%d wdata_valid:%d io.control->flush:%d\n", state, mshr_head, mshr_tail, count_mshr, count_table, offset, entry, done, wdone, wdonelast, wdata_valid, io.control->flush);
         for(int i=0;i<MSHR_ENTRY_SIZE;i++){

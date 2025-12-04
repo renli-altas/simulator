@@ -131,8 +131,9 @@ void ROB::comb_commit() {
     cout << "ROB deq inst:" << endl;
     for (int i = 0; i < ROB_BANK_NUM; i++) {
       if (entry[i][deq_ptr].valid) {
-        printf("bank:%d line:%d inst:0x%08x cmp_num:%d is_page_fault:%d src1_preg:%d src2_preg:%d uop_num:%d result:0x%08x\n", i, deq_ptr,
+        printf("bank:%d line:%d inst:0x%08x pc:0x%08x cmp_num:%d is_page_fault:%d src1_preg:%d src2_preg:%d uop_num:%d result:0x%08x\n", i, deq_ptr,
                entry[i][deq_ptr].uop.instruction,
+               entry[i][deq_ptr].uop.pc,
                entry[i][deq_ptr].uop.cmp_num,
                is_page_fault(entry[i][deq_ptr].uop),
                entry[i][deq_ptr].uop.src1_preg,

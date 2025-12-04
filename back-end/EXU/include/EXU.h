@@ -31,6 +31,7 @@ public:
   void comb_pipeline();
   void comb_ready();
   void seq();
+  void comb_latency();
   EXU_IO io;
 
   // 可以看作一个黑盒电路

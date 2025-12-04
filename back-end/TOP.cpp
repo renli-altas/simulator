@@ -23,7 +23,7 @@ void Back_Top::difftest(Inst_uop *inst) {
 
 #ifdef CONFIG_DIFFTEST
   if (LOG) {
-    cout << "Instruction: " << inst->instruction << endl;
+    printf("Instruction:0x%08x\n", inst->instruction);
     if (inst->page_fault_inst)
       cout << "page fault inst " << endl;
     if (inst->page_fault_load)
@@ -273,8 +273,19 @@ void Back_Top::Back_comb() {
   rename.comb_alloc();
   dis.comb_alloc();
   prf.comb_complete();
+
   prf.comb_awake();
   exu.comb_exec();
+  stq.comb_out();
+  dcache.comb_hit();
+  dcache.comb_in();
+  mshr.comb_in();
+  pmemory.comb();
+  mshr.comb_out();
+  dcache.comb_out();
+  prf.comb_load();
+  stq.comb_in();
+  exu.comb_latency();
   exu.comb_to_csr();
   exu.comb_ready();
   isu.comb_deq();
@@ -284,7 +295,6 @@ void Back_Top::Back_comb() {
   rename.comb_rename();
   isu.comb_ready();
   dis.comb_dispatch();
-  stq.comb();
   rob.comb_ready();
   rob.comb_complete();
   idu.comb_release_tag();
@@ -302,14 +312,9 @@ void Back_Top::Back_comb() {
   exu.comb_branch();
   exu.comb_pipeline();
   exu.comb_flush();
-  dcache.comb_in();
-  mshr.comb_in();
-  pmemory.comb();
-  mshr.comb_out();
-  dcache.comb_out();
+  
   prf.comb_write();
   prf.comb_branch();
-  prf.comb_load();
   prf.comb_pipeline();
   prf.comb_flush();
   dis.comb_pipeline();
@@ -357,13 +362,13 @@ void Back_Top::Back_seq() {
   idu.seq();
   isu.seq();
   exu.seq();
+  dcache.seq();
+  mshr.seq();
+  pmemory.seq();
   prf.seq();
   rob.seq();
   stq.seq();
   csr.seq();
-  dcache.seq();
-  mshr.seq();
-  pmemory.seq();
   for (int i = 0; i < FETCH_WIDTH; i++) {
     out.fire[i] = idu.io.dec2front->fire[i];
   }

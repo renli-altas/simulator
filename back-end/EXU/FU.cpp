@@ -157,7 +157,6 @@ void bru(Inst_uop &inst)
     inst.pc_next = pc_br;
   else
     inst.pc_next = inst.pc + 4;
-  printf("bru operand1:0x%08x operand2:0x%08x pc:0x%08x mispred:%d pc_next:0x%08x idx:%02d\n",operand1,operand2,inst.pc,inst.mispred,inst.pc_next,inst.rob_idx);
 }
 
 void alu(Inst_uop &inst)
@@ -230,7 +229,7 @@ void alu(Inst_uop &inst)
   }
 }
 
-bool ldu(Inst_uop &inst, Mem_IN *&io)
+void ldu(Inst_uop &inst, Mem_IN *&io)
 {
   uint32_t addr = inst.src1_rdata + inst.imm;
   bool stall_load = false;
@@ -252,7 +251,6 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
   }
 
   uint32_t data;
-  // bool page_fault = !load_data(data, addr, inst.rob_idx);
   uint32_t p_addr = addr;
   bool ret = true;
 
@@ -270,6 +268,7 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
                 sstatus, back.csr.privilege, p_memory);
   }
   data = 0;
+  
   if (!ret)
   {
     inst.page_fault_load = true;
@@ -285,22 +284,14 @@ bool ldu(Inst_uop &inst, Mem_IN *&io)
   }
   else {
     io->req = true;
-    // io->req = false;
   }
   io->wr = 0;
   
   io->wdata = data;
   io->wstrb = 0;
+  io->addr = p_addr;
   inst.addr = p_addr;
   io->uop = inst;
-  return io->ready == false;
-  // bool page_fault = !ret;
-
-  // if (!page_fault) {
-  
-  // } else {
-
-  // }
 }
 
 void stu_addr(Inst_uop &inst)

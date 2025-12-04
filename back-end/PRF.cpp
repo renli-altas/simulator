@@ -121,7 +121,6 @@ void PRF::comb_load(){
     }
     load_data = io.cache2prf->uop.page_fault_load ? io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm : data;
     back.stq.st2ld_fwd( io.cache2prf->uop.addr, load_data,io.cache2prf->uop.rob_idx);
-    printf("comb_load addr:0x%08x size:%d offset:%d data:0x%08x cache2prf->data:0x%08x\n",addr,size,offset,load_data,io.cache2prf->data);
   }
 }
 void PRF::comb_complete() {

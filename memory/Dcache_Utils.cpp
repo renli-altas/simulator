@@ -141,7 +141,6 @@ void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& d
 }
 void read_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t data, bool done,bool last)
 {
-
     if(done){
         dcache_data[index][way][offset++] = data;
     }

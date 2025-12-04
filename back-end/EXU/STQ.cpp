@@ -6,7 +6,7 @@
 #include <util.h>
 
 extern Back_Top back;
-void STQ::comb()
+void STQ::comb_out()
 {
   int num = count;
 
@@ -98,18 +98,7 @@ void STQ::comb()
     io.stq2cache->req = false;
   }
 
-  if (io.cache2stq->valid)
-  {
-    entry[io.cache2stq->uop.dest_preg].issued = false;
-    entry[io.cache2stq->uop.dest_preg].complete = false;
-  }
-  if (entry[fwd_ptr].issued == false && entry[fwd_ptr].valid)
-  {
-    entry[fwd_ptr].valid = false;    
-    LOOP_INC(fwd_ptr, STQ_NUM);
-    commit_count--;
-    count--;
-  }
+  
 
   // commit标记为可执行
   for (int i = 0; i < COMMIT_WIDTH; i++)
@@ -124,7 +113,21 @@ void STQ::comb()
     }
   }
 }
-
+void STQ::comb_in()
+{
+  if (io.cache2stq->valid)
+  {
+    entry[io.cache2stq->uop.dest_preg].issued = false;
+    entry[io.cache2stq->uop.dest_preg].complete = false;
+  }
+  if (entry[fwd_ptr].issued == false && entry[fwd_ptr].valid)
+  {
+    entry[fwd_ptr].valid = false;    
+    LOOP_INC(fwd_ptr, STQ_NUM);
+    commit_count--;
+    count--;
+  }
+}
 void STQ::seq()
 {
 
@@ -302,7 +305,7 @@ void STQ::stq_print()
   printf("stq enq_ptr:%d deq_ptr:%d commit_ptr:%d fwd_ptr:%d count:%d commit_count:%d\n", enq_ptr, deq_ptr, commit_ptr, fwd_ptr, count, commit_count);
   for (int i = 0; i != STQ_NUM; i = i + 1)
   {
-    printf("STQ entry %d valid:%d addr:%08x data:%08x size:%d tag:%d addr_valid:%d data_valid:%d complete:%d\n", i, entry[i].valid, entry[i].addr, entry[i].data, entry[i].size, entry[i].tag, entry[i].addr_valid, entry[i].data_valid, entry[i].complete);
+    printf("STQ entry %d valid:%d issued:%d addr:%08x data:%08x size:%d tag:%d addr_valid:%d data_valid:%d complete:%d\n", i, entry[i].valid, entry[i].issued, entry[i].addr, entry[i].data, entry[i].size, entry[i].tag, entry[i].addr_valid, entry[i].data_valid, entry[i].complete);
   }
   for (int i = 0; i < ROB_NUM; i++)
   {

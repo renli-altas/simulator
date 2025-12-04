@@ -223,7 +223,7 @@ typedef struct{
 typedef struct{
   bool flush;
   bool ready;
-  bool misprad;
+  bool mispred;
   uint32_t br_mask;
   bool st_out;
   bool ld_out;
@@ -231,7 +231,7 @@ typedef struct{
 
 typedef struct{
   bool flush;
-  bool misprad;
+  bool mispred;
   uint32_t br_mask;
 }Exe_Cache;
 
