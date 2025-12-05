@@ -747,7 +747,7 @@ Disassembly of section .debug_line_str:
   64:	6174                	.insn	2, 0x6174
   66:	2f6c                	.insn	2, 0x2f6c
   68:	6574                	.insn	2, 0x6574
-  6a:	007473               	.word	0x007473
+  6a:	007473 	.3byte	0x007473
 
 Disassembly of section .debug_info:
 

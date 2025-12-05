@@ -1169,4 +1169,109 @@ Disassembly of section .debug_loclists:
   18:	1c060037          	lui	zero,0x1c060
   1c:	0000                	.insn	2, 0x0000
   1e:	0480                	.insn	2, 0x0480
-  20:	1c00
+  20:	1c00                	.insn	2, 0x1c00
+  22:	3002                	.insn	2, 0x3002
+  24:	049f 5050 7e03      	.insn	6, 0x7e035050049f
+  2a:	9f7c                	.insn	2, 0x9f7c
+  2c:	5004                	.insn	2, 0x5004
+  2e:	0364                	.insn	2, 0x0364
+  30:	7d7e                	.insn	2, 0x7d7e
+  32:	049f 7c64 7e03      	.insn	6, 0x7e037c64049f
+  38:	9f7c                	.insn	2, 0x9f7c
+  3a:	8404                	.insn	2, 0x8404
+  3c:	8401                	.insn	2, 0x8401
+  3e:	0301                	.insn	2, 0x0301
+  40:	7c7e                	.insn	2, 0x7c7e
+  42:	049f 0184 0198      	.insn	6, 0x01980184049f
+  48:	9f7d7e03          	.insn	4, 0x9f7d7e03
+  4c:	9804                	.insn	2, 0x9804
+  4e:	b001                	.insn	2, 0xb001
+  50:	0301                	.insn	2, 0x0301
+  52:	7c7e                	.insn	2, 0x7c7e
+  54:	009f 0c08 3808      	.insn	6, 0x38080c08009f
+  5a:	0000                	.insn	2, 0x0000
+  5c:	0080                	.insn	2, 0x0080
+  5e:	7e0d                	.insn	2, 0x7e0d
+  60:	0600                	.insn	2, 0x0600
+  62:	007c2537          	lui	a0,0x7c2
+  66:	2906                	.insn	2, 0x2906
+  68:	ff08                	.insn	2, 0xff08
+  6a:	9f1a                	.insn	2, 0x9f1a
+  6c:	1900                	.insn	2, 0x1900
+  6e:	081d                	.insn	2, 0x081d
+  70:	006c                	.insn	2, 0x006c
+  72:	8000                	.insn	2, 0x8000
+  74:	0e00                	.insn	2, 0x0e00
+  76:	007c                	.insn	2, 0x007c
+  78:	7e06                	.insn	2, 0x7e06
+  7a:	2600                	.insn	2, 0x2600
+  7c:	007a                	.insn	2, 0x007a
+  7e:	2906                	.insn	2, 0x2906
+  80:	ff08                	.insn	2, 0xff08
+  82:	9f1a                	.insn	2, 0x9f1a
+  84:	2b00                	.insn	2, 0x2b00
+  86:	00a0082f          	.insn	4, 0x00a0082f
+  8a:	8000                	.insn	2, 0x8000
+  8c:	0e00                	.insn	2, 0x0e00
+  8e:	7e06007b          	.insn	4, 0x7e06007b
+  92:	2500                	.insn	2, 0x2500
+  94:	009f1aff082906007f 	.9byte	0x009f1aff082906007f
+
+Disassembly of section .debug_rnglists:
+
+00000000 <.debug_rnglists>:
+   0:	0046                	.insn	2, 0x0046
+   2:	0000                	.insn	2, 0x0000
+   4:	0005                	.insn	2, 0x0005
+   6:	0004                	.insn	2, 0x0004
+   8:	0000                	.insn	2, 0x0000
+   a:	0000                	.insn	2, 0x0000
+   c:	3405                	.insn	2, 0x3405
+   e:	0000                	.insn	2, 0x0000
+  10:	0480                	.insn	2, 0x0480
+  12:	0400                	.insn	2, 0x0400
+  14:	0404                	.insn	2, 0x0404
+  16:	0404                	.insn	2, 0x0404
+  18:	0c08                	.insn	2, 0x0c08
+  1a:	1404                	.insn	2, 0x1404
+  1c:	001c                	.insn	2, 0x001c
+  1e:	6405                	.insn	2, 0x6405
+  20:	0000                	.insn	2, 0x0000
+  22:	0480                	.insn	2, 0x0480
+  24:	0400                	.insn	2, 0x0400
+  26:	0804                	.insn	2, 0x0804
+  28:	0408                	.insn	2, 0x0408
+  2a:	100c                	.insn	2, 0x100c
+  2c:	1c04                	.insn	2, 0x1c04
+  2e:	0024                	.insn	2, 0x0024
+  30:	9805                	.insn	2, 0x9805
+  32:	0000                	.insn	2, 0x0000
+  34:	0480                	.insn	2, 0x0480
+  36:	0400                	.insn	2, 0x0400
+  38:	0804                	.insn	2, 0x0804
+  3a:	0408                	.insn	2, 0x0408
+  3c:	100c                	.insn	2, 0x100c
+  3e:	1c04                	.insn	2, 0x1c04
+  40:	0024                	.insn	2, 0x0024
+  42:	00001c07          	.insn	4, 0x1c07
+  46:	b080                	.insn	2, 0xb080
+  48:	0001                	.insn	2, 0x0001
+
+Disassembly of section .debug_frame:
+
+00000000 <.debug_frame>:
+   0:	000c                	.insn	2, 0x000c
+   2:	0000                	.insn	2, 0x0000
+   4:	ffff                	.insn	2, 0xffff
+   6:	ffff                	.insn	2, 0xffff
+   8:	7c010003          	lb	zero,1984(sp) # 120117c4 <__stack_size+0x100117c4>
+   c:	0c01                	.insn	2, 0x0c01
+   e:	0002                	.insn	2, 0x0002
+  10:	000c                	.insn	2, 0x000c
+  12:	0000                	.insn	2, 0x0000
+  14:	0000                	.insn	2, 0x0000
+  16:	0000                	.insn	2, 0x0000
+  18:	001c                	.insn	2, 0x001c
+  1a:	8000                	.insn	2, 0x8000
+  1c:	00b0                	.insn	2, 0x00b0
+	...

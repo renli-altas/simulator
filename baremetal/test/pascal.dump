@@ -505,7 +505,7 @@ Disassembly of section .debug_line_str:
   60:	6174                	.insn	2, 0x6174
   62:	2f6c                	.insn	2, 0x2f6c
   64:	6574                	.insn	2, 0x6574
-  66:	007473               	.word	0x007473
+  66:	007473 	.3byte	0x007473
 
 Disassembly of section .debug_info:
 
@@ -971,4 +971,59 @@ Disassembly of section .debug_loclists:
   34:	049f 140c 7f02      	.insn	6, 0x7f02140c049f
   3a:	0400                	.insn	2, 0x0400
   3c:	3814                	.insn	2, 0x3814
-  3e:	5d01                	.insn	2, 0x
+  3e:	5d01                	.insn	2, 0x5d01
+  40:	0c00                	.insn	2, 0x0c00
+  42:	0e0e                	.insn	2, 0x0e0e
+  44:	0618                	.insn	2, 0x0618
+  46:	0050                	.insn	2, 0x0050
+  48:	8000                	.insn	2, 0x8000
+  4a:	0004                	.insn	2, 0x0004
+  4c:	0204                	.insn	2, 0x0204
+  4e:	007f 0404 0128 005d 	.insn	10, 0x1e1a005d01280404007f
+  56:	1e1a 
+  58:	7808                	.insn	2, 0x7808
+  5a:	0000                	.insn	2, 0x0000
+  5c:	0080                	.insn	2, 0x0080
+  5e:	06007b0b          	.insn	4, 0x06007b0b
+  62:	009f1aff082906007f 	.9byte	0x009f1aff082906007f
+
+Disassembly of section .debug_rnglists:
+
+00000000 <.debug_rnglists>:
+   0:	0022                	.insn	2, 0x0022
+   2:	0000                	.insn	2, 0x0000
+   4:	0005                	.insn	2, 0x0005
+   6:	0004                	.insn	2, 0x0004
+   8:	0000                	.insn	2, 0x0000
+   a:	0000                	.insn	2, 0x0000
+   c:	7405                	.insn	2, 0x7405
+   e:	0000                	.insn	2, 0x0000
+  10:	0480                	.insn	2, 0x0480
+  12:	0400                	.insn	2, 0x0400
+  14:	0404                	.insn	2, 0x0404
+  16:	0404                	.insn	2, 0x0404
+  18:	0c04                	.insn	2, 0x0c04
+  1a:	1404                	.insn	2, 0x1404
+  1c:	001c                	.insn	2, 0x001c
+  1e:	00001c07          	.insn	4, 0x1c07
+  22:	8080                	.insn	2, 0x8080
+  24:	0001                	.insn	2, 0x0001
+
+Disassembly of section .debug_frame:
+
+00000000 <.debug_frame>:
+   0:	000c                	.insn	2, 0x000c
+   2:	0000                	.insn	2, 0x0000
+   4:	ffff                	.insn	2, 0xffff
+   6:	ffff                	.insn	2, 0xffff
+   8:	7c010003          	lb	zero,1984(sp) # 120117c4 <__stack_size+0x100117c4>
+   c:	0c01                	.insn	2, 0x0c01
+   e:	0002                	.insn	2, 0x0002
+  10:	000c                	.insn	2, 0x000c
+  12:	0000                	.insn	2, 0x0000
+  14:	0000                	.insn	2, 0x0000
+  16:	0000                	.insn	2, 0x0000
+  18:	001c                	.insn	2, 0x001c
+  1a:	8000                	.insn	2, 0x8000
+  1c:	0080                	.insn	2, 0x0080
+	...

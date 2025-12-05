@@ -1456,7 +1456,7 @@ Disassembly of section .debug_loclists:
  1fe:	2d14                	.insn	2, 0x2d14
  200:	0128                	.insn	2, 0x0128
  202:	1600                	.insn	2, 0x1600
- 204:	009f13               	.word	0x009f13
+ 204:	009f13 	.3byte	0x009f13
 
 Disassembly of section .debug_rnglists:
 

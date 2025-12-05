@@ -86,6 +86,10 @@ void PRF::comb_read() {
 }
 void PRF::comb_load(){
   if(io.cache2prf->valid){
+    // uint32_t load_data=0;
+    uint32_t data = io.cache2prf->data;
+    back.stq.st2ld_fwd( io.cache2prf->uop.addr, data,io.cache2prf->uop.rob_idx);
+  
     int addr = io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm;
     int size = io.cache2prf->uop.func3 & 0b11;
     int offset = addr & 0b11;
@@ -99,7 +103,6 @@ void PRF::comb_load(){
       size = 0b10;
       offset = 0b0;
     }
-    uint32_t data = io.cache2prf->data;
     data = data >> (offset * 8);
     if (size == 0) {
       mask = 0xFF;
@@ -120,8 +123,7 @@ void PRF::comb_load(){
       data = data | sign;
     }
     load_data = io.cache2prf->uop.page_fault_load ? io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm : data;
-    back.stq.st2ld_fwd( io.cache2prf->uop.addr, load_data,io.cache2prf->uop.rob_idx);
-  }
+    }
 }
 void PRF::comb_complete() {
   for (int i = 0; i < ISSUE_WAY; i++) {

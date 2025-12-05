@@ -710,7 +710,7 @@ Disassembly of section .debug_line_str:
   66:	6174                	.insn	2, 0x6174
   68:	2f6c                	.insn	2, 0x2f6c
   6a:	6574                	.insn	2, 0x6574
-  6c:	007473               	.word	0x007473
+  6c:	007473 	.3byte	0x007473
 
 Disassembly of section .debug_info:
 
@@ -1300,7 +1300,7 @@ Disassembly of section .debug_loclists:
   5e:	08040493          	addi	s1,s0,128
   62:	0618                	.insn	2, 0x0618
   64:	0aa503a3          	sb	a0,167(a0)
-  68:	009f2b               	.word	0x009f2b
+  68:	009f2b 	.3byte	0x009f2b
 
 Disassembly of section .debug_rnglists:
 

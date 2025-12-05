@@ -154,6 +154,7 @@ void STQ::seq()
     entry[idx].addr = inst->result;
     entry[idx].size = inst->func3;
     entry[idx].addr_valid = true;
+    entry[idx].inst = inst->instruction;
   }
 
   inst = &io.exe2stq->data_entry.uop;
@@ -210,7 +211,7 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx)
   while (count != 0)
   {
     if(DCACHE_LOG){
-      printf("STQ st2ld_fwd checking entry %d address %08x addr:%08x wdata %08x count:%d valid:%d issued:%d\n", i, entry[i].addr,addr, entry[i].data, count, entry[i].valid, entry[i].issued);
+      printf("STQ st2ld_fwd checking entry %d address %08x addr:%08x wdata %08x size:%d count:%d valid:%d issued:%d\n", i, entry[i].addr,addr, entry[i].data, entry[i].size, count, entry[i].valid, entry[i].issued);
     }
     if ((entry[i].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC) && entry[i].valid)
     {
@@ -238,10 +239,11 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx)
         mask |= 0xFF0000;
       if (wstrb & 0b1000)
         mask |= 0xFF000000;
-
+      
+      printf("STQ Load Forwarding from STQ entry %d address %08x wdata %08x data %08x mask %08x\n", i, entry[i].addr, wdata, data, mask);
       data = (mask & wdata) | (~mask & data);
       if (DCACHE_LOG)
-        printf("STQ Load Forwarding from STQ entry %d address %08x wdata %08x count:%d\n", i, entry[i].addr, data, count);
+        printf("STQ Load Forwarding from STQ entry %d address %08x inst %08x wdata %08x count:%d\n", i, entry[i].addr, entry[i].inst, data, count);
       
     }
     LOOP_INC(i, STQ_NUM);

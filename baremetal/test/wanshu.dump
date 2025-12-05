@@ -148,7 +148,7 @@ main():
 
 800000e0 <__divsi3>:
 __divsi3():
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:69
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:69
   li    t0, -1
   beq   a1, t0, .L20
 #endif
@@ -156,78 +156,78 @@ __divsi3():
 FUNC_BEGIN (__divdi3)
   bltz  a0, .L10
 800000e0:	06054063          	blt	a0,zero,80000140 <__umodsi3+0x10>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:70
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:70
   bltz  a1, .L11
 800000e4:	0605c663          	blt	a1,zero,80000150 <__umodsi3+0x20>
 
 800000e8 <__hidden___udivsi3>:
 __hidden___udivsi3():
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:74
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:74
   /* Since the quotient is positive, fall into __udivdi3.  */
 
 FUNC_BEGIN (__udivdi3)
   mv    a2, a1
 800000e8:	00058613          	addi	a2,a1,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:75
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:75
   mv    a1, a0
 800000ec:	00050593          	addi	a1,a0,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:76
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:76
   li    a0, -1
 800000f0:	fff00513          	addi	a0,zero,-1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:77
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:77
   beqz  a2, .L5
 800000f4:	02060c63          	beq	a2,zero,8000012c <__hidden___udivsi3+0x44>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:78
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:78
   li    a3, 1
 800000f8:	00100693          	addi	a3,zero,1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:79
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:79
   bgeu  a2, a1, .L2
 800000fc:	00b67a63          	bgeu	a2,a1,80000110 <__hidden___udivsi3+0x28>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:81
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:81
 .L1:
   blez  a2, .L2
 80000100:	00c05863          	bge	zero,a2,80000110 <__hidden___udivsi3+0x28>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:82
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:82
   slli  a2, a2, 1
 80000104:	00161613          	slli	a2,a2,0x1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:83
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:83
   slli  a3, a3, 1
 80000108:	00169693          	slli	a3,a3,0x1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:84
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:84
   bgtu  a1, a2, .L1
 8000010c:	feb66ae3          	bltu	a2,a1,80000100 <__hidden___udivsi3+0x18>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:86
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:86
 .L2:
   li    a0, 0
 80000110:	00000513          	addi	a0,zero,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:88
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:88
 .L3:
   bltu  a1, a2, .L4
 80000114:	00c5e663          	bltu	a1,a2,80000120 <__hidden___udivsi3+0x38>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:89
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:89
   sub   a1, a1, a2
 80000118:	40c585b3          	sub	a1,a1,a2
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:90
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:90
   or    a0, a0, a3
 8000011c:	00d56533          	or	a0,a0,a3
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:92
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:92
 .L4:
   srli  a3, a3, 1
 80000120:	0016d693          	srli	a3,a3,0x1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:93
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:93
   srli  a2, a2, 1
 80000124:	00165613          	srli	a2,a2,0x1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:94
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:94
   bnez  a3, .L3
 80000128:	fe0696e3          	bne	a3,zero,80000114 <__hidden___udivsi3+0x2c>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:96
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:96
 .L5:
   ret
 8000012c:	00008067          	jalr	zero,0(ra)
 
 80000130 <__umodsi3>:
 __umodsi3():
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:102
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:102
 FUNC_END (__udivdi3)
 HIDDEN_DEF (__udivdi3)
 
@@ -235,94 +235,94 @@ FUNC_BEGIN (__umoddi3)
   /* Call __udivdi3(a0, a1), then return the remainder, which is in a1.  */
   move  t0, ra
 80000130:	00008293          	addi	t0,ra,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:103
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:103
   jal   HIDDEN_JUMPTARGET(__udivdi3)
 80000134:	fb5ff0ef          	jal	ra,800000e8 <__hidden___udivsi3>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:104
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:104
   move  a0, a1
 80000138:	00058513          	addi	a0,a1,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:105
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:105
   jr    t0
 8000013c:	00028067          	jalr	zero,0(t0)
 __divsi3():
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:110
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:110
 FUNC_END (__umoddi3)
 
   /* Handle negative arguments to __divdi3.  */
 .L10:
   neg   a0, a0
 80000140:	40a00533          	sub	a0,zero,a0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:112
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:112
   /* Zero is handled as a negative so that the result will not be inverted.  */
   bgtz  a1, .L12     /* Compute __udivdi3(-a0, a1), then negate the result.  */
 80000144:	00b04863          	blt	zero,a1,80000154 <__umodsi3+0x24>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:114
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:114
 
   neg   a1, a1
 80000148:	40b005b3          	sub	a1,zero,a1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:115
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:115
   j     HIDDEN_JUMPTARGET(__udivdi3)     /* Compute __udivdi3(-a0, -a1).  */
 8000014c:	f9dff06f          	jal	zero,800000e8 <__hidden___udivsi3>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:117
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:117
 .L11:                /* Compute __udivdi3(a0, -a1), then negate the result.  */
   neg   a1, a1
 80000150:	40b005b3          	sub	a1,zero,a1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:119
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:119
 .L12:
   move  t0, ra
 80000154:	00008293          	addi	t0,ra,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:120
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:120
   jal   HIDDEN_JUMPTARGET(__udivdi3)
 80000158:	f91ff0ef          	jal	ra,800000e8 <__hidden___udivsi3>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:121
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:121
   neg   a0, a0
 8000015c:	40a00533          	sub	a0,zero,a0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:122
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:122
   jr    t0
 80000160:	00028067          	jalr	zero,0(t0)
 
 80000164 <__modsi3>:
 __modsi3():
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:126
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:126
 FUNC_END (__divdi3)
 
 FUNC_BEGIN (__moddi3)
   move   t0, ra
 80000164:	00008293          	addi	t0,ra,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:127
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:127
   bltz   a1, .L31
 80000168:	0005ca63          	blt	a1,zero,8000017c <__modsi3+0x18>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:128
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:128
   bltz   a0, .L32
 8000016c:	00054c63          	blt	a0,zero,80000184 <__modsi3+0x20>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:130
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:130
 .L30:
   jal    HIDDEN_JUMPTARGET(__udivdi3)    /* The dividend is not negative.  */
 80000170:	f79ff0ef          	jal	ra,800000e8 <__hidden___udivsi3>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:131
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:131
   move   a0, a1
 80000174:	00058513          	addi	a0,a1,0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:132
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:132
   jr     t0
 80000178:	00028067          	jalr	zero,0(t0)
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:134
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:134
 .L31:
   neg    a1, a1
 8000017c:	40b005b3          	sub	a1,zero,a1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:135
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:135
   bgez   a0, .L30
 80000180:	fe0558e3          	bge	a0,zero,80000170 <__modsi3+0xc>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:137
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:137
 .L32:
   neg    a0, a0
 80000184:	40a00533          	sub	a0,zero,a0
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:138
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:138
   jal    HIDDEN_JUMPTARGET(__udivdi3)    /* The dividend is hella negative.  */
 80000188:	f61ff0ef          	jal	ra,800000e8 <__hidden___udivsi3>
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:139
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:139
   neg    a0, a1
 8000018c:	40b00533          	sub	a0,zero,a1
-/home/renli/riscv-gnu-toolchain/build_newlib_32ia/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:140
+/home/renli/riscv-gnu-toolchain/build/build-gcc-newlib-stage2/riscv32-unknown-elf/libgcc/../../../../gcc/libgcc/config/riscv/div.S:140
   jr     t0
 80000190:	00028067          	jalr	zero,0(t0)
 
@@ -655,12 +655,12 @@ Disassembly of section .debug_line:
  254:	0100                	.insn	2, 0x0100
  256:	0101                	.insn	2, 0x0101
  258:	021f 0069 0000      	.insn	6, 0x0069021f
- 25e:	00ce                	.insn	2, 0x00ce
+ 25e:	00c2                	.insn	2, 0x00c2
  260:	0000                	.insn	2, 0x0000
  262:	0102                	.insn	2, 0x0102
- 264:	021f 020f 00f2      	.insn	6, 0x00f2020f021f
+ 264:	021f 020f 00e6      	.insn	6, 0x00e6020f021f
  26a:	0000                	.insn	2, 0x0000
- 26c:	f201                	.insn	2, 0xf201
+ 26c:	e601                	.insn	2, 0xe601
  26e:	0000                	.insn	2, 0x0000
  270:	0100                	.insn	2, 0x0100
  272:	0500                	.insn	2, 0x0500
@@ -862,41 +862,38 @@ Disassembly of section .debug_line_str:
   86:	6e69                	.insn	2, 0x6e69
   88:	6975622f          	.insn	4, 0x6975622f
   8c:	646c                	.insn	2, 0x646c
-  8e:	6e5f 7765 696c      	.insn	6, 0x696c77656e5f
-  94:	5f62                	.insn	2, 0x5f62
-  96:	61693233          	.insn	4, 0x61693233
-  9a:	6975622f          	.insn	4, 0x6975622f
-  9e:	646c                	.insn	2, 0x646c
-  a0:	672d                	.insn	2, 0x672d
-  a2:	6e2d6363          	bltu	s10,sp,788 <__stack_size-0x1fff878>
-  a6:	7765                	.insn	2, 0x7765
-  a8:	696c                	.insn	2, 0x696c
-  aa:	2d62                	.insn	2, 0x2d62
-  ac:	67617473          	.insn	4, 0x67617473
-  b0:	3265                	.insn	2, 0x3265
-  b2:	7369722f          	.insn	4, 0x7369722f
-  b6:	32337663          	bgeu	t1,gp,3e2 <__stack_size-0x1fffc1e>
-  ba:	752d                	.insn	2, 0x752d
-  bc:	6b6e                	.insn	2, 0x6b6e
-  be:	6f6e                	.insn	2, 0x6f6e
-  c0:	652d6e77          	.insn	4, 0x652d6e77
-  c4:	666c                	.insn	2, 0x666c
-  c6:	62696c2f          	.insn	4, 0x62696c2f
-  ca:	00636367          	.insn	4, 0x00636367
-  ce:	2e2e                	.insn	2, 0x2e2e
-  d0:	2f2e2e2f          	.insn	4, 0x2f2e2e2f
-  d4:	2e2e                	.insn	2, 0x2e2e
-  d6:	2f2e2e2f          	.insn	4, 0x2f2e2e2f
-  da:	2f636367          	.insn	4, 0x2f636367
-  de:	696c                	.insn	2, 0x696c
-  e0:	6762                	.insn	2, 0x6762
-  e2:	632f6363          	bltu	t5,s2,708 <__stack_size-0x1fff8f8>
-  e6:	69666e6f          	jal	t3,6677c <__stack_size-0x1f99884>
-  ea:	69722f67          	.insn	4, 0x69722f67
-  ee:	00766373          	.insn	4, 0x00766373
-  f2:	6964                	.insn	2, 0x6964
-  f4:	2e76                	.insn	2, 0x2e76
-  f6:	0053                	.short	0x0053
+  8e:	6975622f          	.insn	4, 0x6975622f
+  92:	646c                	.insn	2, 0x646c
+  94:	672d                	.insn	2, 0x672d
+  96:	6e2d6363          	bltu	s10,sp,77c <__stack_size-0x1fff884>
+  9a:	7765                	.insn	2, 0x7765
+  9c:	696c                	.insn	2, 0x696c
+  9e:	2d62                	.insn	2, 0x2d62
+  a0:	67617473          	.insn	4, 0x67617473
+  a4:	3265                	.insn	2, 0x3265
+  a6:	7369722f          	.insn	4, 0x7369722f
+  aa:	32337663          	bgeu	t1,gp,3d6 <__stack_size-0x1fffc2a>
+  ae:	752d                	.insn	2, 0x752d
+  b0:	6b6e                	.insn	2, 0x6b6e
+  b2:	6f6e                	.insn	2, 0x6f6e
+  b4:	652d6e77          	.insn	4, 0x652d6e77
+  b8:	666c                	.insn	2, 0x666c
+  ba:	62696c2f          	.insn	4, 0x62696c2f
+  be:	00636367          	.insn	4, 0x00636367
+  c2:	2e2e                	.insn	2, 0x2e2e
+  c4:	2f2e2e2f          	.insn	4, 0x2f2e2e2f
+  c8:	2e2e                	.insn	2, 0x2e2e
+  ca:	2f2e2e2f          	.insn	4, 0x2f2e2e2f
+  ce:	2f636367          	.insn	4, 0x2f636367
+  d2:	696c                	.insn	2, 0x696c
+  d4:	6762                	.insn	2, 0x6762
+  d6:	632f6363          	bltu	t5,s2,6fc <__stack_size-0x1fff904>
+  da:	69666e6f          	jal	t3,66770 <__stack_size-0x1f99890>
+  de:	69722f67          	.insn	4, 0x69722f67
+  e2:	00766373          	.insn	4, 0x00766373
+  e6:	6964                	.insn	2, 0x6964
+  e8:	2e76                	.insn	2, 0x2e76
+  ea:	0053                	.short	0x0053
 
 Disassembly of section .debug_info:
 
@@ -1114,27 +1111,27 @@ Disassembly of section .debug_info:
  1ce:	0000                	.insn	2, 0x0000
  1d0:	0164                	.insn	2, 0x0164
  1d2:	0000                	.insn	2, 0x0000
- 1d4:	01c9                	.insn	2, 0x01c9
+ 1d4:	01bd                	.insn	2, 0x01bd
  1d6:	0000                	.insn	2, 0x0000
  1d8:	8001                	.insn	2, 0x8001
- 1da:	d502                	.insn	2, 0xd502
+ 1da:	c902                	.insn	2, 0xc902
  1dc:	0001                	.insn	2, 0x0001
  1de:	5d00                	.insn	2, 0x5d00
  1e0:	00e0                	.insn	2, 0x00e0
  1e2:	8000                	.insn	2, 0x8000
  1e4:	0184                	.insn	2, 0x0184
- 1e6:	e702                	.insn	2, 0xe702
+ 1e6:	db02                	.insn	2, 0xdb02
  1e8:	0001                	.insn	2, 0x0001
  1ea:	5d00                	.insn	2, 0x5d00
  1ec:	00e8                	.insn	2, 0x00e8
  1ee:	8000                	.insn	2, 0x8000
  1f0:	0248                	.insn	2, 0x0248
- 1f2:	01de                	.insn	2, 0x01de
+ 1f2:	01d2                	.insn	2, 0x01d2
  1f4:	0000                	.insn	2, 0x0000
  1f6:	e85d                	.insn	2, 0xe85d
  1f8:	0000                	.insn	2, 0x0000
  1fa:	4880                	.insn	2, 0x4880
- 1fc:	f102                	.insn	2, 0xf102
+ 1fc:	e502                	.insn	2, 0xe502
  1fe:	0001                	.insn	2, 0x0001
  200:	5d00                	.insn	2, 0x5d00
  202:	0130                	.insn	2, 0x0130
@@ -1487,46 +1484,43 @@ Disassembly of section .debug_str:
  182:	2f6e                	.insn	2, 0x2f6e
  184:	7562                	.insn	2, 0x7562
  186:	6c69                	.insn	2, 0x6c69
- 188:	5f64                	.insn	2, 0x5f64
- 18a:	656e                	.insn	2, 0x656e
- 18c:	62696c77          	.insn	4, 0x62696c77
- 190:	335f 6932 2f61      	.insn	6, 0x2f616932335f
- 196:	7562                	.insn	2, 0x7562
- 198:	6c69                	.insn	2, 0x6c69
- 19a:	2d64                	.insn	2, 0x2d64
- 19c:	2d636367          	.insn	4, 0x2d636367
- 1a0:	656e                	.insn	2, 0x656e
- 1a2:	62696c77          	.insn	4, 0x62696c77
- 1a6:	732d                	.insn	2, 0x732d
- 1a8:	6174                	.insn	2, 0x6174
- 1aa:	2f326567          	.insn	4, 0x2f326567
- 1ae:	6972                	.insn	2, 0x6972
- 1b0:	33766373          	.insn	4, 0x33766373
- 1b4:	2d32                	.insn	2, 0x2d32
- 1b6:	6e75                	.insn	2, 0x6e75
- 1b8:	776f6e6b          	.insn	4, 0x776f6e6b
- 1bc:	2d6e                	.insn	2, 0x2d6e
- 1be:	6c65                	.insn	2, 0x6c65
- 1c0:	2f66                	.insn	2, 0x2f66
- 1c2:	696c                	.insn	2, 0x696c
- 1c4:	6762                	.insn	2, 0x6762
- 1c6:	47006363          	bltu	zero,a6,62c <__stack_size-0x1fff9d4>
- 1ca:	554e                	.insn	2, 0x554e
- 1cc:	4120                	.insn	2, 0x4120
- 1ce:	2e322053          	.insn	4, 0x2e322053
- 1d2:	3434                	.insn	2, 0x3434
- 1d4:	5f00                	.insn	2, 0x5f00
- 1d6:	645f 7669 6973      	.insn	6, 0x69737669645f
- 1dc:	5f5f0033          	.insn	4, 0x5f5f0033
- 1e0:	6968                	.insn	2, 0x6968
- 1e2:	6464                	.insn	2, 0x6464
- 1e4:	6e65                	.insn	2, 0x6e65
- 1e6:	5f5f 755f 6964      	.insn	6, 0x6964755f5f5f
- 1ec:	7376                	.insn	2, 0x7376
- 1ee:	3369                	.insn	2, 0x3369
- 1f0:	5f00                	.insn	2, 0x5f00
- 1f2:	755f 6f6d 7364      	.insn	6, 0x73646f6d755f
- 1f8:	3369                	.insn	2, 0x3369
+ 188:	2f64                	.insn	2, 0x2f64
+ 18a:	7562                	.insn	2, 0x7562
+ 18c:	6c69                	.insn	2, 0x6c69
+ 18e:	2d64                	.insn	2, 0x2d64
+ 190:	2d636367          	.insn	4, 0x2d636367
+ 194:	656e                	.insn	2, 0x656e
+ 196:	62696c77          	.insn	4, 0x62696c77
+ 19a:	732d                	.insn	2, 0x732d
+ 19c:	6174                	.insn	2, 0x6174
+ 19e:	2f326567          	.insn	4, 0x2f326567
+ 1a2:	6972                	.insn	2, 0x6972
+ 1a4:	33766373          	.insn	4, 0x33766373
+ 1a8:	2d32                	.insn	2, 0x2d32
+ 1aa:	6e75                	.insn	2, 0x6e75
+ 1ac:	776f6e6b          	.insn	4, 0x776f6e6b
+ 1b0:	2d6e                	.insn	2, 0x2d6e
+ 1b2:	6c65                	.insn	2, 0x6c65
+ 1b4:	2f66                	.insn	2, 0x2f66
+ 1b6:	696c                	.insn	2, 0x696c
+ 1b8:	6762                	.insn	2, 0x6762
+ 1ba:	47006363          	bltu	zero,a6,620 <__stack_size-0x1fff9e0>
+ 1be:	554e                	.insn	2, 0x554e
+ 1c0:	4120                	.insn	2, 0x4120
+ 1c2:	2e322053          	.insn	4, 0x2e322053
+ 1c6:	3534                	.insn	2, 0x3534
+ 1c8:	5f00                	.insn	2, 0x5f00
+ 1ca:	645f 7669 6973      	.insn	6, 0x69737669645f
+ 1d0:	5f5f0033          	.insn	4, 0x5f5f0033
+ 1d4:	6968                	.insn	2, 0x6968
+ 1d6:	6464                	.insn	2, 0x6464
+ 1d8:	6e65                	.insn	2, 0x6e65
+ 1da:	5f5f 755f 6964      	.insn	6, 0x6964755f5f5f
+ 1e0:	7376                	.insn	2, 0x7376
+ 1e2:	3369                	.insn	2, 0x3369
+ 1e4:	5f00                	.insn	2, 0x5f00
+ 1e6:	755f 6f6d 7364      	.insn	6, 0x73646f6d755f
+ 1ec:	3369                	.insn	2, 0x3369
 	...
 
 Disassembly of section .debug_loclists:

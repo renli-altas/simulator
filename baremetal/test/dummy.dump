@@ -404,7 +404,7 @@ Disassembly of section .debug_str:
   c2:	6672                	.insn	2, 0x6672
   c4:	2d20                	.insn	2, 0x2d20
   c6:	2d20324f          	.insn	4, 0x2d20324f
-  ca:	00324f               	.word	0x00324f
+  ca:	00324f 	.3byte	0x00324f
 
 Disassembly of section .debug_rnglists:
 

@@ -2,5 +2,6 @@
     "files.associations": {
         "iostream": "cpp",
         "ostream": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/wsl.localhost/Ubuntu-22.04/home/renli/qimeng/simulator"
 }

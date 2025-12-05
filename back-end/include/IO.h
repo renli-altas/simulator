@@ -16,6 +16,7 @@ typedef struct {
   reg1_t valid;
   reg1_t issued;
   uint32_t tag;
+  uint32_t inst;
 } STQ_entry;
 
 typedef struct {

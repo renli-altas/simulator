@@ -50,7 +50,7 @@ using namespace std;
 
 #define LOG_START 0//383810621
 
-#define LOG_ENABLE 
+// #define LOG_ENABLE 
 
 #ifndef LOG_ENABLE
   #define LOG (0 && (sim_time >= LOG_START))

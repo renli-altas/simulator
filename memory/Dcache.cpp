@@ -52,7 +52,7 @@ void Dcache::comb_in()
 
 void Dcache::comb_hit(){
     
-    mispred_pc = (io.control->br_mask & (1 << io.cpu_ld_in->uop.tag))&io.control->mispred;
+    mispred_pc = (io.control->br_mask & (1 << io.cpu_ld_in->uop.tag))&&io.control->mispred;
     if (cpu_ld_in.req == true)
     {
         if (cpu_ld_in.uop.page_fault_load == true)
@@ -142,7 +142,7 @@ void Dcache::seq()
             updatelru(index_ld, hit_way_ld);
             if (DCACHE_LOG)
             {
-                printf("read cache data addr:0x%08x rdata:0x%08x index_ld:%d offset_ld:%d way_ld:%d\n", cpu_ld_in.addr, data_ld, index_ld, offset_ld, hit_way_ld);
+                printf("read cache data addr:0x%08x rdata:0x%08x dcache_data:0x%08x index_ld:%d offset_ld:%d way_ld:%d\n", cpu_ld_in.addr, data_ld, dcache_data[index_ld][hit_way_ld][offset_ld], index_ld, offset_ld, hit_way_ld);
             }
         }
         else{

@@ -6,7 +6,6 @@ uint32_t dcache_lru[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_valid[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
-bool dcache_issued[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 
 void updatelru(int linenum,int way)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 {
@@ -84,7 +83,7 @@ bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
     hit_way = -1;
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
-        if (dcache_tag[index][i] == tag && (dcache_valid[index][i]||dcache_issued[index][i]))
+        if (dcache_tag[index][i] == tag && dcache_valid[index][i])
         {
             hit = true;
             hit_way = i;

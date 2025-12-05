@@ -134,7 +134,7 @@ void MSHR::seq()
     }
     if(io.control->mispred){
         for(int i=0;i<MSHR_TABLE_SIZE;i++){
-            if(mshr_table[i].valid){
+            if(mshr_table[i].valid&&mshr_table[i].type==0){
                 if(io.control->br_mask & (1 << mshr_table[i].uop.tag)){
                     add_free(i);
                 }
@@ -149,10 +149,6 @@ void MSHR::seq()
     else if (state == MSHR_WAIT_READ)
     {
         read_cache_line(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, offset, io.mem->data.data, io.mem->data.done, io.mem->data.last);
-        if(io.mem->data.last){
-            dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 1;
-            dcache_tag[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = mshr_entries[mshr_head].tag;
-        }
     }
     else if(state == MSHR_TRAN){
         done=0;
@@ -174,8 +170,8 @@ void MSHR::seq()
                 write_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset, mshr_table[index].wdata, mshr_table[index].wstrb);
                 rdata=0;
                 ruop = mshr_table[index].uop;
-                // if(DCACHE_LOG)
-                // printf("MSHR write cache data addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
+                if(DCACHE_LOG)
+                printf("MSHR write cache data addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
             }
             done=mshr_table[index].type+1;
             add_free(index);
@@ -184,6 +180,9 @@ void MSHR::seq()
             done=0;
             offset=0;
             mshr_entries[mshr_head].valid=false;
+            dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 1;
+            dcache_tag[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = mshr_entries[mshr_head].tag;
+        
             mshr_head=(mshr_head+1)%MSHR_ENTRY_SIZE;
             count_mshr--;
         }
