@@ -32,11 +32,13 @@ bool sim_end = false;
 extern uint32_t *p_memory;
 uint32_t POS_MEMORY_SHIFT = uint32_t(0x80000000 / 4);
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   setbuf(stdout, NULL);
   ifstream inst_data(argv[argc - 1], ios::in);
 
-  if (!inst_data.is_open()) {
+  if (!inst_data.is_open())
+  {
     cout << "Error: Image " << argv[argc - 1] << " does not exist" << endl;
     exit(0);
   }
@@ -45,7 +47,8 @@ int main(int argc, char *argv[]) {
 
   // init physical memory
   int img_size;
-  for (img_size = 0; img_size < PHYSICAL_MEMORY_LENGTH; img_size++) {
+  for (img_size = 0; img_size < PHYSICAL_MEMORY_LENGTH; img_size++)
+  {
     if (inst_data.eof())
       break;
     char inst_data_line[20];
@@ -74,7 +77,8 @@ int main(int argc, char *argv[]) {
 #endif
 
 #ifdef CONFIG_RUN_REF
-  while (1) {
+  while (1)
+  {
     difftest_step();
     sim_time++;
   }
@@ -100,19 +104,17 @@ int main(int argc, char *argv[]) {
   cout << hex << front_out.pc[0] << endl;
   front_in.reset = false;
 
-  for (int i = 0; i < COMMIT_WIDTH; i++) {
+  for (int i = 0; i < COMMIT_WIDTH; i++)
+  {
     front_in.back2front_valid[i] = false;
   }
 #endif
 
   // main loop
-  for (sim_time = 0; sim_time < MAX_SIM_TIME; sim_time++) {
+  for (sim_time = 0; sim_time < MAX_SIM_TIME; sim_time++)
+  {
     if (LOG)
-      cout<< endl<<endl
-          << "****************************************************************"
-          << dec << " cycle: " << sim_time
-          << " ****************************************************************"
-          << endl;
+    printf("\n\n****************************************************************cycle:%lld ****************************************************************\n", sim_time);
 
     // step1: fetch instructions and fill in back.in
     front_cycle(stall, misprediction, exception, front_in, front_out, number_PC,
@@ -134,10 +136,14 @@ int main(int argc, char *argv[]) {
     misprediction = back.out.mispred;
     exception = back.out.flush;
 
-    if (misprediction || exception) {
+    if (misprediction || exception)
+    {
       number_PC = back.out.redirect_pc;
-    } else if (stall) {
-      for (int j = 0; j < FETCH_WIDTH; j++) {
+    }
+    else if (stall)
+    {
+      for (int j = 0; j < FETCH_WIDTH; j++)
+      {
         if (back.out.fire[j])
           back.in.valid[j] = false;
       }
@@ -148,22 +154,24 @@ SIM_END:
 
   delete[] p_memory;
 
-  if (sim_time != MAX_SIM_TIME) {
+  if (sim_time != MAX_SIM_TIME)
+  {
     cout << "\033[1;32m-----------------------------\033[0m" << endl;
     cout << "\033[1;32mSuccess!!!!\033[0m" << endl;
     printf("\033[1;32minstruction num: %d\033[0m\n", commit_num);
     printf("\033[1;32mcycle num      : %lld\033[0m\n", sim_time);
     printf("\033[1;32mipc            : %f\033[0m\n",
            (double)commit_num / sim_time);
-    printf("\033[1;32mhitnum         : %d\033[0m\n",back.dcache.hit_num);
-    printf("\033[1;32mmissnum        : %d\033[0m\n",back.dcache.miss_num);
+    printf("\033[1;32mhitnum         : %d\033[0m\n", back.dcache.hit_num);
+    printf("\033[1;32mmissnum        : %d\033[0m\n", back.dcache.miss_num);
     printf("\033[1;32mdcache hit rate: %f\033[0m\n",
            (double)back.dcache.hit_num /
                (double)(back.dcache.hit_num + back.dcache.miss_num));
     cout << "\033[1;32m-----------------------------\033[0m" << endl;
     cout << endl;
-
-  } else {
+  }
+  else
+  {
     cout << "\033[1;31m------------------------------\033[0m" << endl;
     cout << "\033[1;31mTIME OUT!!!!QAQ\033[0m" << endl;
     cout << "\033[1;31m------------------------------\033[0m" << endl;
@@ -174,7 +182,8 @@ SIM_END:
 }
 
 bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
-           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory, bool dut_flag=true) {
+           bool *mstatus, bool *sstatus, int privilege, uint32_t *p_memory, bool dut_flag = true)
+{
   uint32_t d = 24;
   uint32_t a = 25;
   uint32_t g = 26;
@@ -190,67 +199,97 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
   uint32_t pte1_addr = (satp << 12) | ((v_addr >> 20) & 0xFFC);
   uint32_t pte1_entry_cache;
-  if(DCACHE_LOG){
-      printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
+  if (DCACHE_LOG)
+  {
+    if (dut_flag)
+      printf("DUT CPU: ");
+    else
+      printf("Ref CPU: ");
+    printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
+    if (dut_flag)
+      printf("DUT CPU: ");
+    else
+      printf("Ref CPU: ");
   }
+
   bool pte1_in_cache =
       dcache_read(pte1_addr, pte1_entry_cache); // 尝试从DCache读取PTE1
   uint32_t pte1_entry = p_memory[uint32_t(pte1_addr / 4)];
 
-  if(pte1_in_cache&& dut_flag){
+  if (pte1_in_cache && dut_flag)
+  {
     pte1_entry = pte1_entry_cache;
   }
 
   bool bit_pte1_entry[32];
   cvt_number_to_bit_unsigned(bit_pte1_entry, pte1_entry, 32);
   if (bit_pte1_entry[v] == false ||
-      (bit_pte1_entry[r] == false && bit_pte1_entry[w] == true)) {
+      (bit_pte1_entry[r] == false && bit_pte1_entry[w] == true))
+  {
     return false;
   }
 
-  if (bit_pte1_entry[r] == true || bit_pte1_entry[x] == true) {
+  if (bit_pte1_entry[r] == true || bit_pte1_entry[x] == true)
+  {
     if (!((type == 0 && bit_pte1_entry[x] == true) ||
           (type == 1 && bit_pte1_entry[r] == true) ||
           (type == 2 && bit_pte1_entry[w] == true) ||
-          (type == 1 && mxr == true && bit_pte1_entry[x] == true))) {
+          (type == 1 && mxr == true && bit_pte1_entry[x] == true)))
+    {
       return false;
     }
 
     if (privilege == 1 && sum == 0 && bit_pte1_entry[u] == true &&
-        sstatus[31 - 18] == false) {
+        sstatus[31 - 18] == false)
+    {
       return false;
     }
 
     if (privilege != 1 && mprv == 1 && mpp == 1 && sum == 0 &&
-        bit_pte1_entry[u] == true && sstatus[31 - 18] == false) {
+        bit_pte1_entry[u] == true && sstatus[31 - 18] == false)
+    {
       return false;
     }
 
-    if ((pte1_entry >> 10) % 1024 != 0) {
+    if ((pte1_entry >> 10) % 1024 != 0)
+    {
       return false;
     }
 
     if (bit_pte1_entry[a] == false ||
-        (type == 2 && bit_pte1_entry[d] == false)) {
+        (type == 2 && bit_pte1_entry[d] == false))
+    {
       return false;
     }
 
     p_addr = ((pte1_entry << 2) & 0xFFC00000) | (v_addr & 0x3FFFFF);
+    printf("一级页表直连页表 va:0x%08x pa:0x%08x\n", v_addr, p_addr);
     return true;
   }
 
   uint32_t pte2_addr =
       ((pte1_entry << 2) & 0xFFFFF000) | ((v_addr >> 10) & 0xFFC);
   uint32_t pte2_entry_cache;
-  if(DCACHE_LOG){
-      printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
+  if (DCACHE_LOG)
+  {
+    if (dut_flag)
+      printf("DUT CPU:2 ");
+    else
+      printf("Ref CPU:2 ");
+    printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
+    if (dut_flag)
+      printf("DUT CPU:2 ");
+    else
+      printf("Ref CPU:2 ");
   }
+
   bool pte2_in_cache =
       dcache_read(pte2_addr, pte2_entry_cache); // 尝试从DCache读取PTE2
 
   uint32_t pte2_entry = p_memory[uint32_t(pte2_addr / 4)];
 
-  if(pte2_in_cache && dut_flag){
+  if (pte2_in_cache && dut_flag)
+  {
     pte2_entry = pte2_entry_cache;
   }
 
@@ -260,13 +299,16 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
   if (bit_pte2_stored[v] == false ||
       (bit_pte2_stored[r] == false && bit_pte2_stored[w] == true))
     return false;
-  if (bit_pte2_stored[r] == true || bit_pte2_stored[x] == true) {
+  if (bit_pte2_stored[r] == true || bit_pte2_stored[x] == true)
+  {
     if ((type == 0 && bit_pte2_stored[x] == true) ||
         (type == 1 && bit_pte2_stored[r] == true) ||
         (type == 2 && bit_pte2_stored[w] == true) ||
-        (type == 1 && mxr == true && bit_pte2_stored[x] == true)) {
+        (type == 1 && mxr == true && bit_pte2_stored[x] == true))
+    {
       ;
-    } else
+    }
+    else
       return false;
     if (privilege == 1 && sum == 0 && bit_pte2_stored[u] == true &&
         sstatus[31 - 18] == false)
@@ -318,8 +360,10 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
 void front_cycle(bool stall, bool misprediction, bool exception,
                  front_top_in &front_in, front_top_out &front_out,
-                 uint32_t &number_PC, bool &non_branch_mispred) {
-  if (!stall || misprediction || exception) {
+                 uint32_t &number_PC, bool &non_branch_mispred)
+{
+  if (!stall || misprediction || exception)
+  {
 
 #if defined(CONFIG_BPU)
 
@@ -328,7 +372,8 @@ void front_cycle(bool stall, bool misprediction, bool exception,
     front_top(&front_in, &front_out);
 
 #else
-    for (int j = 0; j < FETCH_WIDTH; j++) {
+    for (int j = 0; j < FETCH_WIDTH; j++)
+    {
       front_out.pc[j] = number_PC;
       front_out.FIFO_valid = true;
       front_out.inst_valid[j] = true;
@@ -344,17 +389,23 @@ void front_cycle(bool stall, bool misprediction, bool exception,
                                  32);
 
       if ((back.csr.CSR_RegFile[number_satp] & 0x80000000) &&
-          back.csr.privilege != 3) {
+          back.csr.privilege != 3)
+      {
 
         front_out.page_fault_inst[j] =
             !va2pa(p_addr, number_PC, back.csr.CSR_RegFile[number_satp], 0,
                    mstatus, sstatus, back.csr.privilege, p_memory);
-        if (front_out.page_fault_inst[j]) {
+        if (front_out.page_fault_inst[j])
+        {
           front_out.instructions[j] = INST_NOP;
-        } else {
+        }
+        else
+        {
           front_out.instructions[j] = p_memory[p_addr / 4];
         }
-      } else {
+      }
+      else
+      {
         front_out.page_fault_inst[j] = false;
         front_out.instructions[j] = p_memory[number_PC / 4];
       }
@@ -369,7 +420,8 @@ void front_cycle(bool stall, bool misprediction, bool exception,
 
     bool no_taken = true;
     uint32_t last_valid_inst_pc = 0;
-    for (int j = 0; j < FETCH_WIDTH; j++) {
+    for (int j = 0; j < FETCH_WIDTH; j++)
+    {
       back.in.valid[j] =
           front_out.FIFO_valid && no_taken && front_out.inst_valid[j];
       if (back.in.valid[j])
@@ -380,9 +432,12 @@ void front_cycle(bool stall, bool misprediction, bool exception,
       back.in.page_fault_inst[j] = front_out.page_fault_inst[j];
       back.in.inst[j] = front_out.instructions[j];
 
-      if (LOG && back.in.valid[j]) {
-        cout << "指令index:" << dec << sim_time << " 当前PC的取值为:" << hex
-             << front_out.pc[j] << " Inst: " << back.in.inst[j] << endl;
+      if (LOG && back.in.valid[j])
+      {
+            printf("指令index:%lld 当前PC的取值为:0x%08x Inst:0x%08x\n",
+                   sim_time, front_out.pc[j], back.in.inst[j]);
+      // //   cout << "指令index:" << dec << sim_time << " 当前PC的取值为:" << hex
+      // //        << front_out.pc[j] << " Inst: " << back.in.inst[j] << endl;
       }
 
       back.in.predict_dir[j] = front_out.predict_dir[j];
@@ -407,14 +462,16 @@ void front_cycle(bool stall, bool misprediction, bool exception,
     non_branch_mispred = false;
     if (no_taken &&
         (front_out.predict_next_fetch_address != last_valid_inst_pc + 4) &&
-        front_out.FIFO_valid) {
+        front_out.FIFO_valid)
+    {
       // 发生了非分支指令的错误预测
       non_branch_mispred = true;
       front_in.refetch = true;
       front_in.refetch_address = last_valid_inst_pc + 4;
     }
-
-  } else {
+  }
+  else
+  {
 #ifdef CONFIG_BPU
     /*
      * stall && !misprediction && !exception
@@ -428,22 +485,28 @@ void front_cycle(bool stall, bool misprediction, bool exception,
   }
 }
 
-void back2front_comb(front_top_in &front_in, front_top_out &front_out) {
+void back2front_comb(front_top_in &front_in, front_top_out &front_out)
+{
   front_in.FIFO_read_enable = false;
-  for (int i = 0; i < COMMIT_WIDTH; i++) {
+  for (int i = 0; i < COMMIT_WIDTH; i++)
+  {
     Inst_uop *inst = &back.out.commit_entry[i].uop;
     front_in.back2front_valid[i] = back.out.commit_entry[i].valid &&
                                    is_branch(back.out.commit_entry[i].uop.type);
-    if (front_in.back2front_valid[i]) {
+    if (front_in.back2front_valid[i])
+    {
       front_in.predict_dir[i] = inst->pred_br_taken;
       front_in.predict_base_pc[i] = inst->pc;
       front_in.actual_dir[i] = inst->br_taken;
       front_in.actual_target[i] = inst->pc_next;
       int br_type = BR_DIRECT;
 
-      if (inst->type == JAL && inst->dest_en && inst->dest_areg == 1) {
+      if (inst->type == JAL && inst->dest_en && inst->dest_areg == 1)
+      {
         br_type = BR_CALL;
-      } else if (inst->type == JALR) {
+      }
+      else if (inst->type == JALR)
+      {
         if (inst->src1_areg == 1)
           br_type = BR_RET;
         else
@@ -455,42 +518,45 @@ void back2front_comb(front_top_in &front_in, front_top_out &front_out) {
       front_in.altpcpn[i] = inst->altpcpn;
       front_in.pcpn[i] = inst->pcpn;
     }
-    if (LOG) {
-      /*cout << " valid: " << front_in.back2front_valid[i]*/
-      /*     << " 反馈给前端的分支指令PC: " << hex << inst->pc*/
-      /*     << " 预测结果: " << inst->pred_br_taken*/
-      /*     << " 实际结果: " << inst->br_taken*/
-      /*     << " 预测目标地址: " << inst->pred_br_pc*/
-      /*     << " 实际目标地址: " << inst->pc_next*/
-      /*     << " 指令: " << inst->instruction << endl;*/
-    }
+    // if (LOG)
+    // {
+    //   /*cout << " valid: " << front_in.back2front_valid[i]*/
+    //   /*     << " 反馈给前端的分支指令PC: " << hex << inst->pc*/
+    //   /*     << " 预测结果: " << inst->pred_br_taken*/
+    //   /*     << " 实际结果: " << inst->br_taken*/
+    //   /*     << " 预测目标地址: " << inst->pred_br_pc*/
+    //   /*     << " 实际目标地址: " << inst->pc_next*/
+    //   /*     << " 指令: " << inst->instruction << endl;*/
+    // }
   }
-  if (LOG) {
-    // show ROB valid vector
-    /*cout << "ROB count: " << back.rob.count << " deq_ptr: " <<
-     * back.rob.deq_ptr*/
-    /*     << " enq_ptr: " << back.rob.enq_ptr << endl;*/
-    /*cout << "ROB valid: \n";*/
-    /*for (int i = 0; i < ROB_NUM; i++) {*/
-    /*  cout << back.rob.entry[i].valid << " ";*/
-    /*  if (i % 32 == 31)*/
-    /*    cout << endl;*/
-    /*}*/
-    /*cout << "ROB inst pc/inst:" << endl;*/
-    /*for (int i = 0; i < ROB_NUM; i++) {*/
-    /*  if (back.rob.entry[i].valid) {*/
-    /*    cout << hex << back.rob.entry[i].uop.pc << " at " << hex << i*/
-    /*         << " , inst: " << back.rob.entry[i].uop.instruction*/
-    /*         << " , decode at sim_time: " << dec*/
-    /*         << back.rob.entry[i].uop.inst_idx*/
-    /*         << " , complete: " << back.rob.complete[i]*/
-    /*         << " , exception: " << back.rob.exception[i] << endl;*/
-    /*  }*/
-    /*}*/
-  }
+  // if (LOG)
+  // {
+  //   // show ROB valid vector
+  //   /*cout << "ROB count: " << back.rob.count << " deq_ptr: " <<
+  //    * back.rob.deq_ptr*/
+  //   /*     << " enq_ptr: " << back.rob.enq_ptr << endl;*/
+  //   /*cout << "ROB valid: \n";*/
+  //   /*for (int i = 0; i < ROB_NUM; i++) {*/
+  //   /*  cout << back.rob.entry[i].valid << " ";*/
+  //   /*  if (i % 32 == 31)*/
+  //   /*    cout << endl;*/
+  //   /*}*/
+  //   /*cout << "ROB inst pc/inst:" << endl;*/
+  //   /*for (int i = 0; i < ROB_NUM; i++) {*/
+  //   /*  if (back.rob.entry[i].valid) {*/
+  //   /*    cout << hex << back.rob.entry[i].uop.pc << " at " << hex << i*/
+  //   /*         << " , inst: " << back.rob.entry[i].uop.instruction*/
+  //   /*         << " , decode at sim_time: " << dec*/
+  //   /*         << back.rob.entry[i].uop.inst_idx*/
+  //   /*         << " , complete: " << back.rob.complete[i]*/
+  //   /*         << " , exception: " << back.rob.exception[i] << endl;*/
+  //   /*  }*/
+  //   /*}*/
+  // }
 
   // if (back.out.mispred) {
-  if (back.out.mispred || back.out.flush) {
+  if (back.out.mispred || back.out.flush)
+  {
     // 若 pre-decode 或后端都检测到 branch mis-prediction，则以后端为准
     front_in.refetch_address = back.out.redirect_pc;
   }

@@ -13,6 +13,7 @@ CXXINCLUDE += -I./front-end/
 CXXINCLUDE += -I./memory/include/
 
 MEM_DIR=./baremetal
+LINUX_IMG=./linux_memory
 IMG=./baremetal/memory
 
 default: $(CXXSRC) 
@@ -21,7 +22,8 @@ default: $(CXXSRC)
 run: 
 # 	./build/rv_simu_mmu $(IMG)
 	./build/rv_simu_mmu $(IMG)
-
+linux:
+	./build/rv_simu_mmu $(LINUX_IMG)
 clean:
 	rm -f a.out
 	rm -rf ./baremetal/memory
@@ -31,5 +33,5 @@ gdb:
 	g++ $(CXXINCLUDE) $(CXXSRC) -g
 	gdb --args ./build/rv_simu_mmu $(IMG)
 
-.PHONY: all clean mem run
+.PHONY: all clean mem run linux
 

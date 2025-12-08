@@ -39,7 +39,7 @@ void ROB::comb_commit() {
     commit = commit &&
              (!entry[i][deq_ptr].valid ||
               (entry[i][deq_ptr].uop.cmp_num == entry[i][deq_ptr].uop.uop_num));
-
+    
     if (entry[i][deq_ptr].valid && is_flush_inst(entry[i][deq_ptr].uop)) {
       break;
     }
@@ -131,13 +131,14 @@ void ROB::comb_commit() {
     cout << "ROB deq inst:" << endl;
     for (int i = 0; i < ROB_BANK_NUM; i++) {
       if (entry[i][deq_ptr].valid) {
-        printf("bank:%d line:%d inst:0x%08x pc:0x%08x cmp_num:%d is_page_fault:%d src1_preg:%d src2_preg:%d uop_num:%d result:0x%08x\n", i, deq_ptr,
+        printf("bank:%d line:%d inst:0x%08x pc:0x%08x cmp_num:%d is_page_fault:%d src1_preg:%d src2_preg:%d dest_preg:%d uop_num:%d result:0x%08x\n", i, deq_ptr,
                entry[i][deq_ptr].uop.instruction,
                entry[i][deq_ptr].uop.pc,
                entry[i][deq_ptr].uop.cmp_num,
                is_page_fault(entry[i][deq_ptr].uop),
                entry[i][deq_ptr].uop.src1_preg,
                entry[i][deq_ptr].uop.src2_preg,
+               entry[i][deq_ptr].uop.dest_preg,
               entry[i][deq_ptr].uop.uop_num,
                entry[i][deq_ptr].uop.result);
       }
@@ -156,7 +157,7 @@ void ROB::comb_complete() {
 
       if (i == IQ_LD) {
         if(DCACHE_LOG){
-          printf("bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x rob_idx:%d preg:%d result:0x%08x page_fault_load:%d\n",bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result, io.prf2rob->entry[i].uop.page_fault_load);
+          printf("bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x pc:0x%08x rob_idx:%d preg:%d result:0x%08x page_fault_load:%d\n",bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.pc,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result, io.prf2rob->entry[i].uop.page_fault_load);
         }
         if (is_page_fault(io.prf2rob->entry[i].uop)) {
           entry_1[bank_idx][line_idx].uop.result =

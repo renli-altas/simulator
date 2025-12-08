@@ -318,6 +318,9 @@ void stu_addr(Inst_uop &inst)
 
   if (page_fault)
   {
+    if(DCACHE_LOG){
+      printf("stu_addr Page Fault:p_addr:0x%08x v_addr:0x%08x\n", p_addr, v_addr);
+    }
     inst.page_fault_store = true;
     inst.result = v_addr;
   }

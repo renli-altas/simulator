@@ -1,11 +1,13 @@
 #include "Dcache_Utils.h"
 #include <cstdio>
+#include "MSHR.h"
 extern long long sim_time;
 uint32_t dcache_data[DCACHE_LINE_NUM][DCACHE_WAY_NUM][DCACHE_OFFSET_NUM] = {0};
 uint32_t dcache_lru[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 uint32_t dcache_tag[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_valid[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 bool dcache_dirty[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
+bool dcache_issued[DCACHE_LINE_NUM][DCACHE_WAY_NUM] = {0};
 
 void updatelru(int linenum,int way)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 {
@@ -35,6 +37,45 @@ uint32_t read_cache_data(uint32_t index, uint32_t way, uint32_t offset)
     return dcache_data[index][way][offset];
 }
 
+uint32_t read_cache_data_pipeline(uint32_t way, uint32_t old_dcache_data[DCACHE_WAY_NUM])
+{
+    return old_dcache_data[way];
+}
+void write_cache_data_pipeline(uint32_t index, uint32_t way, uint32_t offset,uint32_t old_dcache_data[DCACHE_WAY_NUM], uint32_t wdata, uint8_t wstrb)
+{
+    uint32_t old_data = old_dcache_data[way];
+    uint32_t mask = 0;
+    if (wstrb & 0b1)
+        mask |= 0xFF;
+    if (wstrb & 0b10)
+        mask |= 0xFF00;
+    if (wstrb & 0b100)
+        mask |= 0xFF0000;
+    if (wstrb & 0b1000)
+        mask |= 0xFF000000;
+    dcache_data[index][way][offset] = (mask & wdata) | (~mask & old_data);
+    dcache_dirty[index][way] = 1;
+    if(DCACHE_LOG){
+        printf("write cache data addr:0x%08x wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(dcache_tag[index][way], index, offset),wdata,dcache_data[index][way][offset], old_data, wstrb, index, offset, way);
+    }
+}
+void write_cache_data_load(uint32_t way,uint32_t store_data[DCACHE_WAY_NUM],uint32_t old_dcache_data[DCACHE_WAY_NUM], uint32_t wdata, uint8_t wstrb)
+{
+    uint32_t old_data = store_data[way];
+    uint32_t mask = 0;
+    if (wstrb & 0b1)
+        mask |= 0xFF;
+    if (wstrb & 0b10)
+        mask |= 0xFF00;
+    if (wstrb & 0b100)
+        mask |= 0xFF0000;
+    if (wstrb & 0b1000)
+        mask |= 0xFF000000;
+    old_dcache_data[way] = (mask & wdata) | (~mask & old_data);
+    if(DCACHE_LOG){
+        printf("write load data wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x way:%d\n",wdata,old_dcache_data[way], old_data, wstrb, way);
+    }
+}
 void write_cache_data(uint32_t index, uint32_t way, uint32_t offset, uint32_t wdata, uint8_t wstrb)
 {
     uint32_t old_data = dcache_data[index][way][offset];
@@ -49,6 +90,7 @@ void write_cache_data(uint32_t index, uint32_t way, uint32_t offset, uint32_t wd
         mask |= 0xFF000000;
     dcache_data[index][way][offset] = (mask & wdata) | (~mask & old_data);
     dcache_dirty[index][way] = 1;
+    
 }
 
 bool hit_check(uint32_t index, uint32_t tag, uint32_t &hit_way)
@@ -63,19 +105,29 @@ bool hit_check(uint32_t index, uint32_t tag, uint32_t &hit_way)
             hit_way = i;
         }
     }
+    
     return hit;
 }
-void hit_check(uint32_t index, uint32_t tag, uint32_t offset, uint32_t tag_way[DCACHE_WAY_NUM], uint32_t data_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM], bool &hit, uint32_t &data,uint32_t &hit_way)
+void hit_check(uint32_t index, uint32_t tag, uint32_t tag_way[DCACHE_WAY_NUM], bool &hit,uint32_t &hit_way)
 {
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
         if (tag_way[i] == tag && dcache_valid[index][i])
         {
             hit = true;
-            data = data_way[i][offset];
             hit_way = i;
         }
     }
+    if(hit)return ;
+    for(int i = 0; i < DCACHE_WAY_NUM; i++) //修改同一个
+    {
+        if (dcache_tag[index][i] == tag && dcache_issued[index][i])
+        {
+            hit_way = i;
+        }
+    }
+    hit = false;
+    return ;
 }
 bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
 {
@@ -83,7 +135,7 @@ bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
     hit_way = -1;
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
-        if (dcache_tag[index][i] == tag && dcache_valid[index][i])
+        if (dcache_tag[index][i] == tag && (dcache_valid[index][i]||dcache_issued[index][i]))
         {
             hit = true;
             hit_way = i;
@@ -187,14 +239,15 @@ void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
     mem->control.size = 0b10;
     mem->control.last = offset == DCACHE_OFFSET_NUM - 1;
 }
-void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr)
+void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr,uint32_t tag_deal[DCACHE_WAY_NUM])
 {
-    if(dcache_valid[index][hit_way]){
-        dirty_writeback=dcache_dirty[index][hit_way];
-        paddr = get_addr(dcache_tag[index][hit_way], index, 0);
-        dcache_dirty[index][hit_way]=0;
-        dcache_valid[index][hit_way]=0;
-    }
+    dirty_writeback=dcache_dirty[index][hit_way];
+    dcache_tag[index][hit_way]=tag;
+    // printf("Dcache miss_deal writeback tag_deal:0x%08x index:%d offset:%d\n", tag_deal[hit_way], index, 0);
+    paddr = get_addr(tag_deal[hit_way], index, 0);
+    dcache_dirty[index][hit_way]=0;
+    dcache_valid[index][hit_way]=0;
+    dcache_issued[index][hit_way]=1;
 }
 bool dcache_read(uint32_t addr, uint32_t &data)
 {
@@ -204,7 +257,7 @@ bool dcache_read(uint32_t addr, uint32_t &data)
         printf("MMU Dcache read addr:0x%08x tag:0x%08x index:%d offset:%d\n", addr, tag, index, offset);
     }
     uint32_t hit_way;
-    if (hit_check_mmu(index, tag, hit_way))
+    if (hit_check_mmu(index, tag, hit_way) || find_mshr_table(get_addr(tag, index, 0),hit_way))
     {
         data = read_cache_data(index, hit_way, offset);
         if(DCACHE_LOG){
@@ -214,12 +267,10 @@ bool dcache_read(uint32_t addr, uint32_t &data)
     }
     return false;
 }
-void tag_and_data_read(uint32_t index,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM])
+void tag_and_data_read(uint32_t index,uint32_t offset,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM])
 {
     for(int i=0;i<DCACHE_WAY_NUM;i++){
         tag[i] = dcache_tag[index][i];
-        for(int j=0;j<DCACHE_OFFSET_NUM;j++){
-            data[i][j] = dcache_data[index][i][j];
-        }
+        data[i] = dcache_data[index][i][offset];
     }
 }

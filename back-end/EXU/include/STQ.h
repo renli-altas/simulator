@@ -42,5 +42,5 @@ public:
   int fwd_ptr = 0;
   int count = 0;
   int commit_count = 0;
-  bool write_flag = 0;
+  int write_flag = 0;
 };

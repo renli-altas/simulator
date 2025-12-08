@@ -43,6 +43,9 @@ void MEMORY::seq()
         if (io.mem->control.wen == 0)
         {
             rdata = p_memory[addr_offset >> 2];
+            if(addr_offset == 0x80893df4){
+                printf("Debug Memory Read at addr:0x%08x rdata:0x%08x\n",addr_offset,rdata);
+            }
             if (MEM_LOG)
             {
                 printf("\nload  data %08x in %08x(%08x) mask %d\n", rdata, addr_offset, io.mem->control.addr >> 2, io.mem->control.sel);
@@ -64,10 +67,10 @@ void MEMORY::seq()
                     mask |= 0xFF000000;
 
                 p_memory[addr_offset>>2] = (mask & io.mem->control.wdata) | (~mask & old_data);
-
-                // if(addr_offset == 0x80833d8c){
-                //     printf("Store to 0x80833d8c: data=0x%08x sim_time:%lld\n",p_memory[addr_offset>>2], sim_time);
-                // }
+                
+                if(addr_offset == 0x80893df4){
+                    printf("Debug Memory Write at addr:0x%08x wdata:0x%08x old_data:0x%08x mask:%08x p_memory:0x%08x\n",addr_offset,io.mem->control.wdata,old_data,mask,p_memory[addr_offset>>2]);
+                }
                 if (MEM_LOG)
                 {
                     printf("\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n", p_memory[addr_offset>>2], addr_offset, addr_offset >> 2, io.mem->control.sel, old_data);

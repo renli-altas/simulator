@@ -31,7 +31,6 @@ void Back_Top::difftest(Inst_uop *inst) {
     if (inst->page_fault_store)
       cout << "page fault store " << endl;
   }
-
   for (int i = 0; i < ARF_NUM; i++) {
     dut_cpu.gpr[i] = prf.reg_file[rename.arch_RAT[i]];
   }
@@ -327,8 +326,6 @@ void Back_Top::Back_comb() {
     back.out.redirect_pc = prf.io.prf2dec->redirect_pc;
   } else {
 
-    if (LOG)
-      cout << "flush!!!!" << endl;
     back.out.mispred = true;
     if (rob.io.rob_bcast->mret || rob.io.rob_bcast->sret) {
       back.out.redirect_pc = csr.io.csr2exe->epc;
@@ -362,8 +359,8 @@ void Back_Top::Back_seq() {
   idu.seq();
   isu.seq();
   exu.seq();
-  dcache.seq();
   mshr.seq();
+  dcache.seq();
   pmemory.seq();
   prf.seq();
   rob.seq();

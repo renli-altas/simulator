@@ -34,13 +34,18 @@ public:
   void output(Mem_OUT*out,bool valid,bool wr,uint32_t data,uint32_t addr,Inst_uop uop);
   uint32_t tag_ld_way_1[DCACHE_WAY_NUM];
   uint32_t tag_st_way_1[DCACHE_WAY_NUM];
-  uint32_t data_ld_way_1[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];
-  uint32_t data_st_way_1[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];
+  uint32_t data_ld_way_1[DCACHE_WAY_NUM];
+  uint32_t data_st_way_1[DCACHE_WAY_NUM];
 
   uint32_t tag_ld_way[DCACHE_WAY_NUM];
   uint32_t tag_st_way[DCACHE_WAY_NUM];
-  uint32_t data_ld_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];
-  uint32_t data_st_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM];
+  uint32_t data_ld_way[DCACHE_WAY_NUM];
+  uint32_t data_st_way[DCACHE_WAY_NUM];
+
+  
+  uint32_t tag_ld_tmp;
+  uint32_t index_ld_tmp;
+  uint32_t offset_ld_tmp;
 
   Dcache_IO io;
   Mem_IN cpu_ld_in;
@@ -72,7 +77,9 @@ public:
   bool dirty_writeback_ld;
   bool dirty_writeback_st;
 
-  bool mispred_pc;
+  bool mispred_1;
+  bool mispred_2;
+  bool uncache_access;
 
   uint32_t paddr_ld;
   uint32_t paddr_st;

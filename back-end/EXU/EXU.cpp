@@ -42,7 +42,7 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io)
   if (cycle == latency)
   {
     if(DCACHE_LOG){
-      printf("FU exec complete: op:%d pc:0x%08x inst:0x%08x\n",inst.op,inst.pc,inst.instruction);
+      printf("FU exec complete: op:%d pc:0x%08x inst:0x%08x dest_preg:%d\n",inst.op,inst.pc,inst.instruction,inst.dest_preg);
     }
     if(is_load_uop(inst.op))
     {
@@ -222,9 +222,6 @@ void EXU::comb_pipeline()
       fu[i].complete = false;
       fu[i].cycle = 0;
     }
-    // if(DCACHE_LOG){
-    //   printf("i:%d io.prf2exe->iss_entry.valid:%d io.exe2iss->ready:%d io.exe2prf->entry.valid:%d io.prf2exe->ready:%d inst_r_1.valid:%d fu.complete:%d fu.cycle:%d\n",i,io.prf2exe->iss_entry[i].valid,io.exe2iss->ready[i],io.exe2prf->entry[i].valid,io.prf2exe->ready[i],inst_r_1[i].valid,fu[i].complete,fu[i].cycle);
-    // }
   }
 }
 

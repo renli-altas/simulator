@@ -1,0 +1,16 @@
+cd ../.. ;python get_memory.py /home/renli/qimeng/simulator/baremetal/benchmarks/coremark/coremark.bin
+make -C ../../.. run
+make[1]: Entering directory '/home/renli/qimeng/simulator'
+./build/rv_simu_mmu ./baremetal/memory
+0
+[1;32m-----------------------------[0m
+[1;32mSuccess!!!![0m
+[1;32minstruction num: 7454424[0m
+[1;32mcycle num      : 9232900[0m
+[1;32mipc            : 0.807376[0m
+[1;32mhitnum         : 833611[0m
+[1;32mmissnum        : 6195[0m
+[1;32mdcache hit rate: 0.992623[0m
+[1;32m-----------------------------[0m
+
+make[1]: Leaving directory '/home/renli/qimeng/simulator'

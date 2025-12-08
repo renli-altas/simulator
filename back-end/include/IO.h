@@ -14,7 +14,7 @@ typedef struct {
   reg1_t addr_valid;
   reg1_t data_valid;
   reg1_t valid;
-  reg1_t issued;
+  reg2_t issued;
   uint32_t tag;
   uint32_t inst;
 } STQ_entry;

@@ -29,10 +29,12 @@ enum Dcache_State
 void updatelru(int linenum,int way);
 int getlru(int linenum);
 
+void write_cache_data_pipeline(uint32_t index,uint32_t way,uint32_t offset,uint32_t old_dcache_data[DCACHE_WAY_NUM],uint32_t wdata,uint8_t wstrb);
 void write_cache_data(uint32_t index,uint32_t way,uint32_t offset,uint32_t wdata,uint8_t wstrb);
 uint32_t read_cache_data(uint32_t index,uint32_t way,uint32_t offset);
+uint32_t read_cache_data_pipeline(uint32_t way,uint32_t old_dcache_data[DCACHE_WAY_NUM]);
 bool hit_check(uint32_t index,uint32_t tag,uint32_t &hit_way);
-void hit_check(uint32_t index, uint32_t tag, uint32_t offset, uint32_t tag_way[DCACHE_WAY_NUM], uint32_t data_way[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM], bool &hit, uint32_t &data, uint32_t &hit_way);
+void hit_check(uint32_t index, uint32_t tag, uint32_t tag_way[DCACHE_WAY_NUM], bool &hit, uint32_t &hit_way);
 bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way);
 
 void get_addr_info(uint32_t addr,uint32_t &tag,uint32_t& index,uint32_t &offset);
@@ -43,11 +45,12 @@ void write_cache_line(uint32_t index, uint32_t way, uint32_t& offset,uint32_t& d
 
 void transfer_zero(MSHR_INFO* &mshrio);
 void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready);
-void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr);
+void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr,uint32_t tag_deal[DCACHE_WAY_NUM]);
 
 
-void tag_and_data_read(uint32_t index);
+// void tag_and_data_read(uint32_t index);
 uint32_t get_addr(uint32_t tag, uint32_t index, uint32_t offset);
-void tag_and_data_read(uint32_t index,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM][DCACHE_OFFSET_NUM]);
+void tag_and_data_read(uint32_t index,uint32_t offset,uint32_t tag[DCACHE_WAY_NUM], uint32_t data[DCACHE_WAY_NUM]);
+void write_cache_data_load(uint32_t way,uint32_t store_data[DCACHE_WAY_NUM],uint32_t old_dcache_data[DCACHE_WAY_NUM], uint32_t wdata, uint8_t wstrb);
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset);
 bool dcache_read(uint32_t addr, uint32_t &data);

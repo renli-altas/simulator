@@ -1,4 +1,0 @@
-COMMON_DIR = ..
-TARGET = wanshu
-C_SRCS = cpu-tests/wanshu.c
-include ../common.mk
