@@ -199,18 +199,18 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
   uint32_t pte1_addr = (satp << 12) | ((v_addr >> 20) & 0xFFC);
   uint32_t pte1_entry_cache;
-  if (DCACHE_LOG)
-  {
-    if (dut_flag)
-      printf("DUT CPU: ");
-    else
-      printf("Ref CPU: ");
-    printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
-    if (dut_flag)
-      printf("DUT CPU: ");
-    else
-      printf("Ref CPU: ");
-  }
+  // if (DCACHE_LOG)
+  // {
+  //   if (dut_flag)
+  //     printf("DUT CPU: ");
+  //   else
+  //     printf("Ref CPU: ");
+  //   printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
+  //   if (dut_flag)
+  //     printf("DUT CPU: ");
+  //   else
+  //     printf("Ref CPU: ");
+  // }
 
   bool pte1_in_cache =
       dcache_read(pte1_addr, pte1_entry_cache); // 尝试从DCache读取PTE1
@@ -263,25 +263,25 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
     }
 
     p_addr = ((pte1_entry << 2) & 0xFFC00000) | (v_addr & 0x3FFFFF);
-    printf("一级页表直连页表 va:0x%08x pa:0x%08x\n", v_addr, p_addr);
+    // printf("一级页表直连页表 va:0x%08x pa:0x%08x\n", v_addr, p_addr);
     return true;
   }
 
   uint32_t pte2_addr =
       ((pte1_entry << 2) & 0xFFFFF000) | ((v_addr >> 10) & 0xFFC);
   uint32_t pte2_entry_cache;
-  if (DCACHE_LOG)
-  {
-    if (dut_flag)
-      printf("DUT CPU:2 ");
-    else
-      printf("Ref CPU:2 ");
-    printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
-    if (dut_flag)
-      printf("DUT CPU:2 ");
-    else
-      printf("Ref CPU:2 ");
-  }
+  // if (DCACHE_LOG)
+  // {
+  //   if (dut_flag)
+  //     printf("DUT CPU:2 ");
+  //   else
+  //     printf("Ref CPU:2 ");
+  //   printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
+  //   if (dut_flag)
+  //     printf("DUT CPU:2 ");
+  //   else
+  //     printf("Ref CPU:2 ");
+  // }
 
   bool pte2_in_cache =
       dcache_read(pte2_addr, pte2_entry_cache); // 尝试从DCache读取PTE2
@@ -432,10 +432,10 @@ void front_cycle(bool stall, bool misprediction, bool exception,
       back.in.page_fault_inst[j] = front_out.page_fault_inst[j];
       back.in.inst[j] = front_out.instructions[j];
 
-      if (LOG && back.in.valid[j])
+      if (LOG&& back.in.valid[j])
       {
-            printf("指令index:%lld 当前PC的取值为:0x%08x Inst:0x%08x\n",
-                   sim_time, front_out.pc[j], back.in.inst[j]);
+      //       printf("指令index:%lld 当前PC的取值为:0x%08x Inst:0x%08x\n",
+      //              sim_time, front_out.pc[j], back.in.inst[j]);
       // //   cout << "指令index:" << dec << sim_time << " 当前PC的取值为:" << hex
       // //        << front_out.pc[j] << " Inst: " << back.in.inst[j] << endl;
       }

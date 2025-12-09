@@ -43,13 +43,13 @@ void MEMORY::seq()
         if (io.mem->control.wen == 0)
         {
             rdata = p_memory[addr_offset >> 2];
-            if(addr_offset == 0x80893df4){
-                printf("Debug Memory Read at addr:0x%08x rdata:0x%08x\n",addr_offset,rdata);
-            }
-            if (MEM_LOG)
-            {
-                printf("\nload  data %08x in %08x(%08x) mask %d\n", rdata, addr_offset, io.mem->control.addr >> 2, io.mem->control.sel);
-            }
+            // if(addr_offset == 0x8fe11efc){
+            //     printf("Debug Memory Read at addr:0x%08x rdata:0x%08x\n",addr_offset,rdata);
+            // }
+            // if (MEM_LOG)
+            // {
+            //     printf("\nload  data %08x in %08x(%08x) mask %d\n", rdata, addr_offset, io.mem->control.addr >> 2, io.mem->control.sel);
+            // }
             data_cnt++;
         }
         else
@@ -68,13 +68,13 @@ void MEMORY::seq()
 
                 p_memory[addr_offset>>2] = (mask & io.mem->control.wdata) | (~mask & old_data);
                 
-                if(addr_offset == 0x80893df4){
-                    printf("Debug Memory Write at addr:0x%08x wdata:0x%08x old_data:0x%08x mask:%08x p_memory:0x%08x\n",addr_offset,io.mem->control.wdata,old_data,mask,p_memory[addr_offset>>2]);
-                }
-                if (MEM_LOG)
-                {
-                    printf("\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n", p_memory[addr_offset>>2], addr_offset, addr_offset >> 2, io.mem->control.sel, old_data);
-                }
+                // if(addr_offset == 0x8fe11efc){
+                //     printf("Debug Memory Write at addr:0x%08x wdata:0x%08x old_data:0x%08x mask:%08x p_memory:0x%08x\n",addr_offset,io.mem->control.wdata,old_data,mask,p_memory[addr_offset>>2]);
+                // }
+                // if (MEM_LOG)
+                // {
+                //     printf("\nstore data %08x in %08x(%08x) mask %d old_data:%08x\n", p_memory[addr_offset>>2], addr_offset, addr_offset >> 2, io.mem->control.sel, old_data);
+                // }
                 data_cnt++;
             }
         }
@@ -92,12 +92,12 @@ void MEMORY::seq()
         data_cnt = 0;
     }
 
-    if (MEM_LOG)
-    {
-        printf("memory state:%d Latency_cnt:%d data_cnt:%d\n", state, Latency_cnt, data_cnt);
-        printf("memory io.control: En: %d Wen: %d Addr: 0x%08x Wdata: 0x%08x Len: %d Size: %d Sel: %02x Done: %d Last: %d\n", io.mem->control.en, io.mem->control.wen, io.mem->control.addr, io.mem->control.wdata, io.mem->control.len, io.mem->control.size, io.mem->control.sel,io.mem->control.done,io.mem->control.last);
-        printf("memory io.data: Data: 0x%08x Done: %d Last: %d\n", io.mem->data.data, io.mem->data.done, io.mem->data.last);
-    }
+    // if (MEM_LOG)
+    // {
+    //     printf("memory state:%d Latency_cnt:%d data_cnt:%d\n", state, Latency_cnt, data_cnt);
+    //     printf("memory io.control: En: %d Wen: %d Addr: 0x%08x Wdata: 0x%08x Len: %d Size: %d Sel: %02x Done: %d Last: %d\n", io.mem->control.en, io.mem->control.wen, io.mem->control.addr, io.mem->control.wdata, io.mem->control.len, io.mem->control.size, io.mem->control.sel,io.mem->control.done,io.mem->control.last);
+    //     printf("memory io.data: Data: 0x%08x Done: %d Last: %d\n", io.mem->data.data, io.mem->data.done, io.mem->data.last);
+    // }
 
     if (io.mem->control.en == true && Latency_cnt == 0 && state == MEM_IDLE)
     {

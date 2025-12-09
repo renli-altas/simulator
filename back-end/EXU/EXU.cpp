@@ -41,9 +41,9 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io)
   cycle++;
   if (cycle == latency)
   {
-    if(DCACHE_LOG){
-      printf("FU exec complete: op:%d pc:0x%08x inst:0x%08x dest_preg:%d\n",inst.op,inst.pc,inst.instruction,inst.dest_preg);
-    }
+    // if(DCACHE_LOG){
+    //   printf("FU exec complete: op:%d pc:0x%08x inst:0x%08x dest_preg:%d\n",inst.op,inst.pc,inst.instruction,inst.dest_preg);
+    // }
     if(is_load_uop(inst.op))
     {
       ldu(inst, io);

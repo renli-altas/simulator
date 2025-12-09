@@ -155,10 +155,14 @@ void ROB::comb_complete() {
       int line_idx = io.prf2rob->entry[i].uop.rob_idx >> 2;
       entry_1[bank_idx][line_idx].uop.cmp_num++;
 
+      if(DCACHE_LOG&&bank_idx==2&&line_idx==12&&io.prf2rob->entry[i].uop.instruction == 0x00090613){
+        printf("sim_time:%lld bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x pc:0x%08x rob_idx:%d preg:%d result:0x%08x\n",sim_time,bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.pc,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result);
+      }
+
       if (i == IQ_LD) {
-        if(DCACHE_LOG){
-          printf("bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x pc:0x%08x rob_idx:%d preg:%d result:0x%08x page_fault_load:%d\n",bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.pc,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result, io.prf2rob->entry[i].uop.page_fault_load);
-        }
+        // if(DCACHE_LOG){
+        //   printf("bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x pc:0x%08x rob_idx:%d preg:%d result:0x%08x page_fault_load:%d\n",bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.pc,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result, io.prf2rob->entry[i].uop.page_fault_load);
+        // }
         if (is_page_fault(io.prf2rob->entry[i].uop)) {
           entry_1[bank_idx][line_idx].uop.result =
               io.prf2rob->entry[i].uop.result;

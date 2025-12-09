@@ -259,12 +259,12 @@ void Rename ::comb_commit()
         spec_alloc_1[io.rob_commit->commit_entry[i].uop.dest_preg] = false;
       }
       commit_num++;
-      if (LOG)
-      {
-        printf("ROB commit PC 0x%08x idx %02d\n",
-               io.rob_commit->commit_entry[i].uop.pc,
-               io.rob_commit->commit_entry[i].uop.rob_idx);
-      }
+      // if (LOG)
+      // {
+      //   printf("ROB commit PC 0x%08x idx %02d\n",
+      //          io.rob_commit->commit_entry[i].uop.pc,
+      //          io.rob_commit->commit_entry[i].uop.rob_idx);
+      // }
       back.difftest(&(io.rob_commit->commit_entry[i].uop));
     }
   }

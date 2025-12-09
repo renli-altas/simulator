@@ -55,9 +55,9 @@ void write_cache_data_pipeline(uint32_t index, uint32_t way, uint32_t offset,uin
         mask |= 0xFF000000;
     dcache_data[index][way][offset] = (mask & wdata) | (~mask & old_data);
     dcache_dirty[index][way] = 1;
-    if(DCACHE_LOG){
-        printf("write cache data addr:0x%08x wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(dcache_tag[index][way], index, offset),wdata,dcache_data[index][way][offset], old_data, wstrb, index, offset, way);
-    }
+    // if(DCACHE_LOG){
+    //     printf("write cache data addr:0x%08x wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(dcache_tag[index][way], index, offset),wdata,dcache_data[index][way][offset], old_data, wstrb, index, offset, way);
+    // }
 }
 void write_cache_data_load(uint32_t way,uint32_t store_data[DCACHE_WAY_NUM],uint32_t old_dcache_data[DCACHE_WAY_NUM], uint32_t wdata, uint8_t wstrb)
 {
@@ -72,9 +72,9 @@ void write_cache_data_load(uint32_t way,uint32_t store_data[DCACHE_WAY_NUM],uint
     if (wstrb & 0b1000)
         mask |= 0xFF000000;
     old_dcache_data[way] = (mask & wdata) | (~mask & old_data);
-    if(DCACHE_LOG){
-        printf("write load data wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x way:%d\n",wdata,old_dcache_data[way], old_data, wstrb, way);
-    }
+    // if(DCACHE_LOG){
+    //     printf("write load data wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x way:%d\n",wdata,old_dcache_data[way], old_data, wstrb, way);
+    // }
 }
 void write_cache_data(uint32_t index, uint32_t way, uint32_t offset, uint32_t wdata, uint8_t wstrb)
 {
@@ -245,7 +245,7 @@ void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_write
     dcache_tag[index][hit_way]=tag;
     // printf("Dcache miss_deal writeback tag_deal:0x%08x index:%d offset:%d\n", tag_deal[hit_way], index, 0);
     paddr = get_addr(tag_deal[hit_way], index, 0);
-    dcache_dirty[index][hit_way]=0;
+    // dcache_dirty[index][hit_way]=0;
     dcache_valid[index][hit_way]=0;
     dcache_issued[index][hit_way]=1;
 }
@@ -253,16 +253,16 @@ bool dcache_read(uint32_t addr, uint32_t &data)
 {
     uint32_t tag, index, offset;
     get_addr_info(addr, tag, index, offset);
-    if(DCACHE_LOG){
-        printf("MMU Dcache read addr:0x%08x tag:0x%08x index:%d offset:%d\n", addr, tag, index, offset);
-    }
+    // if(DCACHE_LOG){
+    //     printf("MMU Dcache read addr:0x%08x tag:0x%08x index:%d offset:%d\n", addr, tag, index, offset);
+    // }
     uint32_t hit_way;
     if (hit_check_mmu(index, tag, hit_way) || find_mshr_table(get_addr(tag, index, 0),hit_way))
     {
         data = read_cache_data(index, hit_way, offset);
-        if(DCACHE_LOG){
-            printf("MMU Dcache read hit addr:0x%08x tag:0x%08x index:%d offset:%d way:%d data:%08x\n", addr, tag, index, offset, hit_way, data);
-        }
+        // if(DCACHE_LOG){
+        //     printf("MMU Dcache read hit addr:0x%08x tag:0x%08x index:%d offset:%d way:%d data:%08x\n", addr, tag, index, offset, hit_way, data);
+        // }
         return true;
     }
     return false;

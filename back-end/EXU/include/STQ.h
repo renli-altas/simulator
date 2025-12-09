@@ -36,6 +36,7 @@ public:
   void init();
   int enq_ptr;
   int deq_ptr;
+  int deq_num;
 
   STQ_entry entry[STQ_NUM];
   int commit_ptr = 0;

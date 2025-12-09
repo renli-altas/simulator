@@ -70,9 +70,12 @@ public:
     bool wdata_valid;
     uint32_t done;
     uint32_t waddr;
-    
+
+    uint32_t count_mshr_1;
+    uint32_t count_table_1;
 
     void init();
+    void comb_ready();
     void comb_in();
     void comb_out();
     void seq();

@@ -34,10 +34,10 @@ void PRF::comb_br_check()
           io.prf2dec->redirect_rob_idx = inst_r[iq_br].uop.rob_idx;
           io.prf2dec->br_tag = inst_r[iq_br].uop.tag;
           inst_idx = inst_r[iq_br].uop.inst_idx;
-          if (LOG)
-            printf("PRF BR MISPREDICT inst 0x%08x pc 0x%08x redirect_pc 0x%08x rob_idx %d inst_idx %ld\n",
-                   inst_r[iq_br].uop.instruction, inst_r[iq_br].uop.pc,
-                   io.prf2dec->redirect_pc, io.prf2dec->redirect_rob_idx, inst_r[iq_br].uop.inst_idx);
+          // if (LOG)
+          //   printf("PRF BR MISPREDICT inst 0x%08x pc 0x%08x redirect_pc 0x%08x rob_idx %d inst_idx %ld\n",
+          //          inst_r[iq_br].uop.instruction, inst_r[iq_br].uop.pc,
+          //          io.prf2dec->redirect_pc, io.prf2dec->redirect_rob_idx, inst_r[iq_br].uop.inst_idx);
         }
       }
     }
@@ -248,10 +248,10 @@ void PRF::comb_pipeline()
       {
         inst_r_1[i].uop.difftest_skip = true;
       }
-      if (DCACHE_LOG)
-      {
-        printf("\n\nLoad Return: valid:%d pc:0x%08x inst:0x%08x addr:0x%08x data:0x%0x load_data:0x%x page_fault:%d rob_idx:%d preg:%d\n", io.cache2prf->valid, io.cache2prf->uop.pc, io.cache2prf->uop.instruction, addr, io.cache2prf->uop.result, load_data, io.cache2prf->uop.page_fault_load, io.cache2prf->uop.rob_idx, io.cache2prf->uop.dest_preg);
-      }
+      // if (DCACHE_LOG)
+      // {
+      //   printf("\n\nLoad Return: valid:%d pc:0x%08x inst:0x%08x addr:0x%08x data:0x%0x load_data:0x%x page_fault:%d rob_idx:%d preg:%d\n", io.cache2prf->valid, io.cache2prf->uop.pc, io.cache2prf->uop.instruction, addr, io.cache2prf->data, load_data, io.cache2prf->uop.page_fault_load, io.cache2prf->uop.rob_idx, io.cache2prf->uop.dest_preg);
+      // }
     }
     else
     {
