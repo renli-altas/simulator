@@ -1,5 +1,0 @@
-cd ../.. ;python get_memory.py /home/renli/qimeng/simulator/baremetal/benchmarks/dhrystone/dry.bin
-make -C ../../.. run
-make[1]: Entering directory '/home/renli/qimeng/simulator'
-./build/rv_simu_mmu ./baremetal/memory
-0
