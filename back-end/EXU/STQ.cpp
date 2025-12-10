@@ -106,20 +106,20 @@ void STQ::comb_out()
     {
       entry[commit_ptr].complete = true;
       commit_count++;
-      // if((entry[commit_ptr].addr &0xfffffffc) == 0x8fe11efc  && entry[commit_ptr].addr_valid){
-      //   printf("Debug STQ commit store to addr simtime:%lld 0x%08x data 0x%08x inst 0x%08x\n",sim_time, entry[commit_ptr].addr, entry[commit_ptr].data, entry[commit_ptr].inst);
-      // }
+      if(DEBUG&&(entry[commit_ptr].addr &0xfffffffc) == 0x80833eec  && entry[commit_ptr].addr_valid){
+        printf("Debug STQ commit store to addr simtime:%lld 0x%08x data 0x%08x inst 0x%08x\n",sim_time, entry[commit_ptr].addr, entry[commit_ptr].data, entry[commit_ptr].inst);
+      }
       LOOP_INC(commit_ptr, STQ_NUM);
     }
   }
-  // if(DCACHE_LOG){
-  //   printf("STQ State write_flag:%d flush:%d mispread:%d\n",write_flag, io.rob_bcast->flush, io.dec_bcast->mispred);
-  //   stq_print();
-  // }
+  if(DCACHE_LOG){
+    printf("STQ State write_flag:%d flush:%d mispread:%d\n",write_flag, io.rob_bcast->flush, io.dec_bcast->mispred);
+    stq_print();
+  }
 }
 void STQ::comb_in()
 {
-  // if(DCACHE_LOG)printf("io.stq2cache->ready:%d io.stq2cache->req:%d\n", io.stq2cache->ready, io.stq2cache->req);
+  if(DCACHE_LOG)printf("io.stq2cache->ready:%d io.stq2cache->req:%d\n", io.stq2cache->ready, io.stq2cache->req);
   
   
   if ((io.stq2cache->ready&&io.stq2cache->req) || write_flag == 0)
@@ -254,8 +254,8 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx)
         mask |= 0xFF000000;
       
       data = (mask & wdata) | (~mask & data);
-      // if (DCACHE_LOG)
-      //   printf("STQ Load Forwarding from STQ entry %d address %08x inst %08x wdata %08x count:%d mask:%08x\n", i, entry[i].addr, entry[i].inst, data, count, mask);
+      if (DCACHE_LOG)
+        printf("STQ Load Forwarding from STQ entry %d address %08x inst %08x wdata %08x count:%d mask:%08x\n", i, entry[i].addr, entry[i].inst, data, count, mask);
       
     }
     LOOP_INC(i, STQ_NUM);
@@ -280,8 +280,8 @@ void STQ::st2ld_fwd(uint32_t addr, uint32_t &data, int rob_idx)
       // }
       if ((entry[stq_idx].addr & 0xFFFFFFFC) == (addr & 0xFFFFFFFC) && entry[stq_idx].valid)
       {
-        // if (DCACHE_LOG)
-        //   printf("STQ Load Forwarding from STQ entry %d for ROB entry %d address %08x wdata %08x\n", stq_idx, idx, entry[stq_idx].addr, entry[stq_idx].data);
+        if (DCACHE_LOG)
+          printf("STQ Load Forwarding from STQ entry %d for ROB entry %d address %08x wdata %08x\n", stq_idx, idx, entry[stq_idx].addr, entry[stq_idx].data);
         
         uint32_t wdata = entry[stq_idx].data;
         uint32_t waddr = entry[stq_idx].addr;

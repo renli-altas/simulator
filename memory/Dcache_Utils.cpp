@@ -55,9 +55,9 @@ void write_cache_data_pipeline(uint32_t index, uint32_t way, uint32_t offset,uin
         mask |= 0xFF000000;
     dcache_data[index][way][offset] = (mask & wdata) | (~mask & old_data);
     dcache_dirty[index][way] = 1;
-    // if(DCACHE_LOG){
-    //     printf("write cache data addr:0x%08x wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(dcache_tag[index][way], index, offset),wdata,dcache_data[index][way][offset], old_data, wstrb, index, offset, way);
-    // }
+    if(DCACHE_LOG){
+        printf("write cache data addr:0x%08x wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", get_addr(dcache_tag[index][way], index, offset),wdata,dcache_data[index][way][offset], old_data, wstrb, index, offset, way);
+    }
 }
 void write_cache_data_load(uint32_t way,uint32_t store_data[DCACHE_WAY_NUM],uint32_t old_dcache_data[DCACHE_WAY_NUM], uint32_t wdata, uint8_t wstrb)
 {
@@ -72,9 +72,9 @@ void write_cache_data_load(uint32_t way,uint32_t store_data[DCACHE_WAY_NUM],uint
     if (wstrb & 0b1000)
         mask |= 0xFF000000;
     old_dcache_data[way] = (mask & wdata) | (~mask & old_data);
-    // if(DCACHE_LOG){
-    //     printf("write load data wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x way:%d\n",wdata,old_dcache_data[way], old_data, wstrb, way);
-    // }
+    if(DCACHE_LOG){
+        printf("write load data wdata:0x%08x wdatadone:0x%08x old_data:0x%08x wstrb:%02x way:%d\n",wdata,old_dcache_data[way], old_data, wstrb, way);
+    }
 }
 void write_cache_data(uint32_t index, uint32_t way, uint32_t offset, uint32_t wdata, uint8_t wstrb)
 {
@@ -212,8 +212,9 @@ void transfer_zero(MSHR_INFO* &mshrio)
     mshrio->dirty=false;
     mshrio->way=0;
     mshrio->paddr = 0;
+    mshrio->mispred = 0;
 }
-void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready)
+void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,uint32_t index,uint32_t way,bool dirty,uint32_t paddr,bool ready,bool mispred)
 {
     mshrio->valid = ready;
     mshrio->addr = cpu.addr;
@@ -227,6 +228,7 @@ void transfer_data(MSHR_INFO* &mshrio,Mem_IN cpu,uint32_t tag,uint32_t offset,ui
     mshrio->way=way;
     mshrio->paddr = paddr;
     mshrio->uop = cpu.uop;
+    mshrio->mispred = mispred;
 }
 void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 {
@@ -242,6 +244,7 @@ void read_data(EXMem_IO* &mem,uint32_t addr,uint32_t offset)
 void miss_deal(uint32_t index, uint32_t& hit_way, uint32_t tag,bool &dirty_writeback,uint32_t&paddr,uint32_t tag_deal[DCACHE_WAY_NUM])
 {
     dirty_writeback=dcache_dirty[index][hit_way];
+
     dcache_tag[index][hit_way]=tag;
     // printf("Dcache miss_deal writeback tag_deal:0x%08x index:%d offset:%d\n", tag_deal[hit_way], index, 0);
     paddr = get_addr(tag_deal[hit_way], index, 0);

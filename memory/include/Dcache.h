@@ -79,8 +79,10 @@ public:
 
   bool mispred_1;
   bool mispred_2;
+  bool mispred_reg;
   bool uncache_access;
 
   uint32_t paddr_ld;
   uint32_t paddr_st;
+
 };

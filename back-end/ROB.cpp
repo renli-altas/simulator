@@ -100,11 +100,11 @@ void ROB::comb_commit() {
               io.rob_bcast->pc = io.rob_commit->commit_entry[i].uop.pc + 4;
             }
             entry_1[i][deq_ptr].valid = false;
-            if(DCACHE_LOG)printf("commit flush %d %d\n", i, deq_ptr);
+            // if(DCACHE_LOG)printf("commit flush %d %d\n", i, deq_ptr);
           }
         } else {
           entry_1[i][deq_ptr].valid = false;
-          if(DCACHE_LOG)printf("commit flush2 %d %d\n", i, deq_ptr);
+          // if(DCACHE_LOG)printf("commit flush2 %d %d\n", i, deq_ptr);
         }
       } else {
         io.rob_commit->commit_entry[i].valid = false;
@@ -157,13 +157,13 @@ void ROB::comb_complete() {
       int line_idx = io.prf2rob->entry[i].uop.rob_idx >> 2;
       entry_1[bank_idx][line_idx].uop.cmp_num++;
 
-      if(DCACHE_LOG&&bank_idx==2&&line_idx==12&&io.prf2rob->entry[i].uop.instruction == 0x00090613){
-        printf("sim_time:%lld bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x pc:0x%08x rob_idx:%d preg:%d result:0x%08x\n",sim_time,bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.pc,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result);
+      // if(DCACHE_LOG&&bank_idx==2&&line_idx==12&&io.prf2rob->entry[i].uop.instruction == 0x00090613){
+      //   printf("sim_time:%lld bank_idx:%d line_idx:%d cmp_num:%d inst:0x%08x pc:0x%08x rob_idx:%d preg:%d result:0x%08x\n",sim_time,bank_idx,line_idx,entry_1[bank_idx][line_idx].uop.cmp_num,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.pc,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg, io.prf2rob->entry[i].uop.result);
         
-      }
-      if(DCACHE_LOG&&entry_1[bank_idx][line_idx].uop.cmp_num==2&&bank_idx==2&&line_idx==12){
-        printf("sim_time inst:0x%08x %lld inst:0x%08x\n",entry_1[bank_idx][line_idx].uop.instruction,sim_time,io.prf2rob->entry[i].uop.instruction);
-      }
+      // }
+      // if(DCACHE_LOG&&entry_1[bank_idx][line_idx].uop.cmp_num==2&&bank_idx==2&&line_idx==12){
+      //   printf("sim_time inst:0x%08x %lld inst:0x%08x\n",entry_1[bank_idx][line_idx].uop.instruction,sim_time,io.prf2rob->entry[i].uop.instruction);
+      // }
       
 
       if (i == IQ_LD) {
@@ -208,9 +208,18 @@ void ROB::comb_branch() {
     for (int i = (io.dec_bcast->redirect_rob_idx & 0b11) + 1; i < ROB_BANK_NUM;
          i++) {
       entry_1[i][io.dec_bcast->redirect_rob_idx >> 2].valid = false;
-      if(DCACHE_LOG)printf("ready false:%d %d\n", i, enq_ptr);
+      // if(DCACHE_LOG)printf("ready false:%d %d\n", i, enq_ptr);
+    }
+    for ( int i = 0; i < ROB_BANK_NUM; i++) {
+      for (int j = 0; j < ROB_LINE_NUM; j++) {
+        if (entry[i][j].valid && ((1<< entry[i][j].uop.tag) & io.dec_bcast->br_mask)) {
+          entry_1[i][j].valid = false;
+        }
+      }
     }
   }
+
+
 }
 
 void ROB::comb_fire() {
@@ -225,7 +234,7 @@ void ROB::comb_fire() {
         enq = true;
       } else {
         entry_1[i][enq_ptr].valid = false;
-        if(DCACHE_LOG)printf("ready false:%d %d\n", i, enq_ptr);
+        // if(DCACHE_LOG)printf("ready false:%d %d %d %d %d %d\n", i, enq_ptr,count,count_1,enq_ptr,deq_ptr);
       }
     }
   }
@@ -241,7 +250,7 @@ void ROB::comb_flush() {
     for (int i = 0; i < ROB_BANK_NUM; i++) {
       for (int j = 0; j < ROB_LINE_NUM; j++) {
         entry_1[i][j].valid = false;
-        if(DCACHE_LOG)printf("ready false:%d %d\n", i, enq_ptr);
+        // if(DCACHE_LOG)printf("ready false:%d %d\n", i, enq_ptr);
       }
     }
 
@@ -256,9 +265,9 @@ void ROB::seq() {
     for (int j = 0; j < ROB_LINE_NUM; j++) {
       entry[i][j] = entry_1[i][j];
       
-      if(DCACHE_LOG&&i==2&&j==12){
-        printf("ROB entry[%d][%d]: valid:%d inst:0x%08x cmp_num:%d uop_num:%d io.rob_bcast->flush:%d io.dec_bcast->mispred:%d\n",i,j,entry[i][j].valid,entry[i][j].uop.instruction,entry[i][j].uop.cmp_num,entry[i][j].uop.uop_num, io.rob_bcast->flush, io.dec_bcast->mispred);
-      }
+      // if(DCACHE_LOG&&i==2&&j==12){
+      //   printf("ROB entry[%d][%d]: valid:%d inst:0x%08x cmp_num:%d uop_num:%d io.rob_bcast->flush:%d io.dec_bcast->mispred:%d\n",i,j,entry[i][j].valid,entry[i][j].uop.instruction,entry[i][j].uop.cmp_num,entry[i][j].uop.uop_num, io.rob_bcast->flush, io.dec_bcast->mispred);
+      // }
     }
   }
 

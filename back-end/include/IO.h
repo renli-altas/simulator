@@ -192,6 +192,7 @@ typedef struct{
   bool data_ok;
   bool ready;
 
+
   Inst_uop uop;
 
 }Mem_IN;
@@ -217,6 +218,7 @@ typedef struct{
   uint32_t offset;
   uint32_t way;
   bool dirty;
+  bool mispred;
   
   Inst_uop uop;
 }MSHR_INFO;

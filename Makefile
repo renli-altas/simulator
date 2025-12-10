@@ -31,7 +31,7 @@ clean:
 
 gdb:
 	g++ $(CXXINCLUDE) $(CXXSRC) -g
-	gdb --args ./build/rv_simu_mmu $(IMG)
+	gdb --args a.out $(IMG)
 
 .PHONY: all clean mem run linux
 

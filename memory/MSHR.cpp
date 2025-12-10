@@ -80,10 +80,10 @@ void MSHR::comb_out()
     io.control->ld_out = done == 1;
     io.control->st_out = done == 2;
 
-    // if (DCACHE_LOG)
-    // {
-    //     printf("MSHR_state:%d done:%d\n", mshr_state, done);
-    // }
+    if (DCACHE_LOG)
+    {
+        printf("MSHR_state:%d done:%d\n", mshr_state, done);
+    }
     if (mshr_state == MSHR_TRAN)
     {
         io.cpu->valid = done == 1 || done == 2;
@@ -100,10 +100,10 @@ void MSHR::comb_out()
         io.cpu->data = 0;
     }
 
-    // if (DCACHE_LOG)
-    // {
-    //     printf("io.cpu->valid:%d wr:%d addr:0x%08x data:0x%08x rob_idx:%d preg:%d\n", io.cpu->valid, io.cpu->wr, io.cpu->addr, io.cpu->data, io.cpu->uop.rob_idx, io.cpu->uop.dest_preg);
-    // }
+    if (DCACHE_LOG)
+    {
+        printf("io.cpu->valid:%d wr:%d addr:0x%08x data:0x%08x rob_idx:%d preg:%d\n", io.cpu->valid, io.cpu->wr, io.cpu->addr, io.cpu->data, io.cpu->uop.rob_idx, io.cpu->uop.dest_preg);
+    }
 }
 
 void MSHR::seq()
@@ -126,6 +126,8 @@ void MSHR::seq()
         }
         if (io.dcache_ld->valid)
         {
+            if(DCACHE_LOG)
+                printf("MSHR seq receive ld addr:0x%08x tag:0x%08x index:%d way:%d offset:%d dirty:%d preg:%02d rob_idx:%02d mispred:%d\n", io.dcache_ld->addr, io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->offset, io.dcache_ld->dirty, io.dcache_ld->uop.dest_preg, io.dcache_ld->uop.rob_idx, io.dcache_ld->mispred);
             uint32_t entry = find_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty);
             if (entry == MSHR_ENTRY_SIZE)
             {
@@ -136,17 +138,11 @@ void MSHR::seq()
             {
                 mshr_entries[entry].count++;
             }
-            add_table_entry(0, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
-        }
-    }
-    if (io.control->flush)
-    {
-        for (int i = 0; i < MSHR_TABLE_SIZE; i++)
-        {
-            if (mshr_table[i].valid && mshr_table[i].type == 0)
-            {
-                add_free(i);
-            }
+
+            if(io.dcache_ld->mispred)
+                add_table_entry(2, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
+            else
+                add_table_entry(0, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
         }
     }
     if (io.control->mispred)
@@ -159,6 +155,16 @@ void MSHR::seq()
                 {
                     add_free(i);
                 }
+            }
+        }
+    }
+    if (io.control->flush)
+    {
+        for (int i = 0; i < MSHR_TABLE_SIZE; i++)
+        {
+            if (mshr_table[i].valid && mshr_table[i].type == 0)
+            {
+                add_free(i);
             }
         }
     }
@@ -207,8 +213,8 @@ void MSHR::seq()
                 rdata = 0;
                 ruop = mshr_table[index].uop;
                 waddr = get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset);
-                // if (DCACHE_LOG)
-                //     printf("MSHR write cache data table_index:%d addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", index, get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
+                if (DCACHE_LOG)
+                    printf("MSHR write cache data table_index:%d addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", index, get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
             }
             done = mshr_table[index].type + 1;
             add_free(index);
@@ -304,18 +310,18 @@ void MSHR::seq()
             mshr_state = MSHR_IDLE;
         }
     }
-    // if (DCACHE_LOG)
-    // {
-    //     printf("MSHR mshr_state:%d mshr_head:%d mshr_tail:%d count_mshr:%d table_head:%d table_tail:%d count_table:%d offset:%d entry:%d done:%d wdone:%d wdonelast:%d wdata_valid:%d io.control->flush:%d io.control->mispred:%d\n", mshr_state, mshr_head, mshr_tail, count_mshr, table_head, table_tail, count_table, offset, entry, done, wdone, wdonelast, wdata_valid, io.control->flush, io.control->mispred);
-    //     for (int i = 0; i < MSHR_ENTRY_SIZE; i++)
-    //     {
-    //         printf("MSHR entry[%d] valid:%d tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x\n", i, mshr_entries[i].valid, mshr_entries[i].tag, mshr_entries[i].index, mshr_entries[i].way, mshr_entries[i].dirty, mshr_entries[i].paddr);
-    //     }
-    //     for (int i = 0; i < MSHR_TABLE_SIZE; i++)
-    //     {
-    //         printf("MSHR table[%d] valid:%d entry:%d type:%d offset:%d wdata:0x%08x wstrb:%02x tag:0x%08x preg:%d rob_idx:%d\n", i, mshr_table[i].valid, mshr_table[i].entry, mshr_table[i].type, mshr_table[i].offset, mshr_table[i].wdata, mshr_table[i].wstrb, mshr_table[i].uop.tag, mshr_table[i].uop.dest_preg, mshr_table[i].uop.rob_idx);
-    //     }
-    // }
+    if (DCACHE_LOG)
+    {
+        printf("MSHR mshr_state:%d mshr_head:%d mshr_tail:%d count_mshr:%d table_head:%d table_tail:%d count_table:%d offset:%d entry:%d done:%d wdone:%d wdonelast:%d wdata_valid:%d io.control->flush:%d io.control->mispred:%d\n", mshr_state, mshr_head, mshr_tail, count_mshr, table_head, table_tail, count_table, offset, entry, done, wdone, wdonelast, wdata_valid, io.control->flush, io.control->mispred);
+        for (int i = 0; i < MSHR_ENTRY_SIZE; i++)
+        {
+            printf("MSHR entry[%d] valid:%d tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x\n", i, mshr_entries[i].valid, mshr_entries[i].tag, mshr_entries[i].index, mshr_entries[i].way, mshr_entries[i].dirty, mshr_entries[i].paddr);
+        }
+        for (int i = 0; i < MSHR_TABLE_SIZE; i++)
+        {
+            printf("MSHR table[%d] valid:%d entry:%d type:%d offset:%d wdata:0x%08x wstrb:%02x tag:0x%08x preg:%d rob_idx:%d\n", i, mshr_table[i].valid, mshr_table[i].entry, mshr_table[i].type, mshr_table[i].offset, mshr_table[i].wdata, mshr_table[i].wstrb, mshr_table[i].uop.tag, mshr_table[i].uop.dest_preg, mshr_table[i].uop.rob_idx);
+        }
+    }
 }
 void MSHR::broadcast_mshr(uint32_t index, uint32_t way)
 {
@@ -367,11 +373,11 @@ void MSHR::add_entry(uint32_t tag, uint32_t index, uint32_t way, bool dirty, uin
     mshr_entries[mshr_tail].bias = 0;
     mshr_entries[mshr_tail].count = 1;
     mshr_tail = (mshr_tail + 1) % MSHR_ENTRY_SIZE;
-    // if (DCACHE_LOG)
-    //     printf("MSHR add_entry tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x\n", tag, index, way, dirty, paddr);
+    if (DCACHE_LOG)
+        printf("MSHR add_entry tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x\n", tag, index, way, dirty, paddr);
     count_mshr++;
 }
-void MSHR::add_table_entry(bool type, uint32_t entry, uint32_t offset_table, uint32_t wdata, uint8_t wstrb, Inst_uop uop)
+void MSHR::add_table_entry(uint32_t type, uint32_t entry, uint32_t offset_table, uint32_t wdata, uint8_t wstrb, Inst_uop uop)
 {
     mshr_table[table_tail].valid = true;
     mshr_table[table_tail].entry = entry;
@@ -380,8 +386,8 @@ void MSHR::add_table_entry(bool type, uint32_t entry, uint32_t offset_table, uin
     mshr_table[table_tail].wdata = wdata;
     mshr_table[table_tail].wstrb = wstrb;
     mshr_table[table_tail].uop = uop;
-    // if (DCACHE_LOG)
-    //     printf("MSHR add_table_entry index:%d type:%d entry:%d offset:%d wdata:0x%08x wstrb:%02x tag:0x%08x preg:%d rob_idx:%d\n", table_tail, type, entry, offset_table, wdata, wstrb, uop.tag, uop.dest_preg, uop.rob_idx);
+    if (DCACHE_LOG)
+        printf("MSHR add_table_entry index:%d type:%d entry:%d offset:%d wdata:0x%08x wstrb:%02x tag:0x%08x preg:%d rob_idx:%d\n", table_tail, type, entry, offset_table, wdata, wstrb, uop.tag, uop.dest_preg, uop.rob_idx);
     table_tail = (table_tail + 1) % MSHR_TABLE_SIZE;
     count_table++;
 }

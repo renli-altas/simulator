@@ -276,8 +276,8 @@ void Back_Top::Back_comb() {
   prf.comb_awake();
   exu.comb_exec();
   stq.comb_out();
-  dcache.comb_hit();
   mshr.comb_ready();
+  dcache.comb_hit();
   dcache.comb_in();
   mshr.comb_in();
   pmemory.comb();

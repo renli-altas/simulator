@@ -21,7 +21,7 @@ typedef struct{
 typedef struct{
     bool valid;
     uint32_t entry;
-    bool type;
+    uint32_t type;
     uint32_t offset;
     uint32_t wdata;
     uint8_t wstrb;
@@ -83,6 +83,6 @@ public:
     uint32_t find_entry(uint32_t tag,uint32_t index,uint32_t way,uint32_t dirty);
     void add_entry(uint32_t tag,uint32_t index,uint32_t way,bool dirty,uint32_t paddr);
     void add_free(uint32_t entry);
-    void add_table_entry(bool type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb,Inst_uop uop);
-};
+    void add_table_entry(uint32_t type,uint32_t entry,uint32_t offset_table,uint32_t wdata,uint8_t wstrb,Inst_uop uop);
+    };
 
