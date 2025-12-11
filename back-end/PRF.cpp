@@ -164,9 +164,9 @@ void PRF::comb_complete()
       io.prf2rob->entry[i] = inst_r[i];
     else
       io.prf2rob->entry[i].valid = false;
-    if(DCACHE_LOG){
-      printf("io.prf2rob->entry[%d]: valid:%d inst:0x%08x rob_idx:%d preg:%d\n",i,io.prf2rob->entry[i].valid,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg);
-    }
+    // if(DCACHE_LOG){
+    //   printf("io.prf2rob->entry[%d]: valid:%d inst:0x%08x rob_idx:%d preg:%d\n",i,io.prf2rob->entry[i].valid,io.prf2rob->entry[i].uop.instruction,io.prf2rob->entry[i].uop.rob_idx, io.prf2rob->entry[i].uop.dest_preg);
+    // }
   }
 }
 
@@ -234,20 +234,23 @@ void PRF::comb_pipeline()
     else if (i == IQ_LD && io.prf2exe->ready[i] && io.cache2prf->valid)
     {
 
-      inst_r_1[i].valid = io.cache2prf->valid;
-      inst_r_1[i].uop.dest_en = true;
-      inst_r_1[i].uop.dest_preg = io.cache2prf->uop.dest_preg;
-      inst_r_1[i].uop.result = load_data;
-      inst_r_1[i].uop.page_fault_load = io.cache2prf->uop.page_fault_load;
-      inst_r_1[i].uop.tag = io.cache2prf->uop.tag;
-      inst_r_1[i].uop.rob_idx = io.cache2prf->uop.rob_idx;
-      inst_r_1[i].uop.instruction = io.cache2prf->uop.instruction;
-      inst_r_1[i].uop.pc = io.cache2prf->uop.pc;
+      // inst_r_1[i].valid = io.cache2prf->valid;
+      // inst_r_1[i].uop.dest_en = true;
+      // inst_r_1[i].uop.dest_preg = io.cache2prf->uop.dest_preg;
+      // inst_r_1[i].uop.result = load_data;
+      // inst_r_1[i].uop.page_fault_load = io.cache2prf->uop.page_fault_load;
+      // inst_r_1[i].uop.tag = io.cache2prf->uop.tag;
+      // inst_r_1[i].uop.rob_idx = io.cache2prf->uop.rob_idx;
+      // inst_r_1[i].uop.instruction = io.cache2prf->uop.instruction;
+      // inst_r_1[i].uop.pc = io.cache2prf->uop.pc;
       uint32_t addr = io.cache2prf->uop.src1_rdata + io.cache2prf->uop.imm;
-      if (addr == 0x1fd0e000)
-      {
-        inst_r_1[i].uop.difftest_skip = true;
-      }
+      // if (addr == 0x1fd0e000)
+      // {
+      //   inst_r_1[i].uop.difftest_skip = true;
+      // }
+      inst_r_1[i].uop = io.cache2prf->uop;
+      inst_r_1[i].valid = true;
+      inst_r_1[i].uop.result = load_data;
       if (DCACHE_LOG)
       {
         printf("\n\nLoad Return: valid:%d pc:0x%08x inst:0x%08x addr:0x%08x data:0x%0x load_data:0x%x page_fault:%d rob_idx:%d preg:%d\n", io.cache2prf->valid, io.cache2prf->uop.pc, io.cache2prf->uop.instruction, addr, io.cache2prf->data, load_data, io.cache2prf->uop.page_fault_load, io.cache2prf->uop.rob_idx, io.cache2prf->uop.dest_preg);

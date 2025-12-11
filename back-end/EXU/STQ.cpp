@@ -106,20 +106,20 @@ void STQ::comb_out()
     {
       entry[commit_ptr].complete = true;
       commit_count++;
-      if(DEBUG&&(entry[commit_ptr].addr &0xfffffffc) == 0x80833eec  && entry[commit_ptr].addr_valid){
+      if(DEBUG&&(entry[commit_ptr].addr &0xfffffffc) == DEBUG_ADDR  && entry[commit_ptr].addr_valid){
         printf("Debug STQ commit store to addr simtime:%lld 0x%08x data 0x%08x inst 0x%08x\n",sim_time, entry[commit_ptr].addr, entry[commit_ptr].data, entry[commit_ptr].inst);
       }
       LOOP_INC(commit_ptr, STQ_NUM);
     }
   }
-  if(DCACHE_LOG){
-    printf("STQ State write_flag:%d flush:%d mispread:%d\n",write_flag, io.rob_bcast->flush, io.dec_bcast->mispred);
-    stq_print();
-  }
+  // if(DCACHE_LOG){
+  //   printf("STQ State write_flag:%d flush:%d mispread:%d\n",write_flag, io.rob_bcast->flush, io.dec_bcast->mispred);
+  //   stq_print();
+  // }
 }
 void STQ::comb_in()
 {
-  if(DCACHE_LOG)printf("io.stq2cache->ready:%d io.stq2cache->req:%d\n", io.stq2cache->ready, io.stq2cache->req);
+  // if(DCACHE_LOG)printf("io.stq2cache->ready:%d io.stq2cache->req:%d\n", io.stq2cache->ready, io.stq2cache->req);
   
   
   if ((io.stq2cache->ready&&io.stq2cache->req) || write_flag == 0)

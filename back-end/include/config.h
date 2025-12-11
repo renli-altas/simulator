@@ -48,9 +48,9 @@ using namespace std;
 #define ALU_NUM 2
 #define BRU_NUM 2
 
-#define LOG_START 6491760//12611789
+#define LOG_START 207985554//12611789
 
-// #define LOG_ENABLE 
+#define LOG_ENABLE 
 
 #ifndef LOG_ENABLE
   #define DEBUG 0
@@ -58,16 +58,16 @@ using namespace std;
   #define MEM_LOG (0 && (sim_time >= LOG_START))
   #define DCACHE_LOG (0 && (sim_time >= LOG_START))
 #else
-  #define DEBUG 1
-  #define LOG (1 && (sim_time >= LOG_START))
+  #define DEBUG (1 && (sim_time >= LOG_START))
+  #define LOG (0 && (sim_time >= LOG_START))
   #define MEM_LOG (1 && (sim_time >= LOG_START))
   #define DCACHE_LOG (1 && (sim_time >= LOG_START))
 #endif
- 
-//  #define LOG_START ((sim_time >= 8217392&& sim_time <= 8220392)||(sim_time >= 8225047 && sim_time <= 8227047))
-//   #define LOG (1 && LOG_START)
-//   #define MEM_LOG (1 && LOG_START)
-//   #define DCACHE_LOG (1 && LOG_START)
+#define DEBUG_ADDR 0x80c41c0c
+// #define LOG_START (sim_time >= 19703000&& sim_time <= 19706600)
+// #define LOG (0 && LOG_START)
+// #define MEM_LOG (1 && LOG_START)
+// #define DCACHE_LOG (1 && LOG_START)
 extern long long sim_time;
 
 #define CONFIG_DIFFTEST

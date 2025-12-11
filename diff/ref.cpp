@@ -1113,7 +1113,7 @@ void Ref_cpu::store_data() {
     char temp;
     temp = wdata & 0x000000ff;
     memory[0x10000000 / 4] = memory[0x10000000 / 4] & 0xffffff00;
-    /*cout << temp;*/
+    // cout << temp;
   }
 
   if (p_addr == 0x10000001 && (wdata & 0x000000ff) == 7) {

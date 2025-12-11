@@ -282,9 +282,7 @@ void ldu(Inst_uop &inst, Mem_IN *&io)
   {
     data = 0;
   }
-  else {
-    io->req = true;
-  }
+  io->req = true;
   io->wr = 0;
   
   io->wdata = data;
@@ -328,6 +326,9 @@ void stu_addr(Inst_uop &inst)
   {
     inst.result = p_addr;
   }
+  // if(DEBUG&&(p_addr & 0xfffffffc) == DEBUG_ADDR){
+  //   printf("Debug stu_addr p_addr:0x%08x v_addr:0x%08x\n", p_addr, v_addr);
+  // }
 }
 
 void stu_data(Inst_uop &inst)

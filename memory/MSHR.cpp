@@ -113,9 +113,10 @@ void MSHR::seq()
         if (io.dcache_st->valid)
         {
             uint32_t entry = find_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty);
+            
             if (entry == MSHR_ENTRY_SIZE)
             {
-                entry = mshr_tail;
+                entry = mshr_tail;change_bias(io.dcache_st->index, io.dcache_st->way);
                 add_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty, io.dcache_st->paddr);
             }
             else
@@ -129,9 +130,10 @@ void MSHR::seq()
             if(DCACHE_LOG)
                 printf("MSHR seq receive ld addr:0x%08x tag:0x%08x index:%d way:%d offset:%d dirty:%d preg:%02d rob_idx:%02d mispred:%d\n", io.dcache_ld->addr, io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->offset, io.dcache_ld->dirty, io.dcache_ld->uop.dest_preg, io.dcache_ld->uop.rob_idx, io.dcache_ld->mispred);
             uint32_t entry = find_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty);
+            
             if (entry == MSHR_ENTRY_SIZE)
             {
-                entry = mshr_tail;
+                entry = mshr_tail;change_bias(io.dcache_ld->index, io.dcache_ld->way);
                 add_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty, io.dcache_ld->paddr);
             }
             else
@@ -209,7 +211,7 @@ void MSHR::seq()
             else
             {
                 write_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset, mshr_table[index].wdata, mshr_table[index].wstrb);
-                broadcast_mshr(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way);
+                broadcast_mshr(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way,mshr_entries[mshr_head].tag);
                 rdata = 0;
                 ruop = mshr_table[index].uop;
                 waddr = get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset);
@@ -315,7 +317,7 @@ void MSHR::seq()
         printf("MSHR mshr_state:%d mshr_head:%d mshr_tail:%d count_mshr:%d table_head:%d table_tail:%d count_table:%d offset:%d entry:%d done:%d wdone:%d wdonelast:%d wdata_valid:%d io.control->flush:%d io.control->mispred:%d\n", mshr_state, mshr_head, mshr_tail, count_mshr, table_head, table_tail, count_table, offset, entry, done, wdone, wdonelast, wdata_valid, io.control->flush, io.control->mispred);
         for (int i = 0; i < MSHR_ENTRY_SIZE; i++)
         {
-            printf("MSHR entry[%d] valid:%d tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x\n", i, mshr_entries[i].valid, mshr_entries[i].tag, mshr_entries[i].index, mshr_entries[i].way, mshr_entries[i].dirty, mshr_entries[i].paddr);
+            printf("MSHR entry[%d] valid:%d tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x bias:%d\n", i, mshr_entries[i].valid, mshr_entries[i].tag, mshr_entries[i].index, mshr_entries[i].way, mshr_entries[i].dirty, mshr_entries[i].paddr, mshr_entries[i].bias);
         }
         for (int i = 0; i < MSHR_TABLE_SIZE; i++)
         {
@@ -323,7 +325,7 @@ void MSHR::seq()
         }
     }
 }
-void MSHR::broadcast_mshr(uint32_t index, uint32_t way)
+void MSHR::broadcast_mshr(uint32_t index, uint32_t way,uint32_t tag)
 {
 
     for (int i = 1; i < count_mshr; i++)
@@ -332,6 +334,7 @@ void MSHR::broadcast_mshr(uint32_t index, uint32_t way)
         if (mshr_entries[mshr_index].index == index && mshr_entries[mshr_index].way == way && mshr_entries[mshr_index].valid)
         {
             mshr_entries[mshr_index].dirty = 1;
+            mshr_entries[mshr_index].paddr = get_addr(tag,index,0);
         }
     }
 }
@@ -407,4 +410,15 @@ bool find_mshr_table(uint32_t addr, uint32_t &hit_way)
         }
     }
     return false;
+}
+void MSHR::change_bias(uint32_t index, uint32_t way)
+{
+    for (int i = 0; i<count_mshr; i++)
+    {
+        uint32_t mshr_index = (mshr_head + i) % MSHR_ENTRY_SIZE;
+        if (mshr_entries[mshr_index].valid && mshr_entries[mshr_index].index == index && mshr_entries[mshr_index].way == way)
+        {
+            mshr_entries[mshr_index].bias = 1;
+        }
+    }
 }

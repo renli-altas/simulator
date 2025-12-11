@@ -84,6 +84,7 @@ void Dcache::comb_hit()
             else
             {
                 hit_num++;
+                mispred_reg=false;
                 updatelru(index_ld, hit_way_ld);
                 data_ld = read_cache_data_pipeline(hit_way_ld, data_ld_way);
                 if (DCACHE_LOG)
@@ -181,18 +182,15 @@ void Dcache::seq()
         get_addr_info(io.cpu_st_in->addr, tag_st_tmp, index_st_tmp, offset_st_tmp);
         tag_and_data_read(index_st_tmp, offset_st_tmp, tag_st_way_1, data_st_way_1);
     }
-    //================================================================================
 
-    //================================================================================
-
-    uint32_t out_index = 46;
-    uint32_t out_way = 1;
+    uint32_t out_index = 0;
+    uint32_t out_way = 0;
     uint32_t out_offset = 3;
-    if(DEBUG&&old_cache_data_debug != dcache_data[out_index][out_way][out_offset]){
-        old_cache_data_debug = dcache_data[out_index][out_way][out_offset];
-        printf("Debug Dcache seq sim_time:%lld dcache_data[%d][%d][%d]:0x%08x data_tag:0x%08x data_valid:%d data_issued:%d dcache_dirty:%d\n",sim_time,out_index,out_way,out_offset, old_cache_data_debug, dcache_tag[out_index][out_way], dcache_valid[out_index][out_way], dcache_issued[out_index][out_way], dcache_dirty[out_index][out_way]);
-    }
-    if(DEBUG&&io.cpu_st_in->req == true && io.cpu_st_in->addr &0xfffffffc ==0x80833eec){
+    // if(DEBUG&&old_cache_data_debug != dcache_data[out_index][out_way][out_offset]){
+    //     old_cache_data_debug = dcache_data[out_index][out_way][out_offset];
+    //     printf("Debug Dcache seq sim_time:%lld dcache_data[%d][%d][%d]:0x%08x data_tag:0x%08x data_valid:%d data_issued:%d dcache_dirty:%d\n",sim_time,out_index,out_way,out_offset, old_cache_data_debug, dcache_tag[out_index][out_way], dcache_valid[out_index][out_way], dcache_issued[out_index][out_way], dcache_dirty[out_index][out_way]);
+    // }
+    if(DEBUG&&io.cpu_st_in->req == true && io.cpu_st_in->addr &0xfffffffc ==DEBUG_ADDR){
         printf("Debug Dcache seq 2 sim_time:%lld cpu_st_in addr:0x%08x wdata:0x%08x wstrb:%02x preg:%d rob_idx:%d\n",sim_time, io.cpu_st_in->addr, io.cpu_st_in->wdata, io.cpu_st_in->wstrb, io.cpu_st_in->uop.dest_preg, io.cpu_st_in->uop.rob_idx);
     }
     if (DCACHE_LOG)
@@ -215,7 +213,7 @@ void Dcache::seq()
         printf("Dcache Output io.mshr_out->valid:%d   inst:0x%08x addr:0x%08x data:0x%08x preg:%02d rob_idx:%02d\n", io.mshr_out->valid, io.mshr_out->uop.instruction, io.mshr_out->addr, io.mshr_out->data, io.mshr_out->uop.dest_preg, io.mshr_out->uop.rob_idx);
         printf("Dcache Stats io.mshr_control->ld_out:%d io.mshr_control->st_out:%d\n", io.mshr_control->ld_out, io.mshr_control->st_out);
         printf("============================ Dcache to MSHR ============================\n");
-        printf("Dcache to MSHR io.mshr_ld->valid:%d addr:0x%08x paddr:0x%08x index:%d way:%d offset:%d dirty:%d wr:%d preg:%02d rob_idx:%02d mispred:%d\n", io.mshr_ld->valid, io.mshr_ld->addr, io.mshr_ld->paddr, io.mshr_ld->index, io.mshr_ld->way, io.mshr_ld->offset, io.mshr_ld->dirty, io.mshr_ld->wr, io.mshr_ld->uop.dest_preg, io.mshr_ld->uop.rob_idx, io.mshr_ld->uop.mispred);
+        printf("Dcache to MSHR io.mshr_ld->valid:%d addr:0x%08x paddr:0x%08x index:%d way:%d offset:%d dirty:%d wr:%d preg:%02d rob_idx:%02d mispred:%d\n", io.mshr_ld->valid, io.mshr_ld->addr, io.mshr_ld->paddr, io.mshr_ld->index, io.mshr_ld->way, io.mshr_ld->offset, io.mshr_ld->dirty, io.mshr_ld->wr, io.mshr_ld->uop.dest_preg, io.mshr_ld->uop.rob_idx, io.mshr_ld->mispred);
         printf("Dcache to MSHR io.mshr_st->valid:%d addr:0x%08x paddr:0x%08x index:%d way:%d offset:%d dirty:%d wr:%d preg:%02d rob_idx:%02d\n", io.mshr_st->valid, io.mshr_st->addr, io.mshr_st->paddr, io.mshr_st->index, io.mshr_st->way, io.mshr_st->offset, io.mshr_st->dirty, io.mshr_st->wr, io.mshr_st->uop.dest_preg, io.mshr_st->uop.rob_idx);
         printf("============================ Dcache Stats ============================\n");
         printf("Dcache Stats hit_ld:%d hit_way_ld:%d dirty_writeback_ld:%d paddr_ld:0x%08x\n", hit_ld, hit_way_ld, dirty_writeback_ld, paddr_ld);
@@ -229,6 +227,7 @@ void Dcache::seq()
     bool st_out = (!io.mshr_control->st_out & hit_st) | (!hit_st);
     if(DCACHE_LOG)
         printf("io.mshr_control->ready:%d ld_out:%d st_out:%d\n", io.mshr_control->ready, ld_out, st_out);
+    
     if (io.mshr_control->ready == true && ld_out)
     {
         if (mispred_1 || io.control->flush == true)
@@ -249,31 +248,40 @@ void Dcache::seq()
         memcpy(tag_ld_way, tag_ld_way_1, sizeof(tag_ld_way));
         memcpy(data_ld_way, data_ld_way_1, sizeof(data_ld_way));
 
-    }else if(io.mshr_control->ready == false && mispred_2&&cpu_ld_in.req){ 
+    }else if(!hit_ld && mispred_2&&cpu_ld_in.req){ 
         mispred_reg = true;
         if(DCACHE_LOG){
             printf("Dcache seq mispred_2 true cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr);
         }
     }
+    else if(hit_ld && mispred_2&&cpu_ld_in.req){ 
+        cpu_ld_in.req = false;
+        memset(tag_ld_way, 0, sizeof(tag_ld_way));
+        memset(data_ld_way, 0, sizeof(data_ld_way));
+        if(DCACHE_LOG){
+            printf("Dcache seq mispred_3 true cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr);
+        }
+
+    }
+    else{
+        for(int i=0;i<DCACHE_WAY_NUM;i++){
+            data_ld_way[i] = dcache_data[index_ld][i][offset_ld];
+        }
+    }
 
     if (io.mshr_control->ready == true && st_out)
     {
-        // if (io.control->flush == true)
-        // {
-        //     cpu_st_in.req = false;
-        //     memset(tag_st_way, 0, sizeof(tag_st_way));
-        //     memset(data_st_way, 0, sizeof(data_st_way));
-        // }
-        // else
-        // {
-            cpu_st_in = (*io.cpu_st_in);
-            memcpy(tag_st_way, tag_st_way_1, sizeof(tag_st_way));
-            memcpy(data_st_way, data_st_way_1, sizeof(data_st_way));
-        // }
+        cpu_st_in = (*io.cpu_st_in);
+        memcpy(tag_st_way, tag_st_way_1, sizeof(tag_st_way));
+        memcpy(data_st_way, data_st_way_1, sizeof(data_st_way));
     }else if(io.mshr_control->ready == false && hit_st && !io.mshr_control->st_out){
         cpu_st_in = (*io.cpu_st_in);
         memcpy(tag_st_way, tag_st_way_1, sizeof(tag_st_way));
         memcpy(data_st_way, data_st_way_1, sizeof(data_st_way));
+    }else{
+        for(int i=0;i<DCACHE_WAY_NUM;i++){
+            data_st_way[i] = dcache_data[index_st][i][offset_st];
+        }
     }
     if(DCACHE_LOG){
         printf("Dcache seq end cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x cpu_st_in.req:%d cpu_st_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr, cpu_st_in.req, cpu_st_in.addr);
