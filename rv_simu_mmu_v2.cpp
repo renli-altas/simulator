@@ -263,6 +263,7 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
     }
 
     p_addr = ((pte1_entry << 2) & 0xFFC00000) | (v_addr & 0x3FFFFF);
+    // if(DCACHE_LOG)
     // printf("一级页表直连页表 va:0x%08x pa:0x%08x\n", v_addr, p_addr);
     return true;
   }

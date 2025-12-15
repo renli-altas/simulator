@@ -786,7 +786,7 @@ void Ref_cpu::RV32IM() {
       }
 
       if (p_addr == 0x1fd0e000) {
-        data = 0;
+        data = sim_time;
       }
       if (p_addr == 0x1fd0e004) {
         data = 0;

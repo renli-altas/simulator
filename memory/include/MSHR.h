@@ -40,6 +40,7 @@ extern mshr_entry mshr_entries[MSHR_ENTRY_SIZE];
 extern table_entry mshr_table[MSHR_TABLE_SIZE];
 extern enum MSHR_STATE mshr_state;
 bool find_mshr_table(uint32_t addr,uint32_t &hit_way);
+bool find_mshr_entry(uint32_t tag,uint32_t index, uint32_t &hit_way);
 class MSHR_IO
 {
 public:
@@ -69,6 +70,7 @@ public:
     uint32_t wdata;
     bool wdata_valid;
     uint32_t done;
+    bool wflag;
     uint32_t waddr;
 
     uint32_t count_mshr_1;

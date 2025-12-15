@@ -89,7 +89,7 @@ void write_cache_data(uint32_t index, uint32_t way, uint32_t offset, uint32_t wd
     if (wstrb & 0b1000)
         mask |= 0xFF000000;
     dcache_data[index][way][offset] = (mask & wdata) | (~mask & old_data);
-    dcache_dirty[index][way] = 1;
+    // dcache_dirty[index][way] = 1;
     
 }
 
@@ -116,17 +116,26 @@ void hit_check(uint32_t index, uint32_t tag, uint32_t tag_way[DCACHE_WAY_NUM], b
         {
             hit = true;
             hit_way = i;
+            if(DCACHE_LOG)
+                printf("hit_check hit index:%d tag:0x%08x way:%d\n", index, tag, hit_way);
         }
     }
     if(hit)return ;
+    hit = false;
     for(int i = 0; i < DCACHE_WAY_NUM; i++) //修改同一个
     {
         if (dcache_tag[index][i] == tag && dcache_issued[index][i])
         {
             hit_way = i;
+            if(DCACHE_LOG)
+                printf("hit_check issued hit index:%d tag:0x%08x way:%d\n", index, tag, hit_way);
         }
     }
-    hit = false;
+    if(hit_way != -1){
+        return ;
+    }
+
+    find_mshr_entry(tag,index,hit_way);
     return ;
 }
 bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
@@ -135,7 +144,7 @@ bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
     hit_way = -1;
     for (int i = 0; i < DCACHE_WAY_NUM; i++)
     {
-        if (dcache_tag[index][i] == tag && (dcache_valid[index][i]||dcache_issued[index][i]))
+        if (dcache_tag[index][i] == tag && (dcache_valid[index][i]))
         {
             hit = true;
             hit_way = i;
@@ -144,6 +153,9 @@ bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
     if(!hit){
         hit_way = getlru(index);
     }
+    // if(DCACHE_LOG){
+    //     printf("MMU hit_check index:%d tag:0x%08x hit:%d hit_way:%d\n", index, tag, hit, hit_way);
+    // }
     return hit;
 }
 

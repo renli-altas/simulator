@@ -44,7 +44,7 @@ void MEMORY::seq()
         {
             rdata = p_memory[addr_offset >> 2];
             if(DEBUG&&addr_offset == DEBUG_ADDR){
-                printf("Debug Memory Read at addr:0x%08x rdata:0x%08x\n",addr_offset,rdata);
+                printf("Debug Memory Read at addr:0x%08x rdata:0x%08x sim_time:%lld\n",addr_offset,rdata, sim_time);
             }
             if (MEM_LOG)
             {
@@ -69,7 +69,7 @@ void MEMORY::seq()
                 p_memory[addr_offset>>2] = (mask & io.mem->control.wdata) | (~mask & old_data);
                 
                 if(DEBUG&&addr_offset == DEBUG_ADDR){
-                    printf("Debug Memory Write at addr:0x%08x wdata:0x%08x old_data:0x%08x mask:%08x p_memory:0x%08x\n",addr_offset,io.mem->control.wdata,old_data,mask,p_memory[addr_offset>>2]);
+                    printf("Debug Memory Write at addr:0x%08x wdata:0x%08x old_data:0x%08x mask:%08x p_memory:0x%08x sim_time:%lld\n",addr_offset,io.mem->control.wdata,old_data,mask,p_memory[addr_offset>>2], sim_time);
                 }
                 if (MEM_LOG)
                 {

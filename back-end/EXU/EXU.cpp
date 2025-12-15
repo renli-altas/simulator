@@ -15,7 +15,7 @@ void stu_data(Inst_uop &inst);
 void mul(Inst_uop &inst);
 void div(Inst_uop &inst);
 
-void FU::exec(Inst_uop &inst, Mem_IN *&io)
+void FU::exec(Inst_uop &inst, Mem_IN *&io,bool mispred)
 {
 
   if (cycle == 0)
@@ -39,11 +39,16 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io)
   }
 
   cycle++;
+  if(mispred){
+    complete = true;
+    cycle = 0;
+    return;
+  }
   if (cycle == latency)
   {
-    if(DCACHE_LOG){
-      printf("FU exec complete: op:%d pc:0x%08x inst:0x%08x dest_preg:%d\n",inst.op,inst.pc,inst.instruction,inst.dest_preg);
-    }
+    // if(DCACHE_LOG){
+    //   printf("FU exec complete: op:%d pc:0x%08x inst:0x%08x dest_preg:%d rob-idx:%d\n",inst.op,inst.pc,inst.instruction,inst.dest_preg, inst.rob_idx);
+    // }
     if(is_load_uop(inst.op))
     {
       ldu(inst, io);
@@ -73,6 +78,10 @@ void FU::exec(Inst_uop &inst, Mem_IN *&io)
       uint32_t vaddr = 0;
       uint32_t asid = 0;
       // TODO: sfence.vma
+
+      // if(DCACHE_LOG){
+      //   printf("SFENCE_VMA called pc:0x%08x inst:0x%08x\n", inst.pc, inst.instruction);
+      // }
     }
     else
       alu(inst);
@@ -136,7 +145,7 @@ void EXU::comb_exec()
     io.exe2prf->entry[i].valid = false;
     io.exe2prf->entry[i].uop = inst_r[i].uop;
     if(inst_r[i].valid){
-      fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache);
+      fu[i].exec(io.exe2prf->entry[i].uop, io.ldq2cache, (io.dec_bcast->mispred&&((1<<inst_r[i].uop.tag)&io.dec_bcast->br_mask)) || io.rob_bcast->flush);
       if(i==IQ_LD)continue;
       if (fu[i].complete &&
           !(io.dec_bcast->mispred &&

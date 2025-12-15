@@ -6,7 +6,7 @@
 #include <iostream>
 #include <util.h>
 extern Back_Top back;
-
+extern int commit_num;
 void PRF::init()
 {
   for (int i = 0; i < ISSUE_WAY; i++)
@@ -251,6 +251,9 @@ void PRF::comb_pipeline()
       inst_r_1[i].uop = io.cache2prf->uop;
       inst_r_1[i].valid = true;
       inst_r_1[i].uop.result = load_data;
+      // if(addr == 0x1fd0e000 || addr ==0x1fd0e004){
+      //   printf("Special Load to addr:0x%08x data:0x%08x %d %d\n",addr, io.cache2prf->data,load_data,commit_num);
+      // }
       if (DCACHE_LOG)
       {
         printf("\n\nLoad Return: valid:%d pc:0x%08x inst:0x%08x addr:0x%08x data:0x%0x load_data:0x%x page_fault:%d rob_idx:%d preg:%d\n", io.cache2prf->valid, io.cache2prf->uop.pc, io.cache2prf->uop.instruction, addr, io.cache2prf->data, load_data, io.cache2prf->uop.page_fault_load, io.cache2prf->uop.rob_idx, io.cache2prf->uop.dest_preg);

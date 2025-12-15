@@ -73,17 +73,17 @@ void MSHR::comb_in()
 void MSHR::comb_ready()
 {
 
-    io.control->ready = count_mshr < MSHR_ENTRY_SIZE & count_table < MSHR_TABLE_SIZE - 1;
+    io.control->ready = count_mshr < MSHR_ENTRY_SIZE - 1 & count_table < MSHR_TABLE_SIZE - 1;
 }
 void MSHR::comb_out()
 {
     io.control->ld_out = done == 1;
     io.control->st_out = done == 2;
 
-    if (DCACHE_LOG)
-    {
-        printf("MSHR_state:%d done:%d\n", mshr_state, done);
-    }
+    // if (DCACHE_LOG)
+    // {
+    //     printf("MSHR_state:%d done:%d\n", mshr_state, done);
+    // }
     if (mshr_state == MSHR_TRAN)
     {
         io.cpu->valid = done == 1 || done == 2;
@@ -99,53 +99,66 @@ void MSHR::comb_out()
         io.cpu->addr = 0;
         io.cpu->data = 0;
     }
-
-    if (DCACHE_LOG)
-    {
-        printf("io.cpu->valid:%d wr:%d addr:0x%08x data:0x%08x rob_idx:%d preg:%d\n", io.cpu->valid, io.cpu->wr, io.cpu->addr, io.cpu->data, io.cpu->uop.rob_idx, io.cpu->uop.dest_preg);
-    }
 }
 
 void MSHR::seq()
 {
-    if (count_mshr < MSHR_ENTRY_SIZE && count_table < MSHR_TABLE_SIZE - 1)
-    {
-        if (io.dcache_st->valid)
-        {
-            uint32_t entry = find_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty);
-            
-            if (entry == MSHR_ENTRY_SIZE)
-            {
-                entry = mshr_tail;change_bias(io.dcache_st->index, io.dcache_st->way);
-                add_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty, io.dcache_st->paddr);
-            }
-            else
-            {
-                mshr_entries[entry].count++;
-            }
-            add_table_entry(1, entry, io.dcache_st->offset, io.dcache_st->wdata, io.dcache_st->wstrb, io.dcache_st->uop);
-        }
-        if (io.dcache_ld->valid)
-        {
-            if(DCACHE_LOG)
-                printf("MSHR seq receive ld addr:0x%08x tag:0x%08x index:%d way:%d offset:%d dirty:%d preg:%02d rob_idx:%02d mispred:%d\n", io.dcache_ld->addr, io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->offset, io.dcache_ld->dirty, io.dcache_ld->uop.dest_preg, io.dcache_ld->uop.rob_idx, io.dcache_ld->mispred);
-            uint32_t entry = find_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty);
-            
-            if (entry == MSHR_ENTRY_SIZE)
-            {
-                entry = mshr_tail;change_bias(io.dcache_ld->index, io.dcache_ld->way);
-                add_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty, io.dcache_ld->paddr);
-            }
-            else
-            {
-                mshr_entries[entry].count++;
-            }
 
-            if(io.dcache_ld->mispred)
-                add_table_entry(2, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
+    if (io.dcache_st->valid)
+    {
+        uint32_t entry = find_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty);
+
+        if (entry == MSHR_ENTRY_SIZE || entry == MSHR_ENTRY_SIZE + 1)
+        {
+            uint32_t old_tail = mshr_tail;
+            change_bias(io.dcache_st->index, io.dcache_st->way);
+            bool wdirty = io.dcache_st->dirty | wflag;
+            if (entry != MSHR_ENTRY_SIZE + 1)
+                add_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, io.dcache_st->dirty, io.dcache_st->paddr);
             else
-                add_table_entry(0, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
+                add_entry(io.dcache_st->tag, io.dcache_st->index, io.dcache_st->way, wdirty, io.dcache_st->paddr);
+            entry = old_tail;
         }
+        else
+        {
+            mshr_entries[entry].count++;
+        }
+        add_table_entry(1, entry, io.dcache_st->offset, io.dcache_st->wdata, io.dcache_st->wstrb, io.dcache_st->uop);
+    }
+    if (io.dcache_ld->valid)
+    {
+        // if (DCACHE_LOG)
+        //     printf("MSHR seq receive ld addr:0x%08x tag:0x%08x index:%d way:%d offset:%d dirty:%d preg:%02d rob_idx:%02d mispred:%d\n", io.dcache_ld->addr, io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->offset, io.dcache_ld->dirty, io.dcache_ld->uop.dest_preg, io.dcache_ld->uop.rob_idx, io.dcache_ld->mispred);
+        uint32_t entry = find_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty);
+
+        if (entry == MSHR_ENTRY_SIZE || entry == MSHR_ENTRY_SIZE + 1)
+        {
+            uint32_t old_tail = mshr_tail;
+            change_bias(io.dcache_ld->index, io.dcache_ld->way);
+            bool wdirty = io.dcache_ld->dirty | wflag;
+            if (entry != MSHR_ENTRY_SIZE + 1)
+                add_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty, io.dcache_ld->paddr);
+            else
+                add_entry(io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, wdirty, io.dcache_ld->paddr);
+
+            // if (DCACHE_LOG)
+            //     printf("MSHR seq new mshr entry:%d old_tail:%d mshr_tail:%d tag:0x%08x index:%d way:%d dirty:%d %d paddr:0x%08x\n", entry, old_tail, mshr_tail, io.dcache_ld->tag, io.dcache_ld->index, io.dcache_ld->way, io.dcache_ld->dirty, wflag, io.dcache_ld->paddr);
+            entry = old_tail;
+        }
+        else
+        {
+            mshr_entries[entry].count++;
+        }
+
+        if (io.dcache_ld->mispred)
+            add_table_entry(2, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
+        else
+            add_table_entry(0, entry, io.dcache_ld->offset, 0, 0, io.dcache_ld->uop);
+    }
+    if (count_mshr > MSHR_ENTRY_SIZE || count_table > MSHR_TABLE_SIZE)
+    {
+        printf("Error MSHR overflow count_mshr:%d count_table:%d\n", count_mshr, count_table);
+        exit(1);
     }
     if (io.control->mispred)
     {
@@ -194,10 +207,10 @@ void MSHR::seq()
                 break;
             }
         }
-        // if (DCACHE_LOG)
-        // {
-        //     printf("MSHR TRAN table_index search result:%d\n", index);
-        // }
+        if (DCACHE_LOG)
+        {
+            printf("MSHR TRAN table_index search result:%d\n", index);
+        }
         if (index != MSHR_TABLE_SIZE)
         {
             // if (DCACHE_LOG)
@@ -211,10 +224,11 @@ void MSHR::seq()
             else
             {
                 write_cache_data(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_table[index].offset, mshr_table[index].wdata, mshr_table[index].wstrb);
-                broadcast_mshr(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way,mshr_entries[mshr_head].tag);
+                broadcast_mshr(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_entries[mshr_head].tag);
                 rdata = 0;
                 ruop = mshr_table[index].uop;
                 waddr = get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset);
+                wflag = true;
                 if (DCACHE_LOG)
                     printf("MSHR write cache data table_index:%d addr:0x%08x wdata:0x%08x wstrb:%02x index:%d offset:%d way:%d\n", index, get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, mshr_table[index].offset), dcache_data[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way][mshr_table[index].offset], 0x0f, mshr_entries[mshr_head].index, mshr_table[index].offset, mshr_entries[mshr_head].way);
             }
@@ -229,22 +243,38 @@ void MSHR::seq()
         }
         else
         {
+            if (DCACHE_LOG)
+                printf("Error MSHR TRAN no table entry found for mshr_head:%d %d %d\n", mshr_head, wflag, mshr_entries[mshr_head].bias);
             done = 0;
             offset = 0;
             mshr_entries[mshr_head].valid = false;
             updatelru(mshr_entries[mshr_head].index, mshr_entries[mshr_head].way);
-            if (!mshr_entries[mshr_head].bias)
+            if (mshr_entries[mshr_head].bias == 0)
             {
                 // If the entry was found by a load that came later, keep it valid
                 dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 1;
                 dcache_issued[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = 0;
-                // if(DCACHE_LOG)printf("Change Tag:index:%d way:%d dcache_tag:0x%08x change_tag:0x%08x\n",mshr_entries[mshr_head].index,mshr_entries[mshr_head].way,dcache_tag[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way],mshr_entries[mshr_head].tag);
                 dcache_tag[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = mshr_entries[mshr_head].tag;
+                dcache_dirty[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way] = wflag;
             }
             else
             {
                 mshr_entries[mshr_head].bias = 0;
+                for(int i=1;i<count_mshr;i++)
+                {
+                    uint32_t mshr_index = (mshr_head + i) % MSHR_ENTRY_SIZE;
+                    if (mshr_entries[mshr_index].index == mshr_entries[mshr_head].index && mshr_entries[mshr_index].way == mshr_entries[mshr_head].way && mshr_entries[mshr_index].valid)
+                    {
+                        mshr_entries[mshr_index].paddr = get_addr(mshr_entries[mshr_head].tag, mshr_entries[mshr_head].index, 0);
+                        if (DCACHE_LOG)
+                            printf("MSHR broadcast_mshr hit index:%d way:%d tag:0x%08x\n", mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, mshr_entries[mshr_head].tag);
+                    }
+                }
             }
+            wflag = false;
+            if (DCACHE_LOG)
+                printf("Change Tag:index:%d way:%d dcache_tag:0x%08x dcache_valid:%d dcache_issued:%d dcache_dirty:%d\n", mshr_entries[mshr_head].index, mshr_entries[mshr_head].way, dcache_tag[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way], dcache_valid[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way], dcache_issued[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way], dcache_dirty[mshr_entries[mshr_head].index][mshr_entries[mshr_head].way]);
+
             mshr_head = (mshr_head + 1) % MSHR_ENTRY_SIZE;
             count_mshr--;
         }
@@ -282,9 +312,10 @@ void MSHR::seq()
         }
         else
         {
-            if (mshr_head != mshr_tail)
+            if (count_mshr > 0)
             {
                 mshr_head = (mshr_head + 1) % MSHR_ENTRY_SIZE;
+                count_mshr--;
             }
         }
     }
@@ -325,7 +356,7 @@ void MSHR::seq()
         }
     }
 }
-void MSHR::broadcast_mshr(uint32_t index, uint32_t way,uint32_t tag)
+void MSHR::broadcast_mshr(uint32_t index, uint32_t way, uint32_t tag)
 {
 
     for (int i = 1; i < count_mshr; i++)
@@ -334,7 +365,11 @@ void MSHR::broadcast_mshr(uint32_t index, uint32_t way,uint32_t tag)
         if (mshr_entries[mshr_index].index == index && mshr_entries[mshr_index].way == way && mshr_entries[mshr_index].valid)
         {
             mshr_entries[mshr_index].dirty = 1;
-            mshr_entries[mshr_index].paddr = get_addr(tag,index,0);
+            mshr_entries[mshr_index].paddr = get_addr(tag, index, 0);
+            if (DCACHE_LOG)
+                printf("MSHR broadcast_mshr hit index:%d way:%d at mshr_index:%d tag:0x%08x set dirty and paddr:0x%08x\n", index, way, mshr_index, tag, mshr_entries[mshr_index].paddr);
+
+            break;
         }
     }
 }
@@ -353,15 +388,18 @@ uint32_t MSHR::find_entry(uint32_t tag, uint32_t index, uint32_t way, uint32_t d
     }
     if (mshr_entries[mshr_head].tag == tag && mshr_entries[mshr_head].index == index && mshr_entries[mshr_head].way == way && mshr_entries[mshr_head].valid)
     {
-        if(dirty == 0 )return mshr_head;
-        else if(dirty==1 && mshr_state != MSHR_TRAN && mshr_state != MSHR_WAIT_READ){
+        if (dirty == 0)
+            return mshr_head;
+        else if (dirty == 1 && mshr_state != MSHR_TRAN && mshr_state != MSHR_WAIT_READ)
+        {
             // if (DCACHE_LOG)
             //     printf("MSHR find_entry hit tag:0x%08x index:%d way:%d dirty:%d at mshr_index:%d\n", tag, index, way, dirty, mshr_head);
             return mshr_head;
         }
         mshr_entries[mshr_head].bias = 1;
     }
-
+    if(mshr_entries[mshr_head].index == index && mshr_entries[mshr_head].way == way && mshr_entries[mshr_head].valid)
+        return MSHR_ENTRY_SIZE + 1;
     return MSHR_ENTRY_SIZE;
 }
 
@@ -375,9 +413,9 @@ void MSHR::add_entry(uint32_t tag, uint32_t index, uint32_t way, bool dirty, uin
     mshr_entries[mshr_tail].paddr = paddr;
     mshr_entries[mshr_tail].bias = 0;
     mshr_entries[mshr_tail].count = 1;
-    mshr_tail = (mshr_tail + 1) % MSHR_ENTRY_SIZE;
     if (DCACHE_LOG)
-        printf("MSHR add_entry tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x\n", tag, index, way, dirty, paddr);
+        printf("MSHR add_entry tag:0x%08x index:%d way:%d dirty:%d paddr:0x%08x mshr_entries[mshr_tail].paddr:0x%08x\n", tag, index, way, dirty, paddr, mshr_entries[mshr_tail].paddr);
+    mshr_tail = (mshr_tail + 1) % MSHR_ENTRY_SIZE;
     count_mshr++;
 }
 void MSHR::add_table_entry(uint32_t type, uint32_t entry, uint32_t offset_table, uint32_t wdata, uint8_t wstrb, Inst_uop uop)
@@ -406,6 +444,22 @@ bool find_mshr_table(uint32_t addr, uint32_t &hit_way)
         if (mshr_entries[i].valid && mshr_entries[i].paddr == addr && (i != mshr_head || (i == mshr_head && mshr_state != MSHR_TRAN && mshr_state != MSHR_WAIT_READ)))
         {
             hit_way = mshr_entries[i].way;
+            if(DCACHE_LOG)
+                printf("find_mshr_table hit addr:0x%08x at mshr_entry:%d way:%d\n", addr, i, hit_way);
+            return true;
+        }
+    }
+    return false;
+}
+bool find_mshr_entry(uint32_t tag,uint32_t index, uint32_t &hit_way)
+{
+    for (int i = 0; i < MSHR_ENTRY_SIZE; i++)
+    {
+        if (mshr_entries[i].valid && mshr_entries[i].tag == tag  && mshr_entries[i].index == index )// (i != mshr_head || (i == mshr_head && mshr_state != MSHR_TRAN && mshr_state != MSHR_WAIT_READ)))
+        {
+            hit_way = mshr_entries[i].way;
+            if(DCACHE_LOG)
+                printf("find_mshr_table hit tag:0x%08x index:%d at mshr_entry:%d way:%d\n", tag, index, i, hit_way);
             return true;
         }
     }
@@ -413,7 +467,7 @@ bool find_mshr_table(uint32_t addr, uint32_t &hit_way)
 }
 void MSHR::change_bias(uint32_t index, uint32_t way)
 {
-    for (int i = 0; i<count_mshr; i++)
+    for (int i = 0; i < count_mshr; i++)
     {
         uint32_t mshr_index = (mshr_head + i) % MSHR_ENTRY_SIZE;
         if (mshr_entries[mshr_index].valid && mshr_entries[mshr_index].index == index && mshr_entries[mshr_index].way == way)

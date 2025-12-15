@@ -268,7 +268,6 @@ void ldu(Inst_uop &inst, Mem_IN *&io)
                 sstatus, back.csr.privilege, p_memory);
   }
   data = 0;
-  
   if (!ret)
   {
     inst.page_fault_load = true;
@@ -316,9 +315,6 @@ void stu_addr(Inst_uop &inst)
 
   if (page_fault)
   {
-    // if(DCACHE_LOG){
-    //   printf("stu_addr Page Fault:p_addr:0x%08x v_addr:0x%08x\n", p_addr, v_addr);
-    // }
     inst.page_fault_store = true;
     inst.result = v_addr;
   }
@@ -326,9 +322,6 @@ void stu_addr(Inst_uop &inst)
   {
     inst.result = p_addr;
   }
-  // if(DEBUG&&(p_addr & 0xfffffffc) == DEBUG_ADDR){
-  //   printf("Debug stu_addr p_addr:0x%08x v_addr:0x%08x\n", p_addr, v_addr);
-  // }
 }
 
 void stu_data(Inst_uop &inst)

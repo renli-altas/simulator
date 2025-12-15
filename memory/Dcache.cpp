@@ -61,13 +61,18 @@ void Dcache::comb_hit()
 
     mispred_1 = (io.control->br_mask & (1 << io.cpu_ld_in->uop.tag)) && io.control->mispred;
     mispred_2 = (io.control->br_mask & (1 << cpu_ld_in.uop.tag)) && io.control->mispred;
-    uncache_access = (cpu_ld_in.uop.page_fault_load == true) || (cpu_ld_in.addr == 0x1fd0e00) || (cpu_ld_in.addr == 0x1fd0e04);
+    uncache_access = (cpu_ld_in.uop.page_fault_load == true) | (cpu_ld_in.addr == 0x1fd0e000) | (cpu_ld_in.addr == 0x1fd0e004);
     if (cpu_ld_in.req == true)
     {
+        // if(cpu_ld_in.addr == 0x1fd0e000 || cpu_ld_in.addr == 0x1fd0e004){
+        //     printf("Uncache Load Request to addr:0x%08x uncache:%d %d\n", cpu_ld_in.addr, uncache_access,cpu_ld_in.uop.page_fault_load);
+        // }
         if (uncache_access == true)
         {
             data_ld = cpu_ld_in.wdata;
-            hit_ld = false;
+            hit_ld = true;
+            // if(cpu_ld_in.addr==0x1fd0e000 || cpu_ld_in.addr==0x1fd0e004)
+            // printf("Uncache Load to addr:0x%08x data:0x%08x\n", cpu_ld_in.addr, data_ld);
         }
         else
         {
@@ -84,7 +89,6 @@ void Dcache::comb_hit()
             else
             {
                 hit_num++;
-                mispred_reg=false;
                 updatelru(index_ld, hit_way_ld);
                 data_ld = read_cache_data_pipeline(hit_way_ld, data_ld_way);
                 if (DCACHE_LOG)
@@ -151,7 +155,7 @@ void Dcache::comb_out()
     }
     else
     {
-        output(io.cpu_ld_out, (hit_ld == true || uncache_access) && cpu_ld_in.req && !io.control->flush && !mispred_2, false, data_ld, cpu_ld_in.addr, cpu_ld_in.uop);
+        output(io.cpu_ld_out, (hit_ld == true || uncache_access) && cpu_ld_in.req && !io.control->flush && !mispred_reg, false, data_ld, cpu_ld_in.addr, cpu_ld_in.uop);
     }
     io.cpu_ld_in->ready = (io.mshr_control->ready && 
                           ((hit_ld == false && !io.cpu_ld_in->uop.page_fault_load) || 
@@ -183,8 +187,8 @@ void Dcache::seq()
         tag_and_data_read(index_st_tmp, offset_st_tmp, tag_st_way_1, data_st_way_1);
     }
 
-    uint32_t out_index = 0;
-    uint32_t out_way = 0;
+    uint32_t out_index = 49;
+    uint32_t out_way = 2;
     uint32_t out_offset = 3;
     // if(DEBUG&&old_cache_data_debug != dcache_data[out_index][out_way][out_offset]){
     //     old_cache_data_debug = dcache_data[out_index][out_way][out_offset];
@@ -225,8 +229,14 @@ void Dcache::seq()
     // ================================================================================
     bool ld_out = (!io.mshr_control->ld_out & hit_ld) | (!hit_ld);
     bool st_out = (!io.mshr_control->st_out & hit_st) | (!hit_st);
-    if(DCACHE_LOG)
-        printf("io.mshr_control->ready:%d ld_out:%d st_out:%d\n", io.mshr_control->ready, ld_out, st_out);
+
+    if(hit_ld&&mispred_reg&&cpu_ld_in.req){
+        mispred_reg = false;
+        // if(DCACHE_LOG)
+            // printf("Dcache seq mispred_1 true hit_ld:%d cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", hit_ld, cpu_ld_in.req, cpu_ld_in.addr);
+    }
+    // if(DCACHE_LOG)
+    //     printf("io.mshr_control->ready:%d ld_out:%d st_out:%d\n", io.mshr_control->ready, ld_out, st_out);
     
     if (io.mshr_control->ready == true && ld_out)
     {
@@ -250,17 +260,17 @@ void Dcache::seq()
 
     }else if(!hit_ld && mispred_2&&cpu_ld_in.req){ 
         mispred_reg = true;
-        if(DCACHE_LOG){
-            printf("Dcache seq mispred_2 true cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr);
-        }
+        // if(DCACHE_LOG){
+        //     printf("Dcache seq mispred_2 true cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr);
+        // }
     }
     else if(hit_ld && mispred_2&&cpu_ld_in.req){ 
         cpu_ld_in.req = false;
         memset(tag_ld_way, 0, sizeof(tag_ld_way));
         memset(data_ld_way, 0, sizeof(data_ld_way));
-        if(DCACHE_LOG){
-            printf("Dcache seq mispred_3 true cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr);
-        }
+        // if(DCACHE_LOG){
+        //     printf("Dcache seq mispred_3 true cpu_ld_in.req:%d cpu_ld_in.addr:0x%08x\n", cpu_ld_in.req, cpu_ld_in.addr);
+        // }
 
     }
     else{
