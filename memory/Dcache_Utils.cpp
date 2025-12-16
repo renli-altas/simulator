@@ -153,9 +153,9 @@ bool hit_check_mmu(uint32_t index, uint32_t tag, uint32_t &hit_way)
     if(!hit){
         hit_way = getlru(index);
     }
-    // if(DCACHE_LOG){
-    //     printf("MMU hit_check index:%d tag:0x%08x hit:%d hit_way:%d\n", index, tag, hit, hit_way);
-    // }
+    if(MMU_LOG){
+        printf("MMU hit_check index:%d tag:0x%08x hit:%d hit_way:%d\n", index, tag, hit, hit_way);
+    }
     return hit;
 }
 
@@ -268,16 +268,16 @@ bool dcache_read(uint32_t addr, uint32_t &data)
 {
     uint32_t tag, index, offset;
     get_addr_info(addr, tag, index, offset);
-    // if(DCACHE_LOG){
-    //     printf("MMU Dcache read addr:0x%08x tag:0x%08x index:%d offset:%d\n", addr, tag, index, offset);
-    // }
+    if(MMU_LOG){
+        printf("MMU Dcache read addr:0x%08x tag:0x%08x index:%d offset:%d\n", addr, tag, index, offset);
+    }
     uint32_t hit_way;
     if (hit_check_mmu(index, tag, hit_way) || find_mshr_table(get_addr(tag, index, 0),hit_way))
     {
         data = read_cache_data(index, hit_way, offset);
-        // if(DCACHE_LOG){
-        //     printf("MMU Dcache read hit addr:0x%08x tag:0x%08x index:%d offset:%d way:%d data:%08x\n", addr, tag, index, offset, hit_way, data);
-        // }
+        if(MMU_LOG){
+            printf("MMU Dcache read hit addr:0x%08x tag:0x%08x index:%d offset:%d way:%d data:%08x\n", addr, tag, index, offset, hit_way, data);
+        }
         return true;
     }
     return false;

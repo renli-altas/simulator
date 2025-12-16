@@ -48,22 +48,24 @@ using namespace std;
 #define ALU_NUM 2
 #define BRU_NUM 2
 
-#define LOG_START 630694689//12611789
+#define LOG_START 23543130//12611789
 
-#define LOG_ENABLE   
+// #define LOG_ENABLE   
 
 #ifndef LOG_ENABLE
   #define DEBUG 0
   #define LOG (0 && (sim_time >= LOG_START))
   #define MEM_LOG (0 && (sim_time >= LOG_START))
   #define DCACHE_LOG (0 && (sim_time >= LOG_START))
+  #define MMU_LOG (0 && (sim_time >= LOG_START))
 #else
-  #define DEBUG (1 && (sim_time >= 0))
+  #define DEBUG (1 && (sim_time >= 630674689))
   #define LOG (0 && (sim_time >= LOG_START))
   #define MEM_LOG (1 && (sim_time >= LOG_START))
   #define DCACHE_LOG (1 && (sim_time >= LOG_START))
+  #define MMU_LOG (0 && (sim_time >= LOG_START))
 #endif
-#define DEBUG_ADDR 0x807a171c
+#define DEBUG_ADDR 0x80c41bb8
 // #define LOG_START (sim_time >= 394660736 && sim_time <= 394666736)
 // #define DEBUG (1 && sim_time >= 0)
 // #define LOG (0 && LOG_START)

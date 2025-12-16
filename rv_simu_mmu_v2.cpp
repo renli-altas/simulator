@@ -199,18 +199,18 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
 
   uint32_t pte1_addr = (satp << 12) | ((v_addr >> 20) & 0xFFC);
   uint32_t pte1_entry_cache;
-  // if (DCACHE_LOG)
-  // {
-  //   if (dut_flag)
-  //     printf("DUT CPU: ");
-  //   else
-  //     printf("Ref CPU: ");
-  //   printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
-  //   if (dut_flag)
-  //     printf("DUT CPU: ");
-  //   else
-  //     printf("Ref CPU: ");
-  // }
+  if (MMU_LOG)
+  {
+    if (dut_flag)
+      printf("DUT CPU: ");
+    else
+      printf("Ref CPU: ");
+    printf("MMU va2pa v_addr:0x%08x satp:0x%08x pte1_addr:0x%08x\n", v_addr, satp, pte1_addr);
+    if (dut_flag)
+      printf("DUT CPU: ");
+    else
+      printf("Ref CPU: ");
+  }
 
   bool pte1_in_cache =
       dcache_read(pte1_addr, pte1_entry_cache); // 尝试从DCache读取PTE1
@@ -263,26 +263,26 @@ bool va2pa(uint32_t &p_addr, uint32_t v_addr, uint32_t satp, uint32_t type,
     }
 
     p_addr = ((pte1_entry << 2) & 0xFFC00000) | (v_addr & 0x3FFFFF);
-    // if(DCACHE_LOG)
-    // printf("一级页表直连页表 va:0x%08x pa:0x%08x\n", v_addr, p_addr);
+    if(MMU_LOG)
+    printf("一级页表直连页表 va:0x%08x pa:0x%08x\n", v_addr, p_addr);
     return true;
   }
 
   uint32_t pte2_addr =
       ((pte1_entry << 2) & 0xFFFFF000) | ((v_addr >> 10) & 0xFFC);
   uint32_t pte2_entry_cache;
-  // if (DCACHE_LOG)
-  // {
-  //   if (dut_flag)
-  //     printf("DUT CPU:2 ");
-  //   else
-  //     printf("Ref CPU:2 ");
-  //   printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
-  //   if (dut_flag)
-  //     printf("DUT CPU:2 ");
-  //   else
-  //     printf("Ref CPU:2 ");
-  // }
+  if (MMU_LOG)
+  {
+    if (dut_flag)
+      printf("DUT CPU:2 ");
+    else
+      printf("Ref CPU:2 ");
+    printf("MMU va2pa v_addr:0x%08x pte2_addr:0x%08x\n", v_addr, pte2_addr);
+    if (dut_flag)
+      printf("DUT CPU:2 ");
+    else
+      printf("Ref CPU:2 ");
+  }
 
   bool pte2_in_cache =
       dcache_read(pte2_addr, pte2_entry_cache); // 尝试从DCache读取PTE2
