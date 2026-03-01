@@ -49,6 +49,9 @@ constexpr int ROB_BANK_NUM = 8;
 constexpr int ROB_NUM = 128;
 constexpr int ROB_LINE_NUM = 16; // (ROB_NUM / ROB_BANK_NUM)
 
+constexpr int REPLAY_STORE_COUNT_UPPER_BOUND = 32;
+constexpr int REPLAY_STORE_COUNT_LOWER_BOUND = 4;
+
 // Sanity Checks moved to later in the file where all parameters are defined
 
 constexpr int WARMUP = 100000000;

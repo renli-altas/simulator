@@ -18,8 +18,10 @@ typedef struct {
   CsrStatusIO *csr_status;
   DisLsuIO *dis2lsu;
   ExeLsuIO *exe2lsu;
-  MemRespIO *dcache_resp;
-  MemReadyIO *dcache_wready;
+  // MemRespIO *dcache_resp;
+  // MemReadyIO *dcache_wready;
+  
+  DcacheLsuIO *dcache2lsu;
 } LsuIn;
 
 // 输出信号 (发送给各个流水级)
@@ -27,8 +29,9 @@ typedef struct {
   LsuDisIO *lsu2dis;
   LsuRobIO *lsu2rob;
   LsuExeIO *lsu2exe;
-  MemReqIO *dcache_req;
-  MemReqIO *dcache_wreq;
+  // MemReqIO *dcache_req;
+  // MemReqIO *dcache_wreq;
+  LsuDcacheIO *lsu2dcache;
 } LsuOut;
 
 // STQ 条目结构
@@ -37,6 +40,9 @@ struct StqEntry {
   bool addr_valid;
   bool data_valid;
   bool committed;
+
+  bool done;
+  uint32_t replay; //2位宽 1 mshr retry, 2 conflict retry
 
   uint32_t addr;
   uint32_t p_addr; // Translated Physical Address

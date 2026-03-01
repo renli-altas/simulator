@@ -494,6 +494,114 @@ struct MemRespIO {
   }
 };
 
+
+
+struct LoadReq {
+    wire<1> valid;
+    wire<32> addr;
+    MicroOp uop;
+    size_t req_id;        // 请求ID（用于匹配响应）
+
+    LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
+};
+
+// Store请求结构
+struct StoreReq {
+    wire<1> valid;
+    wire<32> addr;
+    wire<32> data;
+    wire<8> strb;        // 字节掩码
+    StqEntry uop;
+    size_t req_id;
+
+    StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
+};
+
+// Load响应结构
+struct LoadResp {
+    wire<1> valid;
+    wire<32> data;
+    MicroOp uop;
+    size_t req_id;
+    wire<2> replay;           
+    LoadResp() : valid(false), data(0), uop(), req_id(0), replay(0) {}
+};
+
+// Store响应结构
+struct StoreResp {
+    wire<1> valid;
+    wire<2> replay;         
+    size_t req_id;
+
+    StoreResp() : valid(false), replay(0), req_id(0) {}
+};
+
+// 请求端口集合（支持4个Load + 4个Store）
+struct DCacheReqPorts {
+
+    LoadReq load_ports[LSU_LDU_COUNT];
+    StoreReq store_ports[LSU_STA_COUNT];
+
+    void clear() {
+        for (int i = 0; i < LSU_LDU_COUNT; i++) {
+            load_ports[i].valid = false;
+        }
+        for (int i = 0; i < LSU_STA_COUNT; i++) {
+            store_ports[i].valid = false;
+        }
+    }
+};
+
+struct MSHRResp {
+    wire<1> valid;
+    wire<1> type; // 0=Load, 1=Store
+    wire<32> data;
+    MicroOp uop;
+    size_t req_id;
+
+    MSHRResp() : valid(false), type(0), data(0), uop(), req_id(0) {}
+};
+
+// 响应端口集合
+struct DCacheRespPorts {
+    LoadResp load_resps[LSU_LDU_COUNT];
+    StoreResp store_resps[LSU_STA_COUNT];
+    MSHRResp mshr_resp;
+    bool mshr_replay;
+
+    void clear() {
+        for (int i = 0; i < LSU_LDU_COUNT; i++) {
+            load_resps[i].valid = false;
+        }
+        for (int i = 0; i < LSU_STA_COUNT; i++) {
+            store_resps[i].valid = false;
+            store_resps[i].replay = true;
+        }
+        mshr_resp.valid = false;
+        mshr_replay = false;
+    }
+};
+
+struct LsuDcacheIO {
+  DCacheReqPorts req_ports;
+
+  LsuDcacheIO() {
+    req_ports.clear();
+  }
+};
+
+struct DcacheLsuIO
+{
+  DCacheRespPorts resp_ports;
+
+  DcacheLsuIO() {
+    resp_ports.clear();
+  }
+
+};
+
+
+
 struct DcacheControlIO {
 
   wire<1> flush;

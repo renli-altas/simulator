@@ -7,10 +7,16 @@ class AbstractDcache {
 public:
   virtual ~AbstractDcache() {}
 
-  MemReqIO *lsu_req_io = nullptr;
-  MemReqIO *lsu_wreq_io = nullptr;
-  MemRespIO *lsu_resp_io = nullptr;
-  MemReadyIO *lsu_wready_io = nullptr;
+  // Legacy single-request ports (used by SimpleCache)
+  // MemReqIO *lsu_req_io = nullptr;
+  // MemReqIO *lsu_wreq_io = nullptr;
+  // MemRespIO *lsu_resp_io = nullptr;
+  // MemReadyIO *lsu_wready_io = nullptr;
+
+  // Multi-port MSHR/writebuffer protocol ports (used by RealDcache)
+  LsuDcacheIO *lsu2dcache = nullptr;
+  DcacheLsuIO *dcache2lsu = nullptr;
+
   PeripheralModel *peripheral_model = nullptr;
 
   virtual void init() = 0;
