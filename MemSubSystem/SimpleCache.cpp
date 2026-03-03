@@ -1,11 +1,10 @@
 #include "SimpleCache.h"
 #include "PeripheralModel.h"
+#include "PhysMemory.h"
 #include "oracle.h"
 #include <cstdint>
 #include <cstdlib>
 #include <algorithm>
-
-extern uint32_t *p_memory;
 
 // 辅助函数：获取PLRU树中特定位的值
 bool get_plru_bit(uint8_t tree[], int bit_index) {
@@ -160,7 +159,7 @@ void SimpleCache::handle_write_req(const MemReqIO &req) {
   cache_access(req.addr);
 
   uint32_t paddr = req.addr;
-  uint32_t old_val = p_memory[paddr >> 2];
+  uint32_t old_val = pmem_read(paddr);
   uint32_t wdata = req.wdata;
   uint32_t wmask = 0;
   for (int i = 0; i < 4; i++) {
@@ -169,7 +168,7 @@ void SimpleCache::handle_write_req(const MemReqIO &req) {
     }
   }
   uint32_t new_val = (old_val & ~wmask) | (wdata & wmask);
-  p_memory[paddr >> 2] = new_val;
+  pmem_write(paddr, new_val);
 
   if (peripheral_model != nullptr) {
     peripheral_model->on_mem_store_effective(paddr, new_val);
@@ -232,7 +231,7 @@ void SimpleCache::comb() {
   pending_resp.addr = p_addr;
   pending_resp.uop = front.req.uop;
 
-  uint32_t mem_val = p_memory[p_addr >> 2];
+  uint32_t mem_val = pmem_read(p_addr);
   if (p_addr == 0x1fd0e000) {
 #ifdef CONFIG_BPU
     mem_val = sim_time;

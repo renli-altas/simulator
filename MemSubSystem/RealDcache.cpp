@@ -1,12 +1,11 @@
 #include "RealDcache.h"
 #include "PeripheralModel.h"
+#include "PhysMemory.h"
 #include "oracle.h"
 #include "util.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
-
-extern uint32_t *p_memory;
 
 // =============================================================
 // 构造 / init
@@ -14,6 +13,7 @@ extern uint32_t *p_memory;
 
 RealDcache::RealDcache(SimContext *ctx) : ctx(ctx) {
   memset(cache_valid, 0, sizeof(cache_valid));
+  memset(cache_dirty, 0, sizeof(cache_dirty));
   memset(cache_tag,   0, sizeof(cache_tag));
   memset(cache_data,  0, sizeof(cache_data));
   memset(plru_tree,   0, sizeof(plru_tree));
@@ -25,6 +25,7 @@ RealDcache::RealDcache(SimContext *ctx) : ctx(ctx) {
 
 void RealDcache::init() {
   memset(cache_valid, 0, sizeof(cache_valid));
+  memset(cache_dirty, 0, sizeof(cache_dirty));
   memset(cache_tag,   0, sizeof(cache_tag));
   memset(cache_data,  0, sizeof(cache_data));
   memset(plru_tree,   0, sizeof(plru_tree));
@@ -103,18 +104,32 @@ int RealDcache::lookup(uint32_t addr) {
   return -1;
 }
 
-// 选一路替换：更新 tag/valid，并从 p_memory 填充整条 cache_data，
-// 返回被替换的 way。
+// 选一路替换：若被替换行是脏的则先写回内存；然后更新 tag/valid/dirty，
+// 并从 p_memory 填充整条 cache_data，返回被替换的 way。
 int RealDcache::fill(uint32_t addr) {
   int way = select_evict_way(addr);
   int idx = get_index(addr);
+
+  // ── 脏行写回（write-back eviction）────────────────────────────────
+  if (cache_valid[way][idx] && cache_dirty[way][idx]) {
+    // 从 tag + index 重建被替换行的物理基地址
+    uint32_t evict_tag       = cache_tag[way][idx];
+    uint32_t evict_line_base = (evict_tag << (OFFSET_WIDTH + INDEX_WIDTH))
+                             | ((uint32_t)idx << OFFSET_WIDTH);
+    // 通过写缓冲路径将整行写回 p_memory
+    for (int w = 0; w < WORDS_PER_LINE; w++)
+      pmem_write(evict_line_base + (uint32_t)(w << 2), cache_data[way][idx][w]);
+    cache_dirty[way][idx] = false;
+  }
+
   cache_tag  [way][idx] = (uint32_t)get_tag(addr);
   cache_valid[way][idx] = true;
+  cache_dirty[way][idx] = false;  // 新填充行从干净状态开始
 
   // 从 p_memory 填充整条 cache line 的数据
   uint32_t line_base = addr & ~((1u << OFFSET_WIDTH) - 1u);
   for (int w = 0; w < WORDS_PER_LINE; w++)
-    cache_data[way][idx][w] = p_memory[(line_base >> 2) + w];
+    cache_data[way][idx][w] = pmem_read(line_base + (uint32_t)(w << 2));
 
   return way;
 }
@@ -149,25 +164,35 @@ int RealDcache::find_free_wb() const {
   return -1;
 }
 
-// 将写缓冲条目 drain 到 p_memory，并同步更新 cache_data（若该行仍在 cache 中）。
+// 将写缓冲条目 drain：
+// - 若行仍在 cache：写 cache_data 并置脏（write-back）
+// - 若行已被替换 ：直接写 p_memory（替换时已通过写回路径处理过脏位）
 void RealDcache::drain_wb_entry(int idx) {
   if (!wb[idx].valid) return;
   uint32_t paddr   = wb[idx].addr;
-  uint32_t old_val = p_memory[paddr >> 2];
   uint32_t wmask   = 0;
   for (int b = 0; b < 4; b++) {
     if (wb[idx].strb & (1 << b))
       wmask |= (0xFFu << (b * 8));
   }
-  uint32_t new_val = (old_val & ~wmask) | (wb[idx].data & wmask);
-  p_memory[paddr >> 2] = new_val;
-  if (peripheral_model)
-    peripheral_model->on_mem_store_effective(paddr, new_val);
 
-  // 若该 cache line 仍在 cache 中，同步更新 cache_data
   int way = lookup(paddr);
-  if (way >= 0)
-    cache_data[way][get_index(paddr)][get_word_off(paddr)] = new_val;
+  if (way >= 0) {
+    // 行仍在 cache：应用到 cache_data，标记为脏（write-back）
+    int      cache_idx = get_index(paddr);
+    int      word_off  = get_word_off(paddr);
+    uint32_t old_val   = cache_data[way][cache_idx][word_off];
+    uint32_t new_val   = (old_val & ~wmask) | (wb[idx].data & wmask);
+    cache_data[way][cache_idx][word_off] = new_val;
+    cache_dirty[way][cache_idx] = true;
+  } else {
+    // 行已被替换（替换时若脏已写回 p_memory），直接写 p_memory
+    uint32_t old_val = pmem_read(paddr);
+    uint32_t new_val = (old_val & ~wmask) | (wb[idx].data & wmask);
+    pmem_write(paddr, new_val);
+    if (peripheral_model)
+      peripheral_model->on_mem_store_effective(paddr, new_val);
+  }
 
   wb[idx].valid = false;
 }
@@ -185,7 +210,7 @@ uint32_t RealDcache::read_mem_data(uint32_t p_addr) const {
 #endif
   }
   if (p_addr == 0x1fd0e004) return 0;
-  return p_memory[p_addr >> 2];
+  return pmem_read(p_addr);
 }
 
 bool RealDcache::is_difftest_skip_addr(uint32_t p_addr) const {
@@ -338,7 +363,7 @@ void RealDcache::process_store_s2(int port, const PipeS1Entry &s1,
     hit_way = lookup(p_addr);
 
   if (hit_way >= 0) {
-    // 命中：写 cache_data 和 p_memory
+    // 命中：写 cache_data，置脏位（write-back，不直写 p_memory）
     int      idx      = get_index(p_addr);
     int      word_off = get_word_off(p_addr);
     uint32_t old_val  = cache_data[hit_way][idx][word_off];
@@ -349,9 +374,7 @@ void RealDcache::process_store_s2(int port, const PipeS1Entry &s1,
     }
     uint32_t new_val = (old_val & ~wmask) | (req.data & wmask);
     cache_data[hit_way][idx][word_off] = new_val;
-    p_memory[p_addr >> 2] = new_val;
-    if (peripheral_model)
-      peripheral_model->on_mem_store_effective(p_addr, new_val);
+    cache_dirty[hit_way][idx] = true;
     update_plru((uint32_t)idx, hit_way);
 
     resp.store_resps[port].valid  = true;
@@ -470,14 +493,52 @@ void RealDcache::comb() {
   for (int i = 0; i < TOTAL_PORTS; i++)
     pipe_s1_next[i] = {};
 
-  // ── Stage 2：处理上一周期 S1 快照，判断命中/缺失，驱动响应 ─────────
+  // ── Bank conflict 检测 ───────────────────────────────────────────
+  // 优先级：load port 0 > load port 1 > ... > store port 0 > store port 1
+  // MMIO 旁路 cache，不参与 bank 冲突计数
+  bool bank_busy   [BANK_NUM]    = {};
+  bool has_conflict[TOTAL_PORTS] = {};
+
   for (int i = 0; i < LSU_LDU_COUNT; i++) {
-    if (pipe_s1[i].valid)
-      process_load_s2(i, pipe_s1[i], resp);
+    if (!pipe_s1[i].valid || is_mmio(pipe_s1[i].p_addr)) continue;
+    int b = get_bank(pipe_s1[i].p_addr);
+    if (bank_busy[b]) has_conflict[i] = true;
+    else              bank_busy[b]    = true;
   }
   for (int i = 0; i < LSU_STA_COUNT; i++) {
-    if (pipe_s1[LSU_LDU_COUNT + i].valid)
-      process_store_s2(i, pipe_s1[LSU_LDU_COUNT + i], resp);
+    int slot = LSU_LDU_COUNT + i;
+    if (!pipe_s1[slot].valid || is_mmio(pipe_s1[slot].p_addr)) continue;
+    int b = get_bank(pipe_s1[slot].p_addr);
+    if (bank_busy[b]) has_conflict[slot] = true;
+    else              bank_busy[b]       = true;
+  }
+
+  // ── Stage 2：处理上一周期 S1 快照，判断命中/缺失，驱动响应 ─────────
+  for (int i = 0; i < LSU_LDU_COUNT; i++) {
+    if (!pipe_s1[i].valid) continue;
+    if (has_conflict[i]) {
+      // Bank conflict：立即返回 replay=1，等待下一周期重发
+      LoadResp &lr  = resp.load_resps[i];
+      lr.valid  = true;
+      lr.replay = 1;
+      lr.req_id = pipe_s1[i].load_req.req_id;
+      lr.uop    = pipe_s1[i].load_req.uop;
+    } else {
+      process_load_s2(i, pipe_s1[i], resp);
+    }
+  }
+  for (int i = 0; i < LSU_STA_COUNT; i++) {
+    int slot = LSU_LDU_COUNT + i;
+    if (!pipe_s1[slot].valid) continue;
+    if (has_conflict[slot]) {
+      // Bank conflict：立即返回 replay=1，等待下一周期重发
+      StoreResp &sr  = resp.store_resps[i];
+      sr.valid  = true;
+      sr.replay = 1;
+      sr.req_id = pipe_s1[slot].store_req.req_id;
+    } else {
+      process_store_s2(i, pipe_s1[slot], resp);
+    }
   }
 
   // ── Stage 1：接收新请求，读取 tag/data 阵列，写入 pipe_s1_next ────

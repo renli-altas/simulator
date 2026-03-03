@@ -43,9 +43,11 @@ CXXSRC := $(shell find ./back-end -name "*.cpp") \
           ./MemSubSystem/MemSubsystem.cpp \
           ./MemSubSystem/SimpleCache.cpp \
           ./MemSubSystem/PtwWalker.cpp \
+          ./MemSubSystem/RealDcache.cpp \
           $(shell find $(FRONT_DIR) -name "*.cpp") \
           $(shell find ./diff -name "*.cpp") \
           ./main.cpp \
+          ./PhysMemory.cpp \
           ./rv_simu_mmu_v2.cpp
 
 # Object Files

@@ -1,6 +1,7 @@
 #include "include/ICacheTop.h"
 #include "../front_module.h"
 #include "../frontend.h"
+#include "PhysMemory.h"
 #include "PtwMemPort.h"
 #include "PtwWalkPort.h"
 #include "RISCV.h"
@@ -13,11 +14,10 @@
 #include <iostream>
 
 // External dependencies
-extern uint32_t *p_memory;
 extern ICache icache; // Defined in icache.cpp
 
 namespace {
-uint32_t icache_coherent_read(uint32_t p_addr) { return p_memory[p_addr >> 2]; }
+uint32_t icache_coherent_read(uint32_t p_addr) { return pmem_read(p_addr); }
 
 class IcacheBlockingPtwPort : public PtwMemPort {
 public:
@@ -186,7 +186,7 @@ void TrueICacheTop::comb() {
       uint32_t cacheline_base_addr = icache_hw.io.out.mem_req_addr & mask;
       for (int i = 0; i < ICACHE_LINE_SIZE / 4; i++) {
         icache_hw.io.in.mem_resp_data[i] =
-            p_memory[cacheline_base_addr / 4 + i];
+            pmem_read(cacheline_base_addr + (uint32_t)(i << 2));
       }
     }
   } else {
@@ -399,7 +399,7 @@ void SimpleICacheTop::comb() {
       }
 
       out->page_fault_inst[i] = false;
-      out->fetch_group[i] = p_memory[p_addr / 4];
+      out->fetch_group[i] = pmem_read(p_addr);
 
       if (DEBUG_PRINT) {
         uint32_t satp = in->csr_status ? static_cast<uint32_t>(in->csr_status->satp) : 0;

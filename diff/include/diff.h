@@ -1,4 +1,5 @@
 #pragma once
+#include "PhysMemory.h"
 #include "ref.h"
 #include "config.h"
 #include <cstdint>
@@ -6,7 +7,6 @@
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 
 extern CPU_state dut_cpu;
-extern uint32_t *p_memory;
 class SimContext;
 
 void init_difftest(int);

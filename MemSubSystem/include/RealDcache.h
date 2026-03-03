@@ -41,6 +41,7 @@ public:
   // 结构参数
   static constexpr int MSHR_NUM        = 16;
   static constexpr int WB_NUM          = 16;
+  static constexpr int BANK_NUM        = 4;    // cache 数据阵列 bank 数（2 的幂）
 
   // S1->S2 流水线总槽数（每个 load/store 端口各占一个槽）
   static constexpr int TOTAL_PORTS     = LSU_LDU_COUNT + LSU_STA_COUNT;
@@ -54,9 +55,10 @@ public:
 private:
   SimContext *ctx;
 
-  // ── Cache Tag / Valid / Data 阵列 ──────────────────────────────────
+  // ── Cache Tag / Valid / Dirty / Data 阵列 ─────────────────────────
   uint32_t cache_tag  [WAY_NUM][1 << INDEX_WIDTH];
   bool     cache_valid[WAY_NUM][1 << INDEX_WIDTH];
+  bool     cache_dirty[WAY_NUM][1 << INDEX_WIDTH];  // write-back 脏位
   uint32_t cache_data [WAY_NUM][1 << INDEX_WIDTH][WORDS_PER_LINE];
   uint8_t  plru_tree  [1 << INDEX_WIDTH][(WAY_NUM - 1 + 7) / 8];
 
@@ -108,6 +110,10 @@ private:
   }
   int get_word_off(uint32_t addr) const {
     return (addr & ((1 << OFFSET_WIDTH) - 1)) >> 2;
+  }
+  // 数据阵列 bank 由 word offset 低位决定（列交织）
+  int get_bank    (uint32_t addr) const {
+    return (addr >> 2) & (BANK_NUM - 1);
   }
   bool is_mmio(uint32_t addr) const {
     return ((addr & UART_ADDR_MASK) == UART_ADDR_BASE) ||

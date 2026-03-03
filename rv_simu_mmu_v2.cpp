@@ -1,6 +1,7 @@
 #include "AbstractLsu.h"
 #include "BackTop.h"
 #include "Csr.h"
+#include "PhysMemory.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "diff.h"
@@ -11,8 +12,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-
-uint32_t *p_memory;
 
 void SimCpu::commit_sync(InstInfo *inst) {
   BackTop *back = &this->back;

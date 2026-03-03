@@ -1,5 +1,6 @@
 #include "RealLsu.h"
 #include "AbstractLsu.h"
+#include "PhysMemory.h"
 #include "TlbMmu.h"
 #include "config.h"
 #include "util.h"
@@ -7,9 +8,6 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
-
-// 外部辅助函数声明
-extern uint32_t *p_memory;
 static constexpr int64_t REQ_WAIT_RETRY = 0x7FFFFFFFFFFFFFFF;
 static constexpr int64_t REQ_WAIT_SEND = 0x7FFFFFFFFFFFFFFD;
 static constexpr int64_t REQ_WAIT_RESP = 0x7FFFFFFFFFFFFFFE;
@@ -1156,7 +1154,7 @@ RealLsu::StoreForwardResult
 RealLsu::check_store_forward(uint32_t p_addr, const MicroOp &load_uop)
 {
 
-    uint32_t current_word = p_memory[p_addr >> 2];
+    uint32_t current_word = pmem_read(p_addr);
     bool hit_any = false;
 
     int ptr = this->stq_head;
@@ -1219,7 +1217,7 @@ StqEntry RealLsu::get_stq_entry(int stq_idx)
 uint32_t RealLsu::coherent_read(uint32_t p_addr)
 {
     // 1. 基准值：读物理内存 (假设 p_addr 已对齐到 4)
-    uint32_t data = p_memory[p_addr >> 2];
+    uint32_t data = pmem_read(p_addr);
 
     // 2. 遍历 STQ 进行覆盖 (Coherent Check)
     int ptr = stq_head;
