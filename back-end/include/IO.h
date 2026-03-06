@@ -5,7 +5,6 @@
 #include "util.h"
 #include <cstdint>
 #include <sys/types.h>
-
 struct DecRenIO {
 
   InstInfo uop[DECODE_WIDTH];
@@ -224,6 +223,10 @@ struct RobBroadcastIO {
   wire<32> trap_val;
   wire<32> pc;
 
+  // ROB 队头的 rob_idx，供 LSU 判断 MMIO load 何时成为全机最老指令
+  wire<ROB_IDX_WIDTH> head_rob_idx;
+  wire<1> head_valid;
+
   RobBroadcastIO() {
     flush = {};
     mret = {};
@@ -239,6 +242,8 @@ struct RobBroadcastIO {
     interrupt = {};
     trap_val = {};
     pc = {};
+    head_rob_idx = {};
+    head_valid = {};
   }
 };
 
@@ -493,8 +498,60 @@ struct MemRespIO {
     uop = {};
   }
 };
+struct PeripheralInIO{
+  wire<1> is_mmio;
+  wire<1> wen;
+  wire<32> mmio_addr;
+  wire<32> mmio_wdata;
+  wire<8> mmio_wstrb;
+  MicroOp uop;
 
+  PeripheralInIO() {
+    is_mmio = {};
+    mmio_addr = {};
+    mmio_wdata = {};
+    mmio_wstrb = {};
+    uop = {};
+  }
+};
+struct PeripheralOutIO{
+  wire<1> is_mmio;
+  wire<32> mmio_rdata;
+  MicroOp uop;
 
+  PeripheralOutIO() {
+    is_mmio = {};
+    mmio_rdata = {};
+    uop = {};
+  }
+
+};
+
+struct PeripheralIO {
+  PeripheralInIO in;
+  PeripheralOutIO out;
+};
+
+struct LoadReq {
+    wire<1> valid;
+    wire<32> addr;
+    MicroOp uop;
+    size_t req_id;        // 请求ID（用于匹配响应）
+
+    LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
+};
+
+// Store请求结构
+struct StoreReq {
+    wire<1> valid;
+    wire<32> addr;
+    wire<32> data;
+    wire<8> strb;        // 字节掩码
+    StqEntry uop;
+    size_t req_id;
+
+    StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
+};
 
 struct LoadReq {
     wire<1> valid;
@@ -523,7 +580,7 @@ struct LoadResp {
     wire<32> data;
     MicroOp uop;
     size_t req_id;
-    wire<2> replay;           
+    wire<2> replay;
     LoadResp() : valid(false), data(0), uop(), req_id(0), replay(0) {}
 };
 
@@ -551,23 +608,18 @@ struct DCacheReqPorts {
         }
     }
 };
+struct ReplayResp{
+    wire<2> replay;
+    size_t replay_addr;
 
-struct MSHRResp {
-    wire<1> valid;
-    wire<1> type; // 0=Load, 1=Store
-    wire<32> data;
-    MicroOp uop;
-    size_t req_id;
-
-    MSHRResp() : valid(false), type(0), data(0), uop(), req_id(0) {}
+    ReplayResp() : replay(0), replay_addr(0) {}
 };
 
 // 响应端口集合
 struct DCacheRespPorts {
     LoadResp load_resps[LSU_LDU_COUNT];
     StoreResp store_resps[LSU_STA_COUNT];
-    MSHRResp mshr_resp;
-    bool mshr_replay;
+    ReplayResp replay_resp;
 
     void clear() {
         for (int i = 0; i < LSU_LDU_COUNT; i++) {
@@ -575,10 +627,9 @@ struct DCacheRespPorts {
         }
         for (int i = 0; i < LSU_STA_COUNT; i++) {
             store_resps[i].valid = false;
-            store_resps[i].replay = true;
+            store_resps[i].replay = 0;
         }
-        mshr_resp.valid = false;
-        mshr_replay = false;
+        replay_resp = ReplayResp();
     }
 };
 
@@ -599,7 +650,6 @@ struct DcacheLsuIO
   }
 
 };
-
 
 
 struct DcacheControlIO {

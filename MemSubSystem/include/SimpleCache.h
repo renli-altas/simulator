@@ -58,6 +58,13 @@ public:
   int MISS_LATENCY;
 
   SimContext *ctx;
+  MemReqIO *lsu_req_io = nullptr;
+  MemReqIO *lsu_wreq_io = nullptr;
+  MemRespIO *lsu_resp_io = nullptr;
+  MemReadyIO *lsu_wready_io = nullptr;
+
+  
+  PeripheralModel *peripheral_model = nullptr;
   int cache_select_evict(uint32_t addr);
   void cache_evict(uint32_t addr);
   int cache_access(uint32_t addr);

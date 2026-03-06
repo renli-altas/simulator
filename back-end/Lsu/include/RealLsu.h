@@ -18,6 +18,8 @@ private:
     bool sent;
     bool waiting_resp;
     bool tlb_retry;
+    bool is_mmio_wait;  // 地址已翻译为 MMIO，等待到达 ROB 队头后再发送
+    uint8_t replay_priority;
     MicroOp uop;
   };
 

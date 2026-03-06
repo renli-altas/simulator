@@ -105,6 +105,19 @@ void Rob::comb_commit() {
   out.rob_bcast->page_fault_inst = out.rob_bcast->page_fault_load =
       out.rob_bcast->page_fault_store = out.rob_bcast->illegal_inst = false;
 
+  // 广播队头 rob_idx，供 LSU 检测 MMIO load 何时成为全机最老指令
+  out.rob_bcast->head_valid = false;
+  out.rob_bcast->head_rob_idx = 0;
+  if (!is_empty()) {
+    for (int i = 0; i < ROB_BANK_NUM; i++) {
+      if (entry[i][deq_ptr].valid) {
+        out.rob_bcast->head_valid = true;
+        out.rob_bcast->head_rob_idx = make_rob_idx(deq_ptr, i);
+        break;
+      }
+    }
+  }
+
   wire<1> commit = (!is_empty() && !in.dec_bcast->mispred);
 
   // 检查 BANK 的同一行是否都已完成

@@ -42,7 +42,8 @@ struct StqEntry {
   bool committed;
 
   bool done;
-  uint32_t replay; //2位宽 1 mshr retry, 2 conflict retry
+  bool is_mmio;
+  uint8_t replay_priority; // 0 = no replay, 1 = low priority, 2 = high priority
 
   uint32_t addr;
   uint32_t p_addr; // Translated Physical Address
@@ -65,6 +66,7 @@ public:
   // IO 端口
   LsuIn in;
   LsuOut out;
+  PeripheralIO peripheral_io; // 供外设访问的 IO 端口
   SimContext *ctx;
   PtwMemPort *ptw_mem_port = nullptr;
   PtwWalkPort *ptw_walk_port = nullptr;
