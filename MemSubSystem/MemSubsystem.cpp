@@ -1,7 +1,8 @@
 #include "MemSubsystem.h"
-#include "SimpleCache.h"
-#include <memory>
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PTW port adapters (unchanged from previous version)
+// ─────────────────────────────────────────────────────────────────────────────
 class MemSubsystemPtwMemPortAdapter : public PtwMemPort {
 public:
   MemSubsystemPtwMemPortAdapter(MemSubsystem *owner, MemSubsystem::PtwClient c)
@@ -37,6 +38,9 @@ private:
   MemSubsystem::PtwClient client = MemSubsystem::PtwClient::DTLB;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PTW helper implementations
+// ─────────────────────────────────────────────────────────────────────────────
 MemPtwBlock::Client MemSubsystem::to_block_client(PtwClient c) {
   return (c == MemSubsystem::PtwClient::DTLB) ? MemPtwBlock::Client::DTLB
                                                : MemPtwBlock::Client::ITLB;
@@ -51,7 +55,8 @@ void MemSubsystem::refresh_ptw_client_outputs() {
         ptw_block.client_resp_data(to_block_client(client));
     ptw_walk_resp_ios[i].valid =
         ptw_block.walk_client_resp_valid(to_block_client(client));
-    ptw_walk_resp_ios[i].resp = ptw_block.walk_client_resp(to_block_client(client));
+    ptw_walk_resp_ios[i].resp =
+        ptw_block.walk_client_resp(to_block_client(client));
   }
 }
 
@@ -98,8 +103,10 @@ void MemSubsystem::ptw_walk_flush(PtwClient client) {
   refresh_ptw_client_outputs();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Constructor / Destructor
+// ─────────────────────────────────────────────────────────────────────────────
 MemSubsystem::MemSubsystem(SimContext *ctx) : ctx(ctx) {
-  dcache = std::make_unique<SimpleCache>(ctx);
   ptw_block.bind_context(ctx);
   dtlb_ptw_port_inst =
       std::make_unique<MemSubsystemPtwMemPortAdapter>(this, PtwClient::DTLB);
@@ -109,112 +116,142 @@ MemSubsystem::MemSubsystem(SimContext *ctx) : ctx(ctx) {
       std::make_unique<MemSubsystemPtwWalkPortAdapter>(this, PtwClient::DTLB);
   itlb_walk_port_inst =
       std::make_unique<MemSubsystemPtwWalkPortAdapter>(this, PtwClient::ITLB);
-  dtlb_ptw_port = dtlb_ptw_port_inst.get();
-  itlb_ptw_port = itlb_ptw_port_inst.get();
+  dtlb_ptw_port  = dtlb_ptw_port_inst.get();
+  itlb_ptw_port  = itlb_ptw_port_inst.get();
   dtlb_walk_port = dtlb_walk_port_inst.get();
   itlb_walk_port = itlb_walk_port_inst.get();
 }
 
 MemSubsystem::~MemSubsystem() = default;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// init — connect wires and initialise all sub-modules.
+// ─────────────────────────────────────────────────────────────────────────────
 void MemSubsystem::init() {
-  Assert(lsu_req_io != nullptr && "MemSubsystem: lsu_req_io is not connected");
-  Assert(lsu_wreq_io != nullptr &&
-         "MemSubsystem: lsu_wreq_io is not connected");
-  Assert(lsu_resp_io != nullptr &&
-         "MemSubsystem: lsu_resp_io is not connected");
-  Assert(lsu_wready_io != nullptr &&
-         "MemSubsystem: lsu_wready_io is not connected");
-  Assert(csr != nullptr && "MemSubsystem: csr is not connected");
+  Assert(lsu2dcache != nullptr && "MemSubsystem: lsu2dcache is not connected");
+  Assert(dcache2lsu  != nullptr && "MemSubsystem: dcache2lsu is not connected");
+  Assert(csr    != nullptr && "MemSubsystem: csr is not connected");
   Assert(memory != nullptr && "MemSubsystem: memory is not connected");
 
-  peripheral.csr = csr;
+  // ── PeripheralModel ────────────────────────────────────────────────────────
+  peripheral.csr    = csr;
   peripheral.memory = memory;
   peripheral.init();
 
-  dcache->lsu_req_io = &dcache_req_mux;
-  dcache->lsu_wreq_io = &dcache_wreq_mux;
-  dcache->lsu_resp_io = &dcache_resp_raw;
-  dcache->lsu_wready_io = &dcache_wready_raw;
-  dcache->peripheral_model = &peripheral;
+  // ── Wire RealDcache IO ports ───────────────────────────────────────────────
+  // External LSU interface (pointers owned by caller; stable after init).
+  dcache_.lsu2dcache  = lsu2dcache;
+  dcache_.dcache2lsu  = dcache2lsu;
+
+  // Internal MSHR ↔ DCache wires: RealDcache reads/writes MSHR IO structs
+  // directly via pointers, keeping the connection zero-copy.
+  dcache_.mshr2dcache = &mshr_.out.mshr2dcache;  // MSHR output → DCache input
+  dcache_.dcache2mshr = &mshr_.in.dcachemshr;    // DCache output → MSHR input
+
+  // Internal WriteBuffer ↔ DCache wires.
+  dcache_.wb2dcache   = &wb_.out.wbdcache;       // WB output → DCache input
+  dcache_.dcache2wb   = &wb_.in.dcachewb;        // DCache output → WB input
+
+  // ── Initialise sub-modules ─────────────────────────────────────────────────
+  mshr_.init();
+  wb_.init();
+  dcache_.init();
 
   ptw_block.init();
-  resp_route_block.init();
-  ptw_mem_resp_ios = {};
+  ptw_mem_resp_ios  = {};
   ptw_walk_resp_ios = {};
   refresh_ptw_client_outputs();
 
-  dcache_req_mux = {};
-  dcache_wreq_mux = {};
-  dcache_resp_raw = {};
-  dcache_wready_raw = {};
-  *lsu_resp_io = {};
-  *lsu_wready_io = {};
-
-  dcache->init();
+  mshr_axi_in  = {};
+  mshr_axi_out = {};
+  wb_axi_in    = {};
+  wb_axi_out   = {};
 }
 
-void MemSubsystem::on_commit_store(uint32_t paddr, uint32_t data, uint8_t func3) {
+// ─────────────────────────────────────────────────────────────────────────────
+// on_commit_store — side-effects when a store retires from the ROB.
+// ─────────────────────────────────────────────────────────────────────────────
+void MemSubsystem::on_commit_store(uint32_t paddr, uint32_t data,
+                                   uint8_t func3) {
   peripheral.on_commit_store(paddr, data, func3);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// comb — combinational evaluation for one cycle.
+//
+// Ordering:
+//   1. PTW: resolve pending page-table reads directly from memory[].
+//   2. MSHR Phase-1  : comb_outputs()  — fill / free count from cur state.
+//   3. WB   Phase-1  : comb_outputs()  — full flag / bypass results.
+//   4. RealDcache    : comb()          — reads MSHR/WB outputs, writes inputs.
+//   5. Bridge AXI + WB→MSHR ready signal; run mshr_.comb_inputs().
+//   6. Bridge MSHR eviction → WB + AXI write channel; run wb_.comb_inputs().
+//   7. Export updated AXI outputs for the caller.
+// ─────────────────────────────────────────────────────────────────────────────
 void MemSubsystem::comb() {
-  // 子模块按组合逻辑顺序推进。
+  // ── PTW ───────────────────────────────────────────────────────────────────
   ptw_block.comb_select_walk_owner();
-
-  // Default outputs every cycle.
-  *lsu_resp_io = {};
-  dcache_req_mux = {};
-  dcache_wreq_mux = {};
-
-  // Pass write channel (currently only LSU issues writes).
-  dcache_wreq_mux = *lsu_wreq_io;
-
-  uint32_t ptw_walk_read_addr = 0;
-  bool issue_ptw_walk_read = ptw_block.walk_read_req(ptw_walk_read_addr);
-
-  bool has_ptw_dtlb = ptw_block.has_pending_mem_req(MemPtwBlock::Client::DTLB);
-  bool has_ptw_itlb = ptw_block.has_pending_mem_req(MemPtwBlock::Client::ITLB);
-  uint32_t ptw_dtlb_addr = has_ptw_dtlb
-                               ? ptw_block.pending_mem_addr(
-                                     MemPtwBlock::Client::DTLB)
-                               : 0;
-  uint32_t ptw_itlb_addr = has_ptw_itlb
-                               ? ptw_block.pending_mem_addr(
-                                     MemPtwBlock::Client::ITLB)
-                               : 0;
-
-  auto arb_ret = read_arb_block.arbitrate(
-      lsu_req_io, issue_ptw_walk_read, ptw_walk_read_addr, has_ptw_dtlb,
-      ptw_dtlb_addr, has_ptw_itlb, ptw_itlb_addr);
   ptw_block.count_wait_cycles();
 
-  if (arb_ret.granted) {
-    dcache_req_mux = arb_ret.req;
+  // Resolve pending single-address PTW mem reads directly from memory[].
+  // (PTW bypasses RealDcache to keep the interface simple; page-table data
+  //  is always coherent in memory[] because stores go through on_commit_store.)
+  for (int i = 0; i < static_cast<int>(MemPtwBlock::Client::NUM_CLIENTS); i++) {
+    auto client = static_cast<MemPtwBlock::Client>(i);
+    if (ptw_block.has_pending_mem_req(client)) {
+      uint32_t paddr = ptw_block.pending_mem_addr(client);
+      uint32_t data  = memory[paddr >> 2];
+      ptw_block.on_mem_read_granted(client);
+      ptw_block.on_mem_resp_client(client, data);
+    }
   }
 
-  if (arb_ret.owner == MemReadArbBlock::Owner::LSU) {
-    resp_route_block.enqueue_owner(MemRespRouteBlock::Owner::LSU);
-  } else if (arb_ret.owner == MemReadArbBlock::Owner::PTW_WALK) {
-    resp_route_block.enqueue_owner(MemRespRouteBlock::Owner::PTW_WALK);
-    ptw_block.on_walk_read_granted();
-  } else if (arb_ret.owner == MemReadArbBlock::Owner::PTW_DTLB) {
-    ptw_block.on_mem_read_granted(MemPtwBlock::Client::DTLB);
-    resp_route_block.enqueue_owner(MemRespRouteBlock::Owner::PTW_DTLB);
-  } else if (arb_ret.owner == MemReadArbBlock::Owner::PTW_ITLB) {
-    ptw_block.on_mem_read_granted(MemPtwBlock::Client::ITLB);
-    resp_route_block.enqueue_owner(MemRespRouteBlock::Owner::PTW_ITLB);
+  // Resolve PTW walk reads (L1 → optionally L2) directly from memory[].
+  // The loop completes at most two iterations (one per page-table level).
+  {
+    uint32_t walk_addr = 0;
+    while (ptw_block.walk_read_req(walk_addr)) {
+      uint32_t data = memory[walk_addr >> 2];
+      ptw_block.on_walk_read_granted();
+      ptw_block.on_walk_mem_resp(data);
+    }
   }
 
-  dcache->comb();
-
-  // Write ready backpressure directly reflects DCache.
-  *lsu_wready_io = dcache_wready_raw;
-
-  (void)resp_route_block.route_resp(dcache_resp_raw, lsu_resp_io, &ptw_block);
   refresh_ptw_client_outputs();
+
+  // ── RealDcache + MSHR + WriteBuffer ──────────────────────────────────────
+  // Phase 1: compute stable outputs from cur state so DCache can read them.
+  mshr_.comb_outputs();
+  wb_.comb_outputs();
+
+  // Phase 2: RealDcache pipeline (S1 + S2).
+  //   Reads : mshr_.out.mshr2dcache, wb_.out.wbdcache  (via dcache_ pointers)
+  //   Writes: mshr_.in.dcachemshr,   wb_.in.dcachewb   (via dcache_ pointers)
+  dcache_.comb();
+
+  // Phase 3a: inject AXI read-channel inputs and WB→MSHR ready signal, then
+  //           run MSHR comb_inputs (may generate a fill → dcache and an
+  //           eviction push → WriteBuffer).
+  mshr_.in.axi_in  = mshr_axi_in;
+  mshr_.in.wbmshr  = wb_.out.wbmshr;   // WB ready flag (set in Phase 1)
+  mshr_.comb_inputs();
+
+  // Phase 3b: inject AXI write-channel inputs and MSHR eviction, then run
+  //           WriteBuffer comb_inputs (drains evictions onto AXI).
+  wb_.in.axi_in   = wb_axi_in;
+  wb_.in.mshrwb   = mshr_.out.mshrwb;  // eviction push (set in Phase 3a)
+  wb_.comb_inputs();
+
+  // Phase 4: expose updated AXI outputs to the caller.
+  mshr_axi_out = mshr_.out.axi_out;
+  wb_axi_out   = wb_.out.axi_out;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// seq — advance all state on the simulated clock edge.
+// ─────────────────────────────────────────────────────────────────────────────
 void MemSubsystem::seq() {
-  dcache->seq();
+  dcache_.seq();
+  mshr_.seq();
+  wb_.seq();
 }

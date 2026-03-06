@@ -34,26 +34,7 @@ typedef struct {
   LsuDcacheIO *lsu2dcache;
 } LsuOut;
 
-// STQ 条目结构
-struct StqEntry {
-  bool valid;
-  bool addr_valid;
-  bool data_valid;
-  bool committed;
-
-  bool done;
-  bool is_mmio;
-  uint8_t replay_priority; // 0 = no replay, 1 = low priority, 2 = high priority
-
-  uint32_t addr;
-  uint32_t p_addr; // Translated Physical Address
-  uint32_t data;
-
-  uint32_t func3;
-  mask_t br_mask;
-  uint32_t rob_idx;
-  uint32_t rob_flag;
-};
+// StqEntry is defined in IO.h (included above).
 
 // ==========================================
 // LSU Backend 基类

@@ -12,7 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MSHRState — the latched state of the MSHR (cur/nxt pair).
 // ─────────────────────────────────────────────────────────────────────────────
-MSHREntry mshr_entries_nxt[MSHR_ENTRIES];
+extern MSHREntry mshr_entries_nxt[MSHR_ENTRIES];
 
 struct MSHR_STATE{
     bool fill; // whether a fill response is expected this cycle (for auto-consume in seq())

@@ -2,6 +2,7 @@
 
 #include "AbstractDcache.h"
 #include "IO.h"
+#include "PeripheralModel.h"
 #include "types.h"
 #include <cstdint>
 #include <cstring>

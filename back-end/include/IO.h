@@ -532,42 +532,38 @@ struct PeripheralIO {
   PeripheralOutIO out;
 };
 
+// STQ 条目结构（定义在此以供 StoreReq 使用）
+struct StqEntry {
+  bool valid        = false;
+  bool addr_valid   = false;
+  bool data_valid   = false;
+  bool committed    = false;
+  bool done         = false;
+  bool is_mmio      = false;
+  uint8_t replay_priority = 0;
+  uint32_t addr     = 0;
+  uint32_t p_addr   = 0;
+  uint32_t data     = 0;
+  uint32_t func3    = 0;
+  mask_t   br_mask  = {};
+  uint32_t rob_idx  = 0;
+  uint32_t rob_flag = 0;
+};
+
 struct LoadReq {
     wire<1> valid;
     wire<32> addr;
     MicroOp uop;
-    size_t req_id;        // 请求ID（用于匹配响应）
-
-    LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
-};
-
-// Store请求结构
-struct StoreReq {
-    wire<1> valid;
-    wire<32> addr;
-    wire<32> data;
-    wire<8> strb;        // 字节掩码
-    StqEntry uop;
     size_t req_id;
 
-    StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
-};
-
-struct LoadReq {
-    wire<1> valid;
-    wire<32> addr;
-    MicroOp uop;
-    size_t req_id;        // 请求ID（用于匹配响应）
-
     LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
 };
 
-// Store请求结构
 struct StoreReq {
     wire<1> valid;
     wire<32> addr;
     wire<32> data;
-    wire<8> strb;        // 字节掩码
+    wire<8> strb;
     StqEntry uop;
     size_t req_id;
 

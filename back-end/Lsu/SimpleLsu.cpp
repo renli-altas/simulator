@@ -103,12 +103,9 @@ void SimpleLsu::comb_recv() {
   mmu->set_ptw_mem_port(ptw_mem_port);
   mmu->set_ptw_walk_port(ptw_walk_port);
 
-  Assert(out.dcache_req != nullptr && "out.dcache_req is not connected");
-  Assert(out.dcache_wreq != nullptr && "out.dcache_wreq is not connected");
-  Assert(in.dcache_resp != nullptr && "in.dcache_resp is not connected");
-  Assert(in.dcache_wready != nullptr && "in.dcache_wready is not connected");
-  *out.dcache_req = {};
-  *out.dcache_wreq = {};
+  Assert(out.lsu2dcache != nullptr && "out.lsu2dcache is not connected");
+  Assert(in.dcache2lsu  != nullptr && "in.dcache2lsu is not connected");
+  out.lsu2dcache->req_ports.clear();
 
   // Retry STA address translations that previously returned MMU::RETRY.
   progress_pending_sta_addr();
@@ -151,12 +148,10 @@ void SimpleLsu::comb_recv() {
     if (entry.uop.cplt_time == REQ_WAIT_SEND) {
       MicroOp req_uop = entry.uop;
       req_uop.rob_idx = i; // Local token: LDQ index
-      out.dcache_req->en = true;
-      out.dcache_req->wen = false;
-      out.dcache_req->addr = entry.uop.diag_val;
-      out.dcache_req->wdata = 0;
-      out.dcache_req->wstrb = 0;
-      out.dcache_req->uop = req_uop;
+      auto &lp = out.lsu2dcache->req_ports.load_ports[0];
+      lp.valid = true;
+      lp.addr  = entry.uop.diag_val;
+      lp.uop   = req_uop;
       entry.sent = true;
       entry.waiting_resp = true;
       entry.uop.cplt_time = REQ_WAIT_RESP;
@@ -177,19 +172,20 @@ void SimpleLsu::comb_load_res() {
     out.lsu2exe->wb_req[i].valid = false;
   }
 
-  if (in.dcache_resp->valid) {
-    int idx = in.dcache_resp->uop.rob_idx;
+  const auto &lr = in.dcache2lsu->resp_ports.load_resps[0];
+  if (lr.valid) {
+    int idx = lr.uop.rob_idx;
     if (idx >= 0 && idx < MAX_INFLIGHT_LOADS) {
       auto &entry = ldq[idx];
       if (entry.valid && entry.sent && entry.waiting_resp) {
         if (!entry.killed) {
-          uint32_t raw = in.dcache_resp->data;
+          uint32_t raw = lr.data;
           uint32_t res =
-              extract_data(raw, in.dcache_resp->addr, entry.uop.func3);
+              extract_data(raw, entry.uop.diag_val, entry.uop.func3);
           entry.uop.result = res;
-          entry.uop.difftest_skip = in.dcache_resp->uop.difftest_skip;
+          entry.uop.difftest_skip = lr.uop.difftest_skip;
           entry.uop.cplt_time = sim_time;
-          entry.uop.is_cache_miss = in.dcache_resp->uop.is_cache_miss;
+          entry.uop.is_cache_miss = lr.uop.is_cache_miss;
           finished_loads.push_back(entry.uop);
         } else {
 
@@ -381,11 +377,11 @@ void SimpleLsu::drive_store_write_req() {
     break;
   }
 
-  out.dcache_wreq->en = true;
-  out.dcache_wreq->wen = true;
-  out.dcache_wreq->addr = head.p_addr;
-  out.dcache_wreq->wdata = wdata;
-  out.dcache_wreq->wstrb = wstrb;
+  auto &sp = out.lsu2dcache->req_ports.store_ports[0];
+  sp.valid = true;
+  sp.addr  = head.p_addr;
+  sp.data  = wdata;
+  sp.strb  = wstrb;
 }
 
 void SimpleLsu::handle_global_flush() {
@@ -710,7 +706,7 @@ void SimpleLsu::seq() {
 
   consume_stq_alloc_reqs(push_count);
   consume_ldq_alloc_reqs();
-  bool write_fire = out.dcache_wreq->en && in.dcache_wready->ready;
+  bool write_fire = out.lsu2dcache->req_ports.store_ports[0].valid;
   retire_stq_head_if_ready(write_fire, pop_count);
   commit_stores_from_rob();
 

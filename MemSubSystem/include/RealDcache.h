@@ -84,23 +84,19 @@ struct S1S2Reg {
 // ─────────────────────────────────────────────────────────────────────────────
 class RealDcache : public AbstractDcache {
 public:
-    // ic: pointer to the shared AXI interconnect (owned by the parent simulator).
-    // explicit RealDcache(axi_interconnect::AXI_Interconnect *ic);
-
     void init() override;
     void comb() override;
     void seq()  override;
 
-private:
-    // axi_interconnect::AXI_Interconnect *ic_;
-    MSHRDcacheIO* mshr2dcache;
-    DcacheMSHRIO* dcache2mshr;
+    // IO ports — set by the owning module (e.g. MemSubsystem) before init().
+    LsuDcacheIO  *lsu2dcache  = nullptr;  // LSU → DCache requests
+    DcacheLsuIO  *dcache2lsu  = nullptr;  // DCache → LSU responses
+    MSHRDcacheIO *mshr2dcache = nullptr;  // MSHR fill/free → DCache
+    DcacheMSHRIO *dcache2mshr = nullptr;  // DCache miss alloc → MSHR
+    DcacheWBIO   *dcache2wb   = nullptr;  // DCache bypass/merge req → WB
+    WBDcacheIO   *wb2dcache   = nullptr;  // WB bypass/merge resp → DCache
 
-    DcacheWBIO* dcache2wb;
-    WBDcacheIO* wb2dcache;
-    
-    LsuDcacheIO *lsu2dcache = nullptr;
-    DcacheLsuIO *dcache2lsu = nullptr;
+private:
 
 
     // // Sub-modules

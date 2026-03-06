@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cstring>
 
-WriteBufferEntry write_buffer_nxt[WB_ENTRIES];
+extern WriteBufferEntry write_buffer_nxt[WB_ENTRIES];
 
 struct WBState {
     uint32_t count; // number of valid entries in the buffer

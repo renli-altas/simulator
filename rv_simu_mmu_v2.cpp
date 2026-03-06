@@ -154,13 +154,11 @@ void SimCpu::init() {
   front.in.csr_status = back.csr->out.csr_status;
   front.ctx = &ctx;
 
-  back.lsu->ptw_walk_port = mem_subsystem.dtlb_walk_port;
-  back.lsu->ptw_mem_port = mem_subsystem.dtlb_ptw_port;
+  back.lsu->set_ptw_walk_port(mem_subsystem.dtlb_walk_port);
+  back.lsu->set_ptw_mem_port(mem_subsystem.dtlb_ptw_port);
 
-  mem_subsystem.lsu_req_io = back.lsu_dcache_req_io;
-  mem_subsystem.lsu_wreq_io = back.lsu_dcache_wreq_io;
-  mem_subsystem.lsu_resp_io = back.lsu_dcache_resp_io;
-  mem_subsystem.lsu_wready_io = back.lsu_dcache_wready_io;
+  mem_subsystem.lsu2dcache = back.lsu_dcache_req_io;
+  mem_subsystem.dcache2lsu  = back.lsu_dcache_resp_io;
 
   front.icache_ptw_walk_port = mem_subsystem.itlb_walk_port;
   front.icache_ptw_mem_port = mem_subsystem.itlb_ptw_port;
