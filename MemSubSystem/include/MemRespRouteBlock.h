@@ -14,7 +14,6 @@ struct load_resp {
   size_t req_id = 0;
   uint8_t replay = 0;
   uint32_t req_addr = 0;
-  uint8_t debug_src = 0;
 
   static load_resp from_io(const LoadResp &resp, uint32_t req_addr = 0) {
     load_resp ret{};
@@ -24,7 +23,6 @@ struct load_resp {
     ret.req_id = resp.req_id;
     ret.replay = resp.replay;
     ret.req_addr = req_addr;
-    ret.debug_src = resp.debug_src;
     return ret;
   }
 
@@ -35,8 +33,6 @@ struct load_resp {
     ret.uop = uop;
     ret.req_id = req_id;
     ret.replay = replay;
-    ret.debug_addr = req_addr;
-    ret.debug_src = debug_src;
     return ret;
   }
 };

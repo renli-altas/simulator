@@ -602,20 +602,17 @@ void MemSubsystem::init() {
   
   // Route LSU requests through MemReadArbBlock so PTW reads can be injected,
   // and capture raw DCache responses before routing them back to LSU/PTW.
-  dcache_.lsu2dcache  = &dcache_req_mux_;
-  dcache_.dcache2lsu  = &dcache_resp_raw_;
+  dcache_.in.lsu2dcache  = &dcache_req_mux_;
+  dcache_.out.dcache2lsu  = &dcache_resp_raw_;
 
   // Internal MSHR ↔ DCache wires: RealDcache reads/writes MSHR IO structs
   // directly via pointers, keeping the connection zero-copy.
-  dcache_.mshr2dcache = &mshr_.out.mshr2dcache;  // MSHR output → DCache input
-  dcache_.dcache2mshr = &mshr_.in.dcachemshr;    // DCache output → MSHR input
+  dcache_.in.mshr2dcache = &mshr_.out.mshr2dcache;  // MSHR output → DCache input
+  dcache_.out.dcache2mshr = &mshr_.in.dcachemshr;    // DCache output → MSHR input
 
   // Internal WriteBuffer ↔ DCache wires.
-  dcache_.wb2dcache   = &wb_.out.wbdcache;       // WB output → DCache input
-  dcache_.dcache2wb   = &wb_.in.dcachewb;        // DCache output → WB input
-  dcache_.bind_context(ctx);
-  mshr_.bind_context(ctx);
-  wb_.bind_context(ctx);
+  dcache_.in.wb2dcache   = &wb_.out.wbdcache;       // WB output → DCache input
+  dcache_.out.dcache2wb   = &wb_.in.dcachewb;       
 
   // ── Initialise sub-modules ─────────────────────────────────────────────────
   mshr_.init();
@@ -795,11 +792,11 @@ void MemSubsystem::comb() {
   mshr_.in.wbmshr = wb_.out.wbmshr;
   mshr_.comb_outputs();
   dcache_.stage1_comb();
-  dcache_.prepare_wb_queries_for_stage2();
+  dcache_.prepare_wb_queries_for_next_stage2();
 
   wb_.in.mshrwb   = mshr_.out.mshrwb;  // eviction push from MSHR current comb
   wb_.comb_inputs();
-  wb_.comb_outputs();
+  wb_.comb_mshr_outputs();
   mshr_.in.wbmshr = wb_.out.wbmshr;
 
   dcache_.stage2_comb();
@@ -910,11 +907,6 @@ void MemSubsystem::comb() {
       if (!resp.valid) {
         continue;
       }
-      record_debug_event(DebugEventKind::LSU_LOAD_RESP,
-                         static_cast<uint8_t>(MemReadArbBlock::Owner::LSU),
-                         resp.debug_addr, resp.data, resp.replay, resp.debug_src,
-                         resp.req_id,
-                         static_cast<uint8_t>(i));
     }
 
     if (read_arb_block.comb_result().lsu_port0_preempted) {
@@ -1044,17 +1036,27 @@ void MemSubsystem::seq() {
 }
 
 void MemSubsystem::dump_debug_state() const {
+  uint32_t mshr_cur_count = 0;
+  uint32_t mshr_nxt_count = 0;
+  for (int i = 0; i < DCACHE_MSHR_ENTRIES; i++) {
+    if (mshr_entries[i].valid) {
+      mshr_cur_count++;
+    }
+    if (mshr_entries_nxt[i].valid) {
+      mshr_nxt_count++;
+    }
+  }
   std::printf(
-      "[DEADLOCK][MEM] mshr_count=%u fill=%d fill_addr=0x%08x wb_count=%u wb_head=%u wb_tail=%u\n",
-      mshr_.cur.mshr_count, static_cast<int>(mshr_.cur.fill), mshr_.cur.fill_addr,
-      wb_.cur.count, wb_.cur.head, wb_.cur.tail);
+      "[DEADLOCK][MEM] mshr_count=%u fill=%d fill_addr=0x%08x wb_count=%zu\n",
+      mshr_cur_count, static_cast<int>(mshr_.cur.fill), mshr_.cur.fill_addr,
+      write_buffer.size());
   std::printf(
       "[DEADLOCK][MEM][MSHR_STATE] cur_fill_valid=%d cur_fill_way=%u cur_wb_valid=%d cur_wb_addr=0x%08x nxt_count=%u\n",
       static_cast<int>(mshr_.cur.fill_valid), mshr_.cur.fill_way,
       static_cast<int>(mshr_.cur.wb_valid), mshr_.cur.wb_addr,
-      mshr_.nxt.mshr_count);
+      mshr_nxt_count);
 
-  for (int i = 0; i < MSHR_ENTRIES; i++) {
+  for (int i = 0; i < DCACHE_MSHR_ENTRIES; i++) {
     const MSHREntry &cur_e = mshr_entries[i];
     const MSHREntry &nxt_e = mshr_entries_nxt[i];
     std::printf(
@@ -1073,25 +1075,24 @@ void MemSubsystem::dump_debug_state() const {
   if (mshr_.cur.wb_valid) {
     print_line_words("[DEADLOCK][MEM][MSHR][WB_DATA]   ", mshr_.cur.wb_data);
   }
-
+  
   std::printf(
-      "[DEADLOCK][MEM][WB_STATE] cur_count=%u cur_head=%u cur_tail=%u cur_send=%u cur_issue_pending=%u nxt_count=%u nxt_head=%u nxt_tail=%u nxt_send=%u nxt_issue_pending=%u\n",
-      wb_.cur.count, wb_.cur.head, wb_.cur.tail, wb_.cur.send,
-      wb_.cur.issue_pending, wb_.nxt.count, wb_.nxt.head, wb_.nxt.tail, wb_.nxt.send,
-      wb_.nxt.issue_pending);
-  for (int i = 0; i < WB_ENTRIES; i++) {
-    const WriteBufferEntry &cur_e = write_buffer[i];
-    const WriteBufferEntry &nxt_e = write_buffer_nxt[i];
-    std::printf(
-        "[DEADLOCK][MEM][WB][%d] cur:{v=%d send=%d addr=0x%08x} nxt:{v=%d send=%d addr=0x%08x}\n",
-        i, static_cast<int>(cur_e.valid), static_cast<int>(cur_e.send),
-        cur_e.addr, static_cast<int>(nxt_e.valid), static_cast<int>(nxt_e.send),
-        nxt_e.addr);
-    if (cur_e.valid) {
-      print_line_words("[DEADLOCK][MEM][WB][CUR_DATA] ", cur_e.data);
+      "[DEADLOCK][MEM][WB_STATE] cur_send=%u cur_issue_pending=%u nxt_send=%u nxt_issue_pending=%u wb_count=%zu\n",
+      wb_.cur.send, wb_.cur.issue_pending, wb_.nxt.send, wb_.nxt.issue_pending,
+      write_buffer.size());
+  for (size_t i = 0; i < write_buffer.size(); i++) {
+    const WriteBufferEntry *cur_e = write_buffer.at(i);
+    if (cur_e == nullptr) {
+      continue;
     }
-    if (nxt_e.valid) {
-      print_line_words("[DEADLOCK][MEM][WB][NXT_DATA] ", nxt_e.data);
+    std::printf(
+        "[DEADLOCK][MEM][WB][%zu] cur:{v=%d send=%d addr=0x%08x} nxt:{v=%d send=%d addr=0x%08x}\n",
+        i, static_cast<int>(cur_e->valid), static_cast<int>(cur_e->send),
+        cur_e->addr, static_cast<int>(cur_e->valid),
+        static_cast<int>(cur_e->send), cur_e->addr);
+    if (cur_e->valid) {
+      print_line_words("[DEADLOCK][MEM][WB][CUR_DATA] ", cur_e->data);
+      print_line_words("[DEADLOCK][MEM][WB][NXT_DATA] ", cur_e->data);
     }
   }
 
@@ -1333,8 +1334,8 @@ void MemSubsystem::dump_key_cache_lines() const {
   if (mshr_.cur.wb_addr != 0) {
     add_line("mshr_wb_addr", mshr_.cur.wb_addr);
   }
-
-  for (int i = 0; i < MSHR_ENTRIES; i++) {
+  
+  for (int i = 0; i < DCACHE_MSHR_ENTRIES; i++) {
     const MSHREntry &cur_e = mshr_entries[i];
     const MSHREntry &nxt_e = mshr_entries_nxt[i];
     if (cur_e.valid) {
@@ -1345,15 +1346,13 @@ void MemSubsystem::dump_key_cache_lines() const {
     }
   }
 
-  for (int i = 0; i < WB_ENTRIES; i++) {
-    const WriteBufferEntry &cur_e = write_buffer[i];
-    const WriteBufferEntry &nxt_e = write_buffer_nxt[i];
-    if (cur_e.valid) {
-      add_line("wb_cur", cur_e.addr);
+  for (size_t i = 0; i < write_buffer.size(); i++) {
+    const WriteBufferEntry *cur_e = write_buffer.at(i);
+    if (cur_e == nullptr || !cur_e->valid) {
+      continue;
     }
-    if (nxt_e.valid) {
-      add_line("wb_nxt", nxt_e.addr);
-    }
+    add_line("wb_cur", cur_e->addr);
+    add_line("wb_nxt", cur_e->addr);
   }
 
   const auto route_dbg = resp_route_block.debug_state();

@@ -33,6 +33,9 @@ public:
   static constexpr size_t kPtwReqIdBase = static_cast<size_t>(LDQ_SIZE);
   static constexpr size_t kFirstDynamicPtwReqId =
       static_cast<size_t>(LDQ_SIZE) + 16;
+  static constexpr size_t kReqIdMax = 0xFFu;
+  static_assert(kFirstDynamicPtwReqId <= kReqIdMax,
+                "PTW dynamic req_id base exceeds LoadReq/LoadResp req_id width");
 
   void init() {
     reset_state(cur_);
@@ -145,7 +148,7 @@ private:
 
   static size_t next_ptw_req_id(size_t cur_req_id) {
     const size_t next_req_id = cur_req_id + 1;
-    if (next_req_id < kFirstDynamicPtwReqId) {
+    if (next_req_id < kFirstDynamicPtwReqId || next_req_id > kReqIdMax) {
       return kFirstDynamicPtwReqId;
     }
     return next_req_id;

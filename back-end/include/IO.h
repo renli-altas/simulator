@@ -1144,31 +1144,31 @@ struct PeripheralIO {
 
 // STQ 条目结构（定义在此以供 StoreReq 使用）
 struct StqEntry {
-  bool valid = false;
-  bool addr_valid = false;
-  bool data_valid = false;
-  bool committed = false;
-  bool done = false;
-  bool is_mmio = false;
-  bool send =
+  wire<1> valid = false;
+  wire<1> addr_valid = false;
+  wire<1> data_valid = false;
+  wire<1> committed = false;
+  wire<1> done = false;
+  wire<1> is_mmio = false;
+  wire<1> send =
       false; // Whether the store has been sent to DCache (for replay logic)
-  uint8_t replay = 0;
-  uint32_t addr = 0;
-  uint32_t p_addr = 0;
-  uint32_t suppress_write =
+  wire<2> replay = 0;
+  wire<32> addr = 0;
+  wire<32> p_addr = 0;
+  wire<1> suppress_write =
       0; // For MMIO: bits to suppress in the write (e.g., for LR/SC)
-  uint32_t data = 0;
-  uint32_t func3 = 0;
-  mask_t br_mask = {};
-  uint32_t rob_idx = 0;
-  uint32_t rob_flag = 0;
+  wire<32> data = 0;
+  wire<3> func3 = 0;
+  wire<BR_MASK_WIDTH> br_mask = {};
+  wire<ROB_IDX_WIDTH> rob_idx = 0;
+  wire<1> rob_flag = 0;
 };
 
 struct LoadReq {
   wire<1> valid;
   wire<32> addr;
   MicroOp uop;
-  size_t req_id;
+  wire<8> req_id;
 
   LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
 };
@@ -1179,7 +1179,7 @@ struct StoreReq {
   wire<32> data;
   wire<8> strb;
   StqEntry uop;
-  size_t req_id;
+  wire<8> req_id;
 
   StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
 };
@@ -1189,20 +1189,18 @@ struct LoadResp {
   wire<1> valid;
   wire<32> data;
   MicroOp uop;
-  size_t req_id;
+  wire<8> req_id;
   wire<2> replay;
-  uint32_t debug_addr;
-  uint8_t debug_src;
+  
   LoadResp()
-      : valid(false), data(0), uop(), req_id(0), replay(0), debug_addr(0),
-        debug_src(0) {}
+      : valid(false), data(0), uop(), req_id(0), replay(0) {}
 };
 
 // Store响应结构
 struct StoreResp {
   wire<1> valid;
   wire<2> replay;
-  size_t req_id;
+  wire<8> req_id;
   wire<1> is_cache_miss;
 
   StoreResp() : valid(false), replay(0), req_id(0), is_cache_miss(false) {}
@@ -1224,9 +1222,9 @@ struct DCacheReqPorts {
   }
 };
 struct ReplayResp {
-  wire<2> replay;
-  size_t replay_addr;
-  wire<8> free_slots;
+  wire<1> replay;
+  wire<32> replay_addr;
+  wire<DCACHE_MSHR_BITS> free_slots;
 
   ReplayResp() : replay(0), replay_addr(0), free_slots(0) {}
 };

@@ -1,70 +1,10 @@
 #include "WriteBuffer.h"
-#include "config.h"
-#include "types.h"
+
 #include <cassert>
-#include <cinttypes>
-#include <cstdio>
+#include <cstddef>
 #include <cstring>
 
-extern uint32_t *p_memory;
-
-WriteBufferEntry write_buffer_nxt[WB_ENTRIES];
-
 namespace {
-static uint64_t g_wb_issue_seq = 0;
-static uint64_t g_wb_resp_seq = 0;
-static bool g_warned_req_size_gt_32b = false;
-
-static inline void dump_line_words(const char *tag, const uint32_t *data) {
-    LSU_MEM_DBG_PRINTF("%s[", tag);
-    for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-        LSU_MEM_DBG_PRINTF("%s%08x", (w == 0) ? "" : " ", data[w]);
-    }
-    LSU_MEM_DBG_PRINTF("]\n");
-}
-
-static inline int first_word_diff(const uint32_t *a, const uint32_t *b) {
-    for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-        if (a[w] != b[w]) {
-            return w;
-        }
-    }
-    return -1;
-}
-
-static inline bool has_nonzero_words_from(const uint32_t *data, int start_word) {
-    for (int w = start_word; w < DCACHE_LINE_WORDS; w++) {
-        if (data[w] != 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static inline void dump_issue_trace(const char *tag, const WbIssueTrace &t) {
-    if (!t.valid) {
-        LSU_MEM_DBG_PRINTF("%s<invalid>\n", tag);
-        return;
-    }
-    LSU_MEM_DBG_PRINTF(
-        "%sseq=%" PRIu64 " cyc=%" PRIu64 " head=%u addr=0x%08x total_size=%u "
-        "wstrb=0x%016" PRIx64 "\n",
-        tag, t.seq, t.issue_cycle, t.head, t.addr, t.req_total_size,
-        static_cast<uint64_t>(t.req_wstrb));
-    dump_line_words("[AXI TRACE][ISSUE_DATA] ", t.data);
-}
-
-static inline void dump_resp_trace(const char *tag, const WbRespTrace &t) {
-    if (!t.valid) {
-        LSU_MEM_DBG_PRINTF("%s<invalid>\n", tag);
-        return;
-    }
-    LSU_MEM_DBG_PRINTF(
-        "%sseq=%" PRIu64 " cyc=%" PRIu64 " head=%u addr=0x%08x "
-        "matched_issue_seq=%" PRIu64 " matched_issue_cyc=%" PRIu64 "\n",
-        tag, t.seq, t.resp_cycle, t.head, t.addr, t.issue_seq, t.issue_cycle);
-    dump_line_words("[AXI TRACE][RESP_DATA] ", t.data);
-}
 
 static constexpr uint8_t kCacheLineReqTotalSize =
     static_cast<uint8_t>(DCACHE_LINE_BYTES - 1u);
@@ -77,13 +17,13 @@ static constexpr uint64_t full_line_wstrb_mask() {
     return mask;
 }
 
-static int find_wb_entry_in_view(const WriteBufferEntry *entries, uint32_t head,
-                                 uint32_t count, uint32_t addr) {
+static int find_wb_entry_in_view(const WriteBufferFifo &entries,
+                                 uint32_t addr) {
     int best_match = -1;
     const uint32_t line_addr = (addr & ~(DCACHE_LINE_BYTES - 1));
-    for (uint32_t i = head, cnt = 0; cnt < count;
-         i = (i + 1) % WB_ENTRIES, cnt++) {
-        if (entries[i].valid && entries[i].addr == line_addr) {
+    for (std::size_t i = 0; i < entries.size(); i++) {
+        const WriteBufferEntry *entry = entries.at(i);
+        if (entry != nullptr && entry->valid && entry->addr == line_addr) {
             best_match = static_cast<int>(i);
         }
     }
@@ -101,17 +41,144 @@ static void clear_axi_req(WBOut &out) {
     }
 }
 
-static void drive_axi_req_from_head(WBOut &out, uint32_t send, uint32_t head,
-                                    const WriteBufferEntry *entries) {
+static void clear_fifo_in_find_slot(FIFOIN &fifo_in, int port) {
+    assert(port >= 0 && port < WB_FIND_PORTS && "find port out of range");
+    fifo_in.writebuffer_find_valid[port] = false;
+    fifo_in.writebuffer_find_index[port] = -1;
+    fifo_in.writebuffer_find_entry[port] = {};
+}
+
+static void clear_all_fifo_in_find(FIFOIN &fifo_in) {
+    for (int p = 0; p < WB_FIND_PORTS; p++) {
+        clear_fifo_in_find_slot(fifo_in, p);
+    }
+}
+
+static void clear_fifo_out_update_slot(FIFOOUT &fifo_out, int port) {
+    assert(port >= 0 && port < WB_FIND_PORTS && "update port out of range");
+    fifo_out.writebuffer_update_valid[port] = false;
+    fifo_out.writebuffer_update_index[port] = -1;
+    fifo_out.writebuffer_update_entry[port] = {};
+}
+
+static void reset_fifo_out_cmd(FIFOOUT &fifo_out) {
+    fifo_out.pop = false;
+    fifo_out.push_valid = false;
+    fifo_out.push_entry = {};
+    fifo_out.writebuffer_update_head = false;
+    fifo_out.writebuffer_update_head_entry = {};
+    for (int p = 0; p < WB_FIND_PORTS; p++) {
+        fifo_out.writebuffer_find_req[p] = false;
+        fifo_out.writebuffer_find_addr[p] = 0;
+        clear_fifo_out_update_slot(fifo_out, p);
+    }
+}
+
+static void refresh_fifo_in_basic(WBIn &in) {
+    in.fifo_in.writebuffer_full = write_buffer.full();
+
+    const WriteBufferEntry *head = write_buffer.front_ptr();
+    if (head != nullptr) {
+        in.fifo_in.writebuffer_head_valid = true;
+        in.fifo_in.writebuffer_head = *head;
+    } else {
+        in.fifo_in.writebuffer_head_valid = false;
+        in.fifo_in.writebuffer_head = {};
+    }
+}
+
+static bool refresh_fifo_in_find_slot(WBIn &in, int port, uint32_t addr) {
+    assert(port >= 0 && port < WB_FIND_PORTS && "find port out of range");
+
+    const int idx = find_wb_entry_in_view(write_buffer, addr);
+    if (idx < 0) {
+        clear_fifo_in_find_slot(in.fifo_in, port);
+        return false;
+    }
+
+    const WriteBufferEntry *entry =
+        write_buffer.at(static_cast<std::size_t>(idx));
+    if (entry == nullptr) {
+        clear_fifo_in_find_slot(in.fifo_in, port);
+        return false;
+    }
+
+    in.fifo_in.writebuffer_find_valid[port] = true;
+    in.fifo_in.writebuffer_find_index[port] = idx;
+    in.fifo_in.writebuffer_find_entry[port] = *entry;
+    return true;
+}
+
+static void apply_fifo_update_port_cmd(WBOut &out, int update_port) {
+    assert(update_port >= 0 && update_port < WB_FIND_PORTS &&
+           "update port out of range");
+
+    if (out.fifo_out.writebuffer_update_valid[update_port]) {
+        assert(out.fifo_out.writebuffer_update_index[update_port] >= 0 &&
+               "WriteBuffer update index is invalid");
+        WriteBufferEntry *dst = write_buffer.at(
+            static_cast<std::size_t>(out.fifo_out.writebuffer_update_index[update_port]));
+        assert(dst != nullptr && "WriteBuffer update index out of range");
+        *dst = out.fifo_out.writebuffer_update_entry[update_port];
+    }
+}
+
+static void apply_fifo_update_head_cmd(WBOut &out) {
+    if (out.fifo_out.writebuffer_update_head) {
+        WriteBufferEntry *head = write_buffer.at(0);
+        assert(head != nullptr && "WriteBuffer head update on empty FIFO");
+        *head = out.fifo_out.writebuffer_update_head_entry;
+    }
+}
+
+static void apply_fifo_push_cmd(WBOut &out) {
+    if (out.fifo_out.push_valid) {
+        assert(!write_buffer.full() && "WriteBuffer overflow");
+        const bool pushed = write_buffer.push(out.fifo_out.push_entry);
+        assert(pushed && "WriteBuffer push failed unexpectedly");
+    }
+}
+
+static void apply_fifo_pop_cmd(WBOut &out) {
+    if (out.fifo_out.pop) {
+        WriteBufferEntry popped{};
+        const bool popped_ok = write_buffer.pop(popped);
+        assert(popped_ok && "WriteBuffer pop failed unexpectedly");
+    }
+}
+
+static bool request_fifo_find(WBIn &in, WBOut &out, int port, uint32_t addr) {
+    assert(port >= 0 && port < WB_FIND_PORTS && "find port out of range");
+    out.fifo_out.writebuffer_find_req[port] = true;
+    out.fifo_out.writebuffer_find_addr[port] = addr;
+#if !CONFIG_BSD
+    return refresh_fifo_in_find_slot(in, port, addr);
+#else
+    // On BSD, we cannot guarantee combinational read response from the FIFO,
+    // so we just issue the find request and return false. The caller should
+    // check the response in the next cycle.
+    return in.fifo_in.writebuffer_find_valid[port];
+#endif
+}
+
+static bool pending_push_matches(const WBState &state, uint32_t addr) {
+    return state.pending_push_valid &&
+           cache_line_match(state.pending_push_entry.addr, addr);
+}
+
+static void drive_axi_req_from_head(WBOut &out, uint32_t send,
+                                    const FIFOIN &fifo_in) {
     clear_axi_req(out);
     out.axi_out.resp_ready = true;
-    if (send != 0) {
+    if (send != 0 || !fifo_in.writebuffer_head_valid) {
         return;
     }
-    const WriteBufferEntry &head_e = entries[head];
+
+    const WriteBufferEntry &head_e = fifo_in.writebuffer_head;
     if (!head_e.valid || head_e.send) {
         return;
     }
+
     out.axi_out.req_valid = true;
     out.axi_out.req_addr = head_e.addr;
     out.axi_out.req_total_size = kCacheLineReqTotalSize;
@@ -122,393 +189,261 @@ static void drive_axi_req_from_head(WBOut &out, uint32_t send, uint32_t head,
     }
 }
 
-static void check_wb_state(const char *phase, const WBState &st) {
-    if (st.count > WB_ENTRIES || st.head >= WB_ENTRIES || st.tail >= WB_ENTRIES ||
-        st.send > 1u || st.issue_pending > 1u) {
-        LSU_MEM_DBG_PRINTF(
-            "[WB STATE CORRUPT] phase=%s cyc=%lld count=%u head=%u tail=%u send=%u issue_pending=%u\n",
-            phase, (long long)sim_time, st.count, st.head, st.tail, st.send,
-            st.issue_pending);
-        Assert(false && "WriteBuffer state corrupted");
+static void drive_axi_req_from_hold(WBOut &out, const WBState &cur) {
+    clear_axi_req(out);
+    out.axi_out.resp_ready = true;
+    if (!cur.issue_pending) {
+        return;
+    }
+    out.axi_out.req_valid = true;
+    out.axi_out.req_addr = cur.issue_addr;
+    out.axi_out.req_total_size = kCacheLineReqTotalSize;
+    out.axi_out.req_id = 0;
+    out.axi_out.req_wstrb = full_line_wstrb_mask();
+    for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
+        out.axi_out.req_wdata[w] = cur.issue_data[w];
     }
 }
+
 } // namespace
 
-int WriteBuffer::find_wb_entry(uint32_t addr)
-{
-    return find_wb_entry_in_view(write_buffer, cur.head, cur.count, addr);
+int WriteBuffer::find_wb_entry(uint32_t addr) {
+    return find_wb_entry_in_view(write_buffer, addr);
 }
-// ─────────────────────────────────────────────────────────────────────────────
-// init
-// ─────────────────────────────────────────────────────────────────────────────
+
 void WriteBuffer::init() {
-    std::memset(&cur, 0, sizeof(cur));
-    std::memset(&nxt, 0, sizeof(nxt));
-    cur_check = {};
-    nxt_check = {};
-    cur_issue = {};
-    nxt_issue = {};
-    cur_last_issue = {};
-    nxt_last_issue = {};
-    cur_last_resp = {};
-    nxt_last_resp = {};
-    std::memset(write_buffer_nxt, 0, sizeof(write_buffer_nxt));
-    g_wb_issue_seq = 0;
-    g_wb_resp_seq = 0;
-    g_warned_req_size_gt_32b = false;
+    cur = {};
+    nxt = {};
+    write_buffer.clear();
     in.clear();
     out.clear();
+    reset_fifo_out_cmd(out.fifo_out);
+    refresh_fifo_in_basic(in);
+    clear_all_fifo_in_find(in.fifo_in);
 }
-// ─────────────────────────────────────────────────────────────────────────────
-// comb_outputs — Phase 1: compute full flag and free slot count.
-//
-// Uses nxt.count so that pushes committed in previous comb_inputs() calls
-// (within the same cycle) are already reflected.
-// ─────────────────────────────────────────────────────────────────────────────
-void WriteBuffer::comb_outputs() {
-    check_wb_state("comb_outputs.cur", cur);
-    check_wb_state("comb_outputs.nxt", nxt);
-    // MemSubsystem::comb() calls wb_.comb_outputs() again after wb_.comb_inputs()
-    // and before mshr_.comb_inputs(). The MSHR therefore samples the refreshed
-    // nxt-count view, and producing one victim in the next cycle is safe as
-    // long as there is one actual slot left in the FIFO.
-    out.wbmshr.ready = (nxt.count < WB_ENTRIES);
 
-    for(int i=0;i<LSU_LDU_COUNT;i++){
+void WriteBuffer::comb_mshr_outputs() {
+    // MSHR consumes this ready in mshr_.comb_inputs() after wb_.comb_inputs().
+    // Use the post-comb WB view (`nxt`) so we don't advertise stale capacity
+    // from the beginning of cycle.
+    out.wbmshr.ready = !nxt.pending_push_valid;
+}
+void WriteBuffer::comb_outputs() {
+
+
+    for (int i = 0; i < LSU_LDU_COUNT; i++) {
         out.wbdcache.bypass_resp[i].valid = nxt.bypassvalid[i];
         out.wbdcache.bypass_resp[i].data = nxt.bypassdata[i];
     }
 
-    for(int i=0;i<LSU_STA_COUNT;i++){
+    for (int i = 0; i < LSU_STA_COUNT; i++) {
         out.wbdcache.merge_resp[i].valid = nxt.mergevalid[i];
         out.wbdcache.merge_resp[i].busy = nxt.mergebusy[i];
     }
-    // Drive the request from nxt view so previously accumulated merges are
-    // visible to the write beat snapshot.
-    drive_axi_req_from_head(out, cur.send, cur.head, write_buffer_nxt);
-
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// comb_inputs — Phase 2: process push requests, accept B channel responses,
-// and fill axi_out with the next AW+W request.
-//
-// Reads axi_in (bridged from IC by RealDcache before this call).
-// Writes axi_out (bridged to IC by RealDcache after this call).
-// ─────────────────────────────────────────────────────────────────────────────
 void WriteBuffer::comb_inputs() {
-    check_wb_state("comb_inputs.cur", cur);
-    check_wb_state("comb_inputs.nxt.pre", nxt);
-    // Deferred verification: check one cycle after B response, so backing
-    // memory has passed through interconnect/memory seq updates.
-    //
-    // This is only valid when the WB drains directly to backing memory.
-    // With LLC enabled the B response means the LLC accepted the write-back,
-    // not that DDR backing memory has already been updated. In that mode the
-    // dirty line can legitimately remain newer in LLC than in p_memory until a
-    // later LLC eviction reaches memory, so comparing against p_memory here
-    // would produce false mismatches.
-    if (cur_check.valid && p_memory != nullptr) {
-#if CONFIG_AXI_LLC_ENABLE
-        cur_check.valid = false;
-#else
-        const uint32_t line_addr = cur_check.addr;
-        const uint32_t word_base = (line_addr >> 2);
-        bool write_mismatch = false;
-        int first_bad = -1;
-        uint32_t mem_word = 0;
-        uint32_t exp_word = 0;
-        uint32_t mem_line[DCACHE_LINE_WORDS] = {};
-        for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-            mem_line[w] = p_memory[word_base + w];
-            if (!write_mismatch && mem_line[w] != cur_check.data[w]) {
-                write_mismatch = true;
-                first_bad = w;
-                mem_word = mem_line[w];
-                exp_word = cur_check.data[w];
-            }
-        }
-        if (write_mismatch) {
-            LSU_MEM_DBG_PRINTF(
-                "[AXI WRITE MISMATCH] cyc=%lld resp_cyc=%llu line_addr=0x%08x word=%d exp=0x%08x mem=0x%08x\n",
-                (long long)sim_time, (unsigned long long)cur_check.resp_cycle,
-                line_addr, first_bad, exp_word, mem_word);
-            LSU_MEM_DBG_PRINTF(
-                "[AXI WRITE MISMATCH][WB_STATE] cur{count=%u head=%u tail=%u send=%u issue_pending=%u} nxt{count=%u head=%u tail=%u send=%u issue_pending=%u}\n",
-                cur.count, cur.head, cur.tail, cur.send, cur.issue_pending,
-                nxt.count, nxt.head, nxt.tail, nxt.send, nxt.issue_pending);
-            if (cur_issue.valid) {
-                int issue_bad = -1;
-                for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-                    if (cur_issue.data[w] != cur_check.data[w]) {
-                        issue_bad = w;
-                        break;
-                    }
-                }
-                LSU_MEM_DBG_PRINTF(
-                    "[AXI WRITE MISMATCH][ISSUE] issue_cyc=%llu head=%u addr=0x%08x issue_vs_resp_word=%d\n",
-                    (unsigned long long)cur_issue.issue_cycle, cur_issue.head,
-                    cur_issue.addr, issue_bad);
-                dump_line_words("[AXI WRITE MISMATCH][ISSUE_DATA] ", cur_issue.data);
-            } else {
-                LSU_MEM_DBG_PRINTF("[AXI WRITE MISMATCH][ISSUE] no in-flight issue snapshot captured\n");
-            }
-            dump_issue_trace("[AXI WRITE MISMATCH][LAST_ISSUE] ", cur_last_issue);
-            dump_resp_trace("[AXI WRITE MISMATCH][LAST_RESP] ", cur_last_resp);
-            const int last_issue_diff =
-                cur_last_issue.valid ? first_word_diff(cur_last_issue.data, cur_check.data) : -1;
-            LSU_MEM_DBG_PRINTF(
-                "[AXI WRITE MISMATCH][CHECK_CTX] check_addr=0x%08x "
-                "check_vs_last_issue_word=%d hi8_exp_nonzero=%d hi8_mem_nonzero=%d\n",
-                cur_check.addr, last_issue_diff,
-                static_cast<int>(has_nonzero_words_from(cur_check.data, 8)),
-                static_cast<int>(has_nonzero_words_from(mem_line, 8)));
-            bool low32b_match = true;
-            for (int w = 0; w < DCACHE_LINE_WORDS && w < 8; w++) {
-                if (cur_check.data[w] != mem_line[w]) {
-                    low32b_match = false;
-                    break;
-                }
-            }
-            if (first_bad >= 8 && low32b_match) {
-                LSU_MEM_DBG_PRINTF(
-                    "[AXI WRITE MISMATCH][HINT] first mismatch is at word %d (>=8) "
-                    "while low 32B matches. Suspect 32B write-path truncation "
-                    "between WB and AXI interconnect bridge.\n",
-                    first_bad);
-            }
-            dump_line_words("[AXI WRITE MISMATCH][EXP] ", cur_check.data);
-            dump_line_words("[AXI WRITE MISMATCH][MEM] ", mem_line);
-            Assert(false && "WriteBuffer AXI write mismatch after deferred verification. Likely root causes: write response accepted before backing memory commit, incorrect line payload/address tracking across WB head movement, or AXI write-path ordering bug.");
-        }
-#endif
-    }
-    nxt_check = {};
-    nxt_issue = cur_issue;
-    nxt_last_issue = cur_last_issue;
-    nxt_last_resp = cur_last_resp;
+    reset_fifo_out_cmd(out.fifo_out);
+    // Start from current sequential state, then override per-cycle outputs.
+    // nxt.send = cur.send;
+    // nxt.issue_pending = cur.issue_pending;
+    // nxt.issue_addr = cur.issue_addr;
+    // std::memcpy(nxt.issue_data, cur.issue_data, sizeof(nxt.issue_data));
+    // nxt.pending_push_valid = cur.pending_push_valid;
+    // nxt.pending_push_entry = cur.pending_push_entry;
 
-    // Default outputs: nothing to send, always ready to accept a write response.
-    for(int i=0;i<LSU_LDU_COUNT;i++){
+    // Current-cycle B-consume eligibility for the head entry.
+    const bool can_pop_head_now =
+        cur.send && in.axi_in.resp_valid && in.fifo_in.writebuffer_head_valid &&
+        in.fifo_in.writebuffer_head.valid && in.fifo_in.writebuffer_head.send;
+
+    // Allow same-cycle pop+push so full-at-cycle-start does not cause false
+    // overflow when the B channel is also retiring one entry this cycle.
+    const bool can_push_now =
+        (!in.fifo_in.writebuffer_full) || can_pop_head_now;
+
+    // Local issue view of head payload. Merge updates to head are reflected
+    // here so a newly latched issue-hold captures up-to-date bytes.
+    FIFOIN fifo_issue_view = in.fifo_in;
+
+    for (int i = 0; i < LSU_LDU_COUNT; i++) {
         nxt.bypassvalid[i] = false;
-        nxt.bypassdata[i] = 0; // Or some default value if not found in the write buffer
+        nxt.bypassdata[i] = 0;
     }
 
-    
-    
-    for(int i=0;i<LSU_STA_COUNT;i++){
+    for (int i = 0; i < LSU_STA_COUNT; i++) {
         nxt.mergevalid[i] = false;
         nxt.mergebusy[i] = false;
-         if(in.dcachewb.merge_req[i].valid){
-            int wb_idx = find_wb_entry_in_view(write_buffer_nxt, nxt.head,
-                                               nxt.count,
-                                               in.dcachewb.merge_req[i].addr);
-            if(wb_idx != -1){
-                WriteBufferEntry &e = write_buffer_nxt[wb_idx];
-                const bool head_issue_frozen =
-                    (wb_idx == static_cast<int>(cur.head)) &&
-                    ((cur.issue_pending != 0u) || (nxt.issue_pending != 0u));
-                // Ready-first AXI means the interconnect may capture the head
-                // entry one cycle before WriteBuffer observes req_accepted.
-                // Once that window opens, same-line merges must stop; otherwise
-                // the buffer state moves ahead of the payload already captured
-                // by the interconnect.
-                if (e.send || head_issue_frozen) {
-                    nxt.mergebusy[i] = true;
-                } else {
-                    nxt.mergevalid[i] = true;
-                    uint32_t word_off = decode(in.dcachewb.merge_req[i].addr).word_off;
-                    uint32_t strb = in.dcachewb.merge_req[i].strb;
-                    apply_strobe(e.data[word_off], in.dcachewb.merge_req[i].data, strb);
-                }
-            }
-            else if(cache_line_match(in.dcachewb.merge_req[i].addr,in.mshrwb.addr)&&in.mshrwb.valid){
-                nxt.mergevalid[i] = true;
-                uint32_t word_off = decode(in.dcachewb.merge_req[i].addr).word_off;
-                uint32_t strb = in.dcachewb.merge_req[i].strb;
-                apply_strobe(in.mshrwb.data[word_off], in.dcachewb.merge_req[i].data, strb);
-            }
-            
-        }
-    }
-    
 
-    if(in.mshrwb.valid){
-        if(nxt.count < WB_ENTRIES){
-            WriteBufferEntry &e = write_buffer_nxt[nxt.tail];
-            e.valid    = true;
-            e.send     = false;
-            e.addr     = in.mshrwb.addr;
-            std::memcpy(e.data, in.mshrwb.data, DCACHE_LINE_WORDS * sizeof(uint32_t));
-            nxt.tail  = (nxt.tail + 1) % WB_ENTRIES;
-            nxt.count++;
+        if (!in.dcachewb.merge_req[i].valid) {
+            continue;
         }
-        else{
-            assert(false && "WriteBuffer overflow: MSHR is producing evictions faster than WriteBuffer can drain them");
-        }
-    }
 
-    for(int i=0;i<LSU_LDU_COUNT;i++){
-        if(in.dcachewb.bypass_req[i].valid){
-            int wb_idx = find_wb_entry_in_view(write_buffer_nxt, nxt.head,
-                                               nxt.count,
-                                               in.dcachewb.bypass_req[i].addr);
-            if(wb_idx != -1){
-                nxt.bypassvalid[i] = true;
-                nxt.bypassdata[i] = write_buffer_nxt[wb_idx].data[decode(in.dcachewb.bypass_req[i].addr).word_off];
-            }
-            else if(cache_line_match(in.dcachewb.bypass_req[i].addr,in.mshrwb.addr)&&in.mshrwb.valid){
-                // Bypass from the MSHR fill data if the requested line matches the line being filled by the MSHR.
-                nxt.bypassvalid[i] = true;
-                nxt.bypassdata[i] = in.mshrwb.data[decode(in.dcachewb.bypass_req[i].addr).word_off];
-            }
-        }
-    }
-
-    // Rebuild current-cycle AXI request after same-cycle merges / pushes.
-    drive_axi_req_from_head(out, cur.send, cur.head, write_buffer_nxt);
-
-    // AXI interconnect uses ready-first timing, but only req.accepted means the
-    // request has actually been captured by the interconnect.
-    if (cur.send == 0) {
-        WriteBufferEntry &head_e = write_buffer_nxt[cur.head];
-        const bool can_issue_head = head_e.valid && !head_e.send;
-        const bool req_payload_matches_head =
-            out.axi_out.req_valid && (out.axi_out.req_addr == head_e.addr);
-        const bool req_handshake = can_issue_head && in.axi_in.req_accepted &&
-                                   req_payload_matches_head;
-        if (can_issue_head && in.axi_in.req_accepted && !out.axi_out.req_valid) {
-            LSU_MEM_DBG_PRINTF(
-                "[AXI WRITE ISSUE WARN] cyc=%lld req_accepted=1 while req_valid=0 head=%u addr=0x%08x\n",
-                (long long)sim_time, cur.head, head_e.addr);
-        } else if (can_issue_head && in.axi_in.req_accepted &&
-                   out.axi_out.req_valid &&
-                   out.axi_out.req_addr != head_e.addr) {
-            LSU_MEM_DBG_PRINTF(
-                "[AXI WRITE ISSUE WARN] cyc=%lld req_accepted=1 but req_addr mismatch head=%u head_addr=0x%08x req_addr=0x%08x\n",
-                (long long)sim_time, cur.head, head_e.addr,
-                out.axi_out.req_addr);
-        }
-        if (req_handshake) {
-            head_e.send = true;
-            nxt.send = 1;
-            nxt.issue_pending = 0;
-            nxt_issue.valid = true;
-            nxt_issue.seq = ++g_wb_issue_seq;
-            nxt_issue.addr = head_e.addr;
-            nxt_issue.head = cur.head;
-            nxt_issue.issue_cycle = (uint64_t)sim_time;
-            nxt_issue.req_total_size = out.axi_out.req_total_size;
-            nxt_issue.req_wstrb = out.axi_out.req_wstrb;
-            if (out.axi_out.req_valid) {
-                std::memcpy(nxt_issue.data, out.axi_out.req_wdata, sizeof(nxt_issue.data));
+        const auto &req = in.dcachewb.merge_req[i];
+        const int find_port = i;
+        if (request_fifo_find(in, out, find_port, req.addr)) {
+            WriteBufferEntry entry = in.fifo_in.writebuffer_find_entry[find_port];
+            const int wb_idx = in.fifo_in.writebuffer_find_index[find_port];
+            const bool head_issue_frozen =
+                (wb_idx == 0) &&
+                (cur.issue_pending || cur.send);
+            if (entry.send || head_issue_frozen) {
+                nxt.mergebusy[i] = true;
             } else {
-                std::memcpy(nxt_issue.data, head_e.data, sizeof(nxt_issue.data));
+                nxt.mergevalid[i] = true;
+                const uint32_t word_off = decode(req.addr).word_off;
+                apply_strobe(entry.data[word_off], req.data, req.strb);
+                out.fifo_out.writebuffer_update_valid[find_port] = true;
+                out.fifo_out.writebuffer_update_index[find_port] = wb_idx;
+                out.fifo_out.writebuffer_update_entry[find_port] = entry;
+            #if !CONFIG_BSD
+                if (wb_idx == 0) {
+                    fifo_issue_view.writebuffer_head_valid = true;
+                    fifo_issue_view.writebuffer_head = entry;
+                }
+                apply_fifo_update_port_cmd(out, find_port);
+            #else
+                // On BSD, find/update returns one cycle later. Keep the local
+                // issue view conservative and do not speculate head bytes.
+            #endif
             }
-            nxt_last_issue = nxt_issue;
-            if (!g_warned_req_size_gt_32b && out.axi_out.req_total_size > 31) {
-                g_warned_req_size_gt_32b = true;
-                LSU_MEM_DBG_PRINTF(
-                    "[AXI WRITE ISSUE WARN] cyc=%lld req_total_size=%u (>31) "
-                    "means write larger than 32B. Please verify bridge/interconnect "
-                    "write payload width is not capped at 8 words.\n",
-                    (long long)sim_time,
-                    static_cast<unsigned>(out.axi_out.req_total_size));
+        } else if (pending_push_matches(cur, req.addr)) {
+            nxt.mergevalid[i] = true;
+            const uint32_t word_off = decode(req.addr).word_off;
+            apply_strobe(nxt.pending_push_entry.data[word_off], req.data,
+                         req.strb);
+        } else if (in.mshrwb.valid && cache_line_match(req.addr, in.mshrwb.addr)) {
+            nxt.mergevalid[i] = true;
+            const uint32_t word_off = decode(req.addr).word_off;
+            apply_strobe(in.mshrwb.data[word_off], req.data, req.strb);
+        }
+    }
+
+    WriteBufferEntry incoming_push{};
+    const bool has_incoming_push = in.mshrwb.valid;
+    if (has_incoming_push) {
+        incoming_push.valid = true;
+        incoming_push.send = false;
+        incoming_push.addr = in.mshrwb.addr;
+        std::memcpy(incoming_push.data, in.mshrwb.data,
+                    DCACHE_LINE_WORDS * sizeof(uint32_t));
+    }
+
+    // Priority: drain pending skid entry first.
+    if (cur.pending_push_valid) {
+        if (can_push_now) {
+            out.fifo_out.push_valid = true;
+            out.fifo_out.push_entry = cur.pending_push_entry;
+            nxt.pending_push_valid = false;
+            nxt.pending_push_entry = {};
+        }
+        if (has_incoming_push) {
+            // Refill skid buffer with the new incoming eviction.
+            if (nxt.pending_push_valid) {
+                // Two unresolved pushes in a 1-entry skid means backpressure
+                // protocol is violated by upstream scheduling.
+                assert(false && "WriteBuffer pending-push overflow");
             }
-        } else if (can_issue_head) {
-            nxt.send = 0;
-            nxt.issue_pending =
-                (in.axi_in.req_ready && req_payload_matches_head) ? 1u : 0u;
+            nxt.pending_push_valid = true;
+            nxt.pending_push_entry = incoming_push;
+        }
+    } else if (has_incoming_push) {
+        if (can_push_now) {
+            out.fifo_out.push_valid = true;
+            out.fifo_out.push_entry = incoming_push;
         } else {
-            nxt.issue_pending = 0;
+            nxt.pending_push_valid = true;
+            nxt.pending_push_entry = incoming_push;
+        }
+    }
+
+    for (int i = 0; i < LSU_LDU_COUNT; i++) {
+        if (!in.dcachewb.bypass_req[i].valid) {
+            continue;
+        }
+
+        const uint32_t addr = in.dcachewb.bypass_req[i].addr;
+        const uint32_t word_off = decode(addr).word_off;
+        const int find_port = LSU_STA_COUNT + i;
+        if (request_fifo_find(in, out, find_port, addr)) {
+            nxt.bypassvalid[i] = true;
+            nxt.bypassdata[i] =
+                in.fifo_in.writebuffer_find_entry[find_port].data[word_off];
+        } else if (pending_push_matches(cur, addr)) {
+            nxt.bypassvalid[i] = true;
+            nxt.bypassdata[i] = cur.pending_push_entry.data[word_off];
+        } else if (in.mshrwb.valid && cache_line_match(addr, in.mshrwb.addr)) {
+            nxt.bypassvalid[i] = true;
+            nxt.bypassdata[i] = in.mshrwb.data[word_off];
+        }
+    }
+
+    // Drive request either from held payload (stable until accepted) or from
+    // current head if no hold exists yet.
+    if (!cur.send && cur.issue_pending) {
+        drive_axi_req_from_hold(out, cur);
+    } else {
+        drive_axi_req_from_head(out, cur.send, fifo_issue_view);
+    }
+
+    if (!cur.send) {
+        const bool req_payload_matches_hold =
+            (!cur.issue_pending) ||
+            (out.axi_out.req_addr == cur.issue_addr);
+        const bool req_handshake =
+            in.axi_in.req_accepted && out.axi_out.req_valid &&
+            req_payload_matches_hold;
+
+        // When not in hold yet, latch the payload we are trying to issue.
+        if (!cur.issue_pending && out.axi_out.req_valid) {
+            nxt.issue_pending = true;
+            nxt.issue_addr = out.axi_out.req_addr;
+            std::memcpy(nxt.issue_data, out.axi_out.req_wdata,
+                        sizeof(nxt.issue_data));
+        }
+
+        if (req_handshake) {
+            WriteBufferEntry updated = fifo_issue_view.writebuffer_head;
+            updated.send = true;
+            out.fifo_out.writebuffer_update_head = true;
+            out.fifo_out.writebuffer_update_head_entry = updated;
+            nxt.send = true;
+            nxt.issue_pending = false;
+            nxt.issue_addr = 0;
+            std::memset(nxt.issue_data, 0, sizeof(nxt.issue_data));
+        } else if (!out.axi_out.req_valid) {
+            // No request to issue, drop stale hold.
+            nxt.issue_pending = false;
+            nxt.issue_addr = 0;
+            std::memset(nxt.issue_data, 0, sizeof(nxt.issue_data));
         }
     } else {
-        nxt.issue_pending = 0;
+        // In-flight mode never needs an issue-hold.
+        nxt.issue_pending = false;
+        nxt.issue_addr = 0;
+        std::memset(nxt.issue_data, 0, sizeof(nxt.issue_data));
     }
 
-    // ── Accept write response (B channel) ────────────────────────────────────
-    if (in.axi_in.resp_valid) {
-        WriteBufferEntry &head_e = write_buffer[cur.head];
-        if (head_e.valid && head_e.send ) {
-            // Delay the memory-consistency check by one cycle.
-            nxt_check.valid = true;
-            nxt_check.addr = head_e.addr;
-            nxt_check.resp_cycle = (uint64_t)sim_time;
-            std::memcpy(nxt_check.data, head_e.data, sizeof(head_e.data));
-            nxt_last_resp.valid = true;
-            nxt_last_resp.seq = ++g_wb_resp_seq;
-            nxt_last_resp.addr = head_e.addr;
-            nxt_last_resp.head = cur.head;
-            nxt_last_resp.resp_cycle = static_cast<uint64_t>(sim_time);
-            std::memcpy(nxt_last_resp.data, head_e.data, sizeof(head_e.data));
-            nxt_last_resp.issue_seq = 0;
-            nxt_last_resp.issue_cycle = 0;
-            if (cur_issue.valid && cur_issue.addr == head_e.addr) {
-                nxt_last_resp.issue_seq = cur_issue.seq;
-                nxt_last_resp.issue_cycle = cur_issue.issue_cycle;
-            } else if (cur_last_issue.valid && cur_last_issue.addr == head_e.addr) {
-                nxt_last_resp.issue_seq = cur_last_issue.seq;
-                nxt_last_resp.issue_cycle = cur_last_issue.issue_cycle;
-            }
-            if (ctx != nullptr && cur_issue.valid) {
-                const uint64_t now = static_cast<uint64_t>(sim_time);
-                if (now >= cur_issue.issue_cycle) {
-                    ctx->perf.l1d_axi_write_total_cycles +=
-                        (now - cur_issue.issue_cycle);
-                    ctx->perf.l1d_axi_write_samples++;
-                }
-            }
-            write_buffer_nxt[cur.head].valid = false;
-            write_buffer_nxt[cur.head].send = false;
-            int new_head = (cur.head + 1) % WB_ENTRIES;
-            nxt.head  = new_head;
-            if (nxt.count > 0) {
-                nxt.count--;
-            }
-            nxt_issue.valid = false;
-        } else {
-            LSU_MEM_DBG_PRINTF(
-                "[AXI WRITE RESP UNEXPECTED] cyc=%lld head=%u head_valid=%d head_send=%d cur_send=%u count=%u req_ready=%d resp_valid=%d\n",
-                (long long)sim_time, cur.head, static_cast<int>(head_e.valid),
-                static_cast<int>(head_e.send), cur.send, cur.count,
-                static_cast<int>(in.axi_in.req_ready),
-                static_cast<int>(in.axi_in.resp_valid));
-            if (cur_issue.valid) {
-                LSU_MEM_DBG_PRINTF(
-                    "[AXI WRITE RESP UNEXPECTED][ISSUE] issue_cyc=%llu issue_head=%u issue_addr=0x%08x\n",
-                    (unsigned long long)cur_issue.issue_cycle, cur_issue.head,
-                    cur_issue.addr);
-                dump_line_words("[AXI WRITE RESP UNEXPECTED][ISSUE_DATA] ", cur_issue.data);
-            }
-        }
-        nxt.send = 0; // allow sending (or retrying) the head entry
-        nxt.issue_pending = 0;
+    if (can_pop_head_now) {
+        out.fifo_out.pop = true;
+        nxt.send = false;
+        nxt.issue_pending = false;
+        nxt.issue_addr = 0;
+        std::memset(nxt.issue_data, 0, sizeof(nxt.issue_data));
     }
 
-    check_wb_state("comb_inputs.nxt.post", nxt);
-
-    // ── Issue write request (AW + W) ─────────────────────────────────────────
-    // Walk the FIFO from nxt.head to find the first unsent entry.
-    
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// seq
-// ─────────────────────────────────────────────────────────────────────────────
 void WriteBuffer::seq() {
-    check_wb_state("seq.cur.pre", cur);
-    check_wb_state("seq.nxt.pre", nxt);
     cur = nxt;
-    cur_check = nxt_check;
-    cur_issue = nxt_issue;
-    cur_last_issue = nxt_last_issue;
-    cur_last_resp = nxt_last_resp;
-    memcpy(write_buffer, write_buffer_nxt, sizeof(write_buffer));
-    nxt = cur; 
-    nxt_check = cur_check;
-    nxt_issue = cur_issue;
-    nxt_last_issue = cur_last_issue;
-    nxt_last_resp = cur_last_resp;
-    check_wb_state("seq.cur.post", cur);
-    check_wb_state("seq.nxt.post", nxt);
+    nxt = cur;
+    apply_fifo_update_head_cmd(out);
+    if (out.fifo_out.pop) {
+        apply_fifo_pop_cmd(out);
+    }
+    if (out.fifo_out.push_valid) {
+        apply_fifo_push_cmd(out);
+    }
+    refresh_fifo_in_basic(in);
+    clear_all_fifo_in_find(in.fifo_in);
 }

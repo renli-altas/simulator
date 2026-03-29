@@ -12,52 +12,43 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MSHRState — the latched state of the MSHR (cur/nxt pair).
 // ─────────────────────────────────────────────────────────────────────────────
-extern MSHREntry mshr_entries_nxt[MSHR_ENTRIES];
+extern MSHREntry mshr_entries_nxt[DCACHE_MSHR_ENTRIES];
 
 struct MSHR_STATE{
     // one-cycle replay pulse for LSU after a fill is accepted
-    bool fill;
-    uint32_t fill_addr;
-    uint32_t mshr_count;
+    reg<1> fill;
+    reg<32> fill_addr;
 
     // Registered outputs: produced in comb_inputs(), consumed by comb_outputs()
     // in the next cycle.
-    bool fill_valid;
-    bool fill_dirty;
-    uint32_t fill_way;
-    uint32_t fill_data[DCACHE_LINE_WORDS];
+    reg<1> fill_valid;
+    reg<1> fill_dirty;
+    reg<DCACHE_WAY_BITS> fill_way;
+    reg<32> fill_data[DCACHE_LINE_WORDS];
 
-    bool wb_valid;
-    uint32_t wb_addr;
-    uint32_t wb_data[DCACHE_LINE_WORDS];
+    reg<1> wb_valid;
+    reg<32> wb_addr;
+    reg<32> wb_data[DCACHE_LINE_WORDS];
 };
 
 // AXI read-channel interface signals (IC's read_ports[MASTER_DCACHE_R]).
 // axi_in  — inputs from IC to MSHR (driven by RealDcache bridge).
 // axi_out — outputs from MSHR to IC (consumed by RealDcache bridge).
 struct MshrAxiIn {
-    bool     req_ready  = false;   // IC ready-first hint for AR request
-    bool     req_accepted = false; // true AR handshake committed in IC seq
-    uint8_t  req_accepted_id = 0; // accepted request ID from IC
-    bool     resp_valid = false;   // R data available from IC
-    uint32_t resp_data[DCACHE_LINE_WORDS] = {};
-    uint8_t  resp_id    = 0;       // transaction ID echoed back
+    wire<1>     req_ready  = false;   // IC ready-first hint for AR request
+    wire<1>     req_accepted = false; // true AR handshake committed in IC seq
+    wire<8>     req_accepted_id = 0; // accepted request ID from IC
+    wire<1>     resp_valid = false;   // R data available from IC
+    wire<32>    resp_data[DCACHE_LINE_WORDS] = {};
+    wire<8>     resp_id    = 0;       // transaction ID echoed back
 };
 
 struct MshrAxiOut {
-    bool     req_valid      = false;  // AR request to IC
-    uint32_t req_addr       = 0;
-    uint8_t  req_total_size = 0;
-    uint8_t  req_id         = 0;
-    bool     resp_ready     = false;  // ready to accept R data
-};
-
-enum MSHR_StateMachine{
-    MSHR_IDLE,
-    MSHR_DEAL,
-    MSHR_TRAN,
-    MSHR_WRITEBACK,
-    MSHR_FORWARD
+    wire<1>     req_valid      = false;  // AR request to IC
+    wire<32>    req_addr       = 0;
+    wire<8>     req_total_size = 0;
+    wire<8>     req_id         = 0;
+    wire<1>     resp_ready     = false;  // ready to accept R data
 };
 
 struct MSHRINIO{
@@ -74,12 +65,9 @@ struct MSHROUTIO{
 class MSHR {
 public:
     MSHR() = default;
-    void bind_context(SimContext *c) { ctx = c; }
-
-    MSHR_StateMachine state = MSHR_IDLE;
 
     void init();
-    int entries_add(int set_idx,int tag);
+    int entries_add(int set_idx, int tag, uint32_t &mshr_count);
 
     // Phase 1: compute lookup results, full flag, and fill delivery from cur.
     // Must be called BEFORE stage2_comb() so lookup results are ready.
@@ -100,11 +88,6 @@ public:
     MSHROUTIO out;
 
     MSHR_STATE cur,nxt;
-    SimContext *ctx = nullptr;
-    uint64_t miss_alloc_cycle[MSHR_ENTRIES] = {};
-    bool miss_alloc_cycle_valid[MSHR_ENTRIES] = {};
-    uint64_t axi_issue_cycle[MSHR_ENTRIES] = {};
-    bool axi_issue_cycle_valid[MSHR_ENTRIES] = {};
 
     // AXI channel signals — set by the RealDcache bridge before/after comb_inputs().
 

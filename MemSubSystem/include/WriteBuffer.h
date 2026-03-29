@@ -4,70 +4,70 @@
 #include "IO.h"
 #include <cstdint>
 
-class SimContext;
-
-extern WriteBufferEntry write_buffer_nxt[WB_ENTRIES];
-
 struct WBState {
-    uint32_t count; // number of valid entries in the buffer
-    uint32_t head;  // index of the oldest entry (next to evict)
-    uint32_t tail;  // index of the next free slot for new entry
-    uint32_t send;  // flag to indicate if a request is currently being sent
-    uint32_t issue_pending; // saw req_ready hint, waiting real acceptance
+    reg<1> send;  // in-flight write exists (accepted, waiting B response)
+    // Issue-hold valid: we have selected/snapshotted a head payload and keep
+    // driving it until req_accepted.
+    reg<1> issue_pending;
+    reg<32> issue_addr;
+    reg<32> issue_data[DCACHE_LINE_WORDS];
+    reg<1> pending_push_valid;
+    WriteBufferEntry pending_push_entry;
 
-    uint32_t bypassdata[LSU_LDU_COUNT];
-    bool bypassvalid[LSU_LDU_COUNT];
+    reg<32> bypassdata[LSU_LDU_COUNT];
+    reg<1> bypassvalid[LSU_LDU_COUNT];
 
-    bool mergevalid[LSU_STA_COUNT];
-    bool mergebusy[LSU_STA_COUNT];
+    reg<1> mergevalid[LSU_STA_COUNT];
+    reg<1> mergebusy[LSU_STA_COUNT];
 };
 
-struct WbDeferredCheck {
-    bool valid = false;
-    uint32_t addr = 0;
-    uint32_t data[DCACHE_LINE_WORDS] = {};
-    uint64_t resp_cycle = 0;
+static constexpr int WB_FIND_PORTS = LSU_STA_COUNT + LSU_LDU_COUNT;
+
+struct FIFOIN {
+    wire<1> writebuffer_head_valid = false;
+    WriteBufferEntry writebuffer_head = {};
+
+    wire<1> writebuffer_find_valid[WB_FIND_PORTS] = {};
+    wire<DCACHE_WB_BITS> writebuffer_find_index[WB_FIND_PORTS] = {};
+    WriteBufferEntry writebuffer_find_entry[WB_FIND_PORTS] = {};
+
+    wire<1> writebuffer_full = false;
 };
 
-struct WbIssueTrace {
-    bool valid = false;
-    uint64_t seq = 0;
-    uint32_t addr = 0;
-    uint32_t head = 0;
-    uint32_t data[DCACHE_LINE_WORDS] = {};
-    uint64_t issue_cycle = 0;
-    uint8_t req_total_size = 0;
-    uint64_t req_wstrb = 0;
-};
+struct FIFOOUT {
+    wire<1> pop = false;
 
-struct WbRespTrace {
-    bool valid = false;
-    uint64_t seq = 0;
-    uint32_t addr = 0;
-    uint32_t head = 0;
-    uint32_t data[DCACHE_LINE_WORDS] = {};
-    uint64_t resp_cycle = 0;
-    uint64_t issue_seq = 0;
-    uint64_t issue_cycle = 0;
+    wire<1> push_valid = false;
+    WriteBufferEntry push_entry = {};
+
+    wire<1> writebuffer_update_head = false;
+    WriteBufferEntry writebuffer_update_head_entry = {};
+
+    wire<1> writebuffer_find_req[WB_FIND_PORTS] = {};
+    wire<32> writebuffer_find_addr[WB_FIND_PORTS] = {};
+
+    wire<1> writebuffer_update_valid[WB_FIND_PORTS] = {};
+    wire<DCACHE_WB_BITS> writebuffer_update_index[WB_FIND_PORTS] = {};
+    WriteBufferEntry writebuffer_update_entry[WB_FIND_PORTS] = {};
 };
 
 // AXI write-channel interface signals (IC's write_ports[MASTER_DCACHE_W]).
 // axi_in  — inputs from IC to WriteBuffer (driven by RealDcache bridge).
 // axi_out — outputs from WriteBuffer to IC (consumed by RealDcache bridge).
 struct WbAxiIn {
-    bool req_ready  = false;  // IC is ready to accept the current request
-    bool req_accepted = false; // one-cycle pulse when IC actually accepts it
-    bool resp_valid = false;  // B response available
+    wire<1> req_ready  = false;  // IC is ready to accept the current request
+    wire<1> req_accepted = false; // one-cycle pulse when IC actually accepts it
+    wire<1> resp_valid = false;  // B response available
 };
 
 struct WbAxiOut {
-    bool     req_valid      = false;  // AW+W request to IC
-    uint32_t req_addr       = 0;
-    uint8_t  req_total_size = 0;
-    uint8_t  req_id         = 0;
-    uint64_t req_wstrb      = 0;
-    uint32_t req_wdata[DCACHE_LINE_WORDS] = {};
-    bool     resp_ready     = false;  // ready to accept B response
+    wire<1>     req_valid      = false;  // AW+W request to IC
+    wire<32>    req_addr       = 0;
+    wire<8>     req_total_size = 0;
+    wire<8>     req_id         = 0;
+    wire<64>    req_wstrb      = 0;
+    wire<32>    req_wdata[DCACHE_LINE_WORDS] = {};
+    wire<1>     resp_ready     = false;  // ready to accept B response
 };
 
 
@@ -75,6 +75,7 @@ struct WBIn {
     MSHRWBIO mshrwb;
     DcacheWBIO dcachewb;
     WbAxiIn axi_in;
+    FIFOIN fifo_in;
 
     void clear() {
         *this = {};
@@ -84,6 +85,7 @@ struct WBOut {
     WBMSHRIO wbmshr;
     WBDcacheIO wbdcache;
     WbAxiOut axi_out;
+    FIFOOUT fifo_out;
 
     void clear() {
         *this = {};
@@ -93,7 +95,7 @@ struct WBOut {
 // WriteBuffer — queues dirty evictions and drains them over the AXI write port.
 //
 // Correct usage per cycle:
-//   1. wb_.comb_outputs()   ← sets out.full / out.free_count (from nxt.count)
+//   1. wb_.comb_outputs()   ← sets out.ready from FIFO status
 //   2. stage2_comb()        ← reads out.full/free_count, sets in.push_ports[]
 //   3. Bridge IC outputs → wb_.axi_in
 //   4. wb_.comb_inputs()    ← processes pushes + B channel + fills axi_out
@@ -103,12 +105,12 @@ struct WBOut {
 class WriteBuffer {
 public:
     WriteBuffer() = default;
-    void bind_context(SimContext *c) { ctx = c; }
     int find_wb_entry(uint32_t addr);
 
     void init();
 
-    // Phase 1: compute out.full and out.free_count from current nxt.count.
+    // Phase 1: compute output readiness from current FIFO status.
+    void comb_mshr_outputs();
     void comb_outputs();
 
     // Phase 2: process push requests from in.push_ports[], accept B channel
@@ -123,9 +125,4 @@ public:
     WBOut out;
 
     WBState cur, nxt;
-    WbDeferredCheck cur_check, nxt_check;
-    WbIssueTrace cur_issue, nxt_issue;
-    WbIssueTrace cur_last_issue, nxt_last_issue;
-    WbRespTrace cur_last_resp, nxt_last_resp;
-    SimContext *ctx = nullptr;
 };
