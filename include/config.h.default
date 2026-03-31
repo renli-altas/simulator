@@ -133,6 +133,18 @@ constexpr uint32_t ICACHE_TAG_MASK = (1u << ICACHE_TAG_BITS) - 1u;
 
 #define DCACHE_WB_ENTRIES 8
 
+#ifndef SIMPLE_DCACHE_HIT_LATENCY
+#define SIMPLE_DCACHE_HIT_LATENCY 1
+#endif
+
+#ifndef SIMPLE_DCACHE_MISS_LATENCY
+#define SIMPLE_DCACHE_MISS_LATENCY 100
+#endif
+
+#ifndef CONFIG_MEM_USE_SIMPLE_DCACHE
+#define CONFIG_MEM_USE_SIMPLE_DCACHE 1
+#endif
+
 // ============================================================
 // Core Resources
 // ============================================================

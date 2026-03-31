@@ -69,6 +69,7 @@ CXXSRC := $(shell find ./back-end -name "*.cpp") \
           ./MemSubSystem/PtwWalker.cpp \
           ./MemSubSystem/PeripheralAxi.cpp \
           ./MemSubSystem/RealDcache.cpp \
+          ./MemSubSystem/SimpleDcache.cpp \
           ./MemSubSystem/MSHR.cpp \
           ./MemSubSystem/WriteBuffer.cpp \
           ./MemSubSystem/DcacheConfig.cpp \

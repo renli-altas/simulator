@@ -539,6 +539,7 @@ void MemSubsystem::init() {
   dcache_.lsu2dcache  = &dcache_req_mux_;
   dcache_.dcache2lsu  = &dcache_resp_raw_;
 
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
   // Internal MSHR ↔ DCache wires: RealDcache reads/writes MSHR IO structs
   // directly via pointers, keeping the connection zero-copy.
   dcache_.mshr2dcache = &mshr_.out.mshr2dcache;  // MSHR output → DCache input
@@ -547,6 +548,7 @@ void MemSubsystem::init() {
   // Internal WriteBuffer ↔ DCache wires.
   dcache_.wb2dcache   = &wb_.out.wbdcache;       // WB output → DCache input
   dcache_.dcache2wb   = &wb_.in.dcachewb;        // DCache output → WB input
+#endif
   dcache_.bind_context(ctx);
   mshr_.bind_context(ctx);
   wb_.bind_context(ctx);
@@ -688,6 +690,7 @@ void MemSubsystem::comb() {
   bool ptw_walk_direct_hit = false;
   bool ptw_walk_hold_for_coherence = false;
   uint32_t ptw_walk_direct_data = 0;
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
   if (issue_ptw_walk_read) {
     const auto q =
         dcache_.query_coherent_word(ptw_walk_read_addr, ptw_walk_direct_data);
@@ -697,6 +700,7 @@ void MemSubsystem::comb() {
         (mshr_.cur.fill_valid &&
          cache_line_match(mshr_.cur.fill_addr, ptw_walk_read_addr));
   }
+#endif
 
   read_arb_block.eval_comb(lsu2dcache,
                            issue_ptw_walk_read && !ptw_walk_direct_hit &&
@@ -708,6 +712,7 @@ void MemSubsystem::comb() {
   dcache_req_mux_ = read_arb_block.comb_result().dcache_req;
   dcache_resp_raw_ = {};
 
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
   // Feed current-cycle AXI feedback before any comb phase that consumes it.
   mshr_.in.axi_in = mshr_axi_in;
   wb_.in.axi_in   = wb_axi_in;
@@ -734,6 +739,9 @@ void MemSubsystem::comb() {
   mshr_.in.wbmshr = wb_.out.wbmshr;
 
   dcache_.stage2_comb();
+#else
+  dcache_.comb();
+#endif
 
   if (ptw_walk_direct_hit) {
     ptw_block.on_walk_read_granted(0);
@@ -763,8 +771,10 @@ void MemSubsystem::comb() {
     }
   }
 
-  const replay_resp replay_bcast =
-      replay_resp::from_io(mshr_.out.replay_resp);
+  replay_resp replay_bcast{};
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
+  replay_bcast = replay_resp::from_io(mshr_.out.replay_resp);
+#endif
 
   resp_route_block.eval_comb(&dcache_resp_raw_,
                              read_arb_block.comb_result().issued_tags,
@@ -824,20 +834,31 @@ void MemSubsystem::comb() {
   // Export MSHR replay wakeup to LSU. RealDcache::comb() clears resp ports
   // every cycle, so this must be written after dcache_.comb().
   if (dcache2lsu != nullptr) {
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
     dcache2lsu->resp_ports.replay_resp = mshr_.out.replay_resp;
+#else
+    dcache2lsu->resp_ports.replay_resp = {};
+#endif
   }
 
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
   // Phase 3a: run MSHR comb_inputs (may accept AXI R, allocate entries, and
   // prepare next-cycle registered fill / eviction outputs).
   mshr_.comb_inputs();
+#endif
 
   peripheral_axi_.in.read = peripheral_axi_read_in;
   peripheral_axi_.in.write = peripheral_axi_write_in;
   peripheral_axi_.comb_outputs();
   peripheral_axi_.comb_inputs();
 
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
   mshr_axi_out = mshr_.out.axi_out;
   wb_axi_out = wb_.out.axi_out;
+#else
+  mshr_axi_out = {};
+  wb_axi_out = {};
+#endif
   peripheral_axi_read_out = peripheral_axi_.out.read;
   peripheral_axi_write_out = peripheral_axi_.out.write;
 
@@ -884,8 +905,10 @@ void MemSubsystem::comb() {
 
 void MemSubsystem::seq() {
   dcache_.seq();
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
   mshr_.seq();
   wb_.seq();
+#endif
   peripheral_axi_.seq();
   read_arb_block.update_seq();
   resp_route_block.update_seq();
