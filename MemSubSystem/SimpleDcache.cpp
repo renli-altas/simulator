@@ -1,5 +1,6 @@
 #include "SimpleDcache.h"
 #include "DcacheConfig.h"
+#include "DiffMemTrace.h"
 #include "PhysMemory.h"
 #include "types.h"
 #include <cassert>
@@ -68,6 +69,11 @@ void SimpleDcache::comb() {
     p.req_id = req.req_id;
     p.was_miss = !hit;
     pending_loads_.push_back(p);
+    diff_mem_trace::record(
+        DiffMemTraceOp::Load, DiffMemTracePhase::Req, DiffMemTraceDetail::Req,
+        static_cast<uint8_t>(i), static_cast<uint8_t>(req.uop.func3),
+        req.req_id, req.uop.rob_idx, req.uop.rob_flag, req.addr, 0,
+        hit ? 1u : 0u, static_cast<uint32_t>(p.ready_cycle & 0xffffffffu));
     if (ctx != nullptr) {
       ctx->perf.dcache_access_num++;
       if (!hit) {
@@ -90,6 +96,12 @@ void SimpleDcache::comb() {
     p.req_id = req.req_id;
     p.was_miss = !hit;
     pending_stores_.push_back(p);
+    diff_mem_trace::record(
+        DiffMemTraceOp::Store, DiffMemTracePhase::Req, DiffMemTraceDetail::Req,
+        static_cast<uint8_t>(i), static_cast<uint8_t>(req.uop.func3),
+        req.req_id, req.uop.rob_idx, req.uop.rob_flag, req.addr, req.data,
+        static_cast<uint32_t>(p.strb) | (hit ? (1u << 8) : 0u),
+        static_cast<uint32_t>(p.ready_cycle & 0xffffffffu));
     if (ctx != nullptr) {
       ctx->perf.dcache_access_num++;
       if (!hit) {

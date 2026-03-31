@@ -166,13 +166,8 @@ fault:
          dut_cpu.instruction);
   std::printf("Commit PC: 0x%08x\tDUT next PC: 0x%08x\tREF next PC: 0x%08x\n",
               dut_cpu.commit_pc, dut_cpu.pc, ref_cpu.state.pc);
-  std::printf("[DIFF] p_memory@a5(0x%08x)=0x%08x ref=0x%08x\n", dut_cpu.gpr[15],
-              p_memory[dut_cpu.gpr[15] >> 2],
-              ref_cpu.memory[dut_cpu.gpr[15] >> 2]);
   dump_code_line_snapshot("commit_pc", dut_cpu.commit_pc);
-#if defined(LOG_ENABLE) && defined(LOG_LSU_MEM_ENABLE)
   diff_mem_trace::dump_recent();
-#endif
   dump_mem_subsystem_snapshot();
 
   Assert(0 && "Difftest: Register or Memory mismatch detected.");
