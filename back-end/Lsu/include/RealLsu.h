@@ -13,7 +13,7 @@ class PtwWalkPort;
 
 class RealLsu : public AbstractLsu {
 private:
-  enum class LoadState : uint8_t {
+  enum class LoadState : reg<3> {
     WaitExec = 0,
     WaitSend = 1,
     WaitResp = 2,
@@ -22,18 +22,18 @@ private:
   };
 
   struct LdqEntry {
-    bool valid;
-    bool killed;
-    bool sent;
-    bool waiting_resp;
-    uint64_t wait_resp_since;
-    bool tlb_retry;
-    bool is_mmio_wait;  // 地址已翻译为 MMIO，等待到达 ROB 队头后再发送
-    uint8_t replay_priority;
+    reg<1> valid;
+    reg<1> killed;
+    reg<1> sent;
+    reg<1> waiting_resp;
+    reg<64> wait_resp_since;
+    reg<1> tlb_retry;
+    reg<1> is_mmio_wait;  // 地址已翻译为 MMIO，等待到达 ROB 队头后再发送
+    reg<3> replay_priority;
     MicroOp uop;
   };
 
-  enum class StoreForwardState : uint8_t {
+  enum class StoreForwardState : reg<2> {
     NoHit = 0,
     Hit = 1,
     Retry = 2,
@@ -41,7 +41,7 @@ private:
 
   struct StoreForwardResult {
     StoreForwardState state = StoreForwardState::NoHit;
-    uint32_t data = 0;
+    reg<32> data = 0;
   };
 
   // MMU Instance (Composition)
@@ -64,11 +64,6 @@ private:
   bool reserve_valid;
   uint32_t reserve_addr;
 
-  int replay_count_ldq; // 统计重试次数
-  int replay_count_stq; // 统计重试次数
-  int mshr_replay_count_ldq; // 统计 MSHR 重试次数
-  int mshr_replay_count_stq; // 统计 MSHR 重试次数
-
   bool stq_head_flag; // 用于区分环形缓冲区中的两轮
 
   bool replay_type; // 0 = LDQ, 1 = STQ
@@ -87,6 +82,11 @@ private:
   std::deque<MicroOp> pending_sta_addr_reqs;
   bool pending_mmio_valid = false;
   PeripheralInIO pending_mmio_req{};
+
+  int replay_count_ldq; // 统计重试次数
+  int replay_count_stq; // 统计重试次数
+  int mshr_replay_count_ldq; // 统计 MSHR 重试次数
+  int mshr_replay_count_stq; // 统计 MSHR 重试次数
 
 public:
   RealLsu(SimContext *ctx);
