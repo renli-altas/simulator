@@ -1,15 +1,18 @@
 #pragma once
 #include "AbstractLsu.h"
+#include "../BSD/comb_flush.h"
+#include "../BSD/comb_load_res.h"
+#include "../BSD/comb_lsu2dis_info.h"
+#include "../BSD/comb_recv.h"
 #include "SimpleMmu.h" // Added MMU include
 #include "config.h"
 #include <cstdint>
-#include <deque>
 #include <memory>
 
 class Csr;
 class PtwMemPort;
 class PtwWalkPort;
-
+uint32_t extract_data(uint32_t raw_mem_val, uint32_t addr, int func3);
 
 class RealLsu : public AbstractLsu {
 private:
@@ -21,17 +24,7 @@ private:
     Ready = 4,
   };
 
-  struct LdqEntry {
-    reg<1> valid;
-    reg<1> killed;
-    reg<1> sent;
-    reg<1> waiting_resp;
-    reg<64> wait_resp_since;
-    reg<1> tlb_retry;
-    reg<1> is_mmio_wait;  // 地址已翻译为 MMIO，等待到达 ROB 队头后再发送
-    reg<3> replay_priority;
-    MicroOp uop;
-  };
+  using LdqEntry = RealLsuBsd::LdqEntry;
 
   enum class StoreForwardState : reg<2> {
     NoHit = 0,
@@ -74,12 +67,12 @@ private:
   bool issued_stq_addr_valid[LSU_STA_COUNT] = {}; // 标记 issued_stq_addr 中哪些地址是有效的
   bool issued_stq_addr_valid_nxt[LSU_STA_COUNT] = {}; // 下一周期的有效地址标记
   // 3. 完成的 Load 队列 (等待写回)
-  std::deque<MicroOp> finished_loads;
+  RealLsuBsd::FinishedLoadQueue finished_loads;
 
   // 4. 完成的 STA 队列 (等待访存流水线对齐写回)
-  std::deque<MicroOp> finished_sta_reqs;
+  RealLsuBsd::FinishedStaQueue finished_sta_reqs;
   // 5. STA 地址翻译重试队列 (DTLB/PTW miss -> RETRY)
-  std::deque<MicroOp> pending_sta_addr_reqs;
+  RealLsuBsd::PendingStaAddrQueue pending_sta_addr_reqs;
   bool pending_mmio_valid = false;
   PeripheralInIO pending_mmio_req{};
 
@@ -156,6 +149,10 @@ private:
   void progress_ldq_entries();
   void progress_pending_sta_addr();
   bool finish_store_addr_once(const MicroOp &inst);
+  RealLsuBsd::CombLsu2DisInfoInterface make_comb_lsu2dis_info_ifc();
+  RealLsuBsd::CombRecvInterface make_comb_recv_ifc();
+  RealLsuBsd::CombLoadResInterface make_comb_load_res_ifc();
+  RealLsuBsd::CombFlushInterface make_comb_flush_ifc();
 
   bool has_older_store_pending(const MicroOp &load_uop) const;
   StoreForwardResult check_store_forward(uint32_t p_addr,
