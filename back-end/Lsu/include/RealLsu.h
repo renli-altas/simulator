@@ -1,6 +1,6 @@
 #pragma once
 #include "AbstractLsu.h"
-#include "SimpleMmu.h" // Added MMU include
+#include "SimpleMmu.h"
 #include "config.h"
 #include <cstdint>
 #include <deque>
@@ -10,17 +10,8 @@ class Csr;
 class PtwMemPort;
 class PtwWalkPort;
 
-
 class RealLsu : public AbstractLsu {
 private:
-  enum class LoadState : uint8_t {
-    WaitExec = 0,
-    WaitSend = 1,
-    WaitResp = 2,
-    WaitRetry = 3,
-    Ready = 4,
-  };
-
   struct LdqEntry {
     bool valid;
     bool killed;
@@ -60,23 +51,15 @@ private:
   LdqEntry ldq[LDQ_SIZE];
   int ldq_count;
   int ldq_alloc_tail;
-  
+
   bool reserve_valid;
   uint32_t reserve_addr;
 
-  int replay_count_ldq; // 统计重试次数
-  int replay_count_stq; // 统计重试次数
-  int mshr_replay_count_ldq; // 统计 MSHR 重试次数
-  int mshr_replay_count_stq; // 统计 MSHR 重试次数
+  int mshr_replay_count_ldq;
+  int mshr_replay_count_stq;
   bool stq_head_flag; // 用于区分环形缓冲区中的两轮
 
   bool replay_type; // 0 = LDQ, 1 = STQ
-
-  
-  uint32_t issued_stq_addr[LSU_STA_COUNT] = {};
-  uint32_t issued_stq_addr_nxt[LSU_STA_COUNT] = {}; // 每周期已发出的 Store 地址，用于 Store Forward 检测
-  bool issued_stq_addr_valid[LSU_STA_COUNT] = {}; // 标记 issued_stq_addr 中哪些地址是有效的
-  bool issued_stq_addr_valid_nxt[LSU_STA_COUNT] = {}; // 下一周期的有效地址标记
   // 3. 完成的 Load 队列 (等待写回)
   std::deque<MicroOp> finished_loads;
 
@@ -135,7 +118,6 @@ private:
   void handle_store_addr(const MicroOp &uop);
   void handle_store_data(const MicroOp &uop);
   int find_recovery_tail(mask_t br_mask);
-  bool is_store_older(int s_idx, int s_flag, int l_idx, int l_flag);
   bool reserve_stq_entry(mask_t br_mask, uint32_t rob_idx, uint32_t rob_flag,
                          uint32_t func3);
   void consume_stq_alloc_reqs(int &push_count);
@@ -156,6 +138,8 @@ private:
   void progress_ldq_entries();
   void progress_pending_sta_addr();
   bool finish_store_addr_once(const MicroOp &inst);
+  void update_load_ready_state(LdqEntry &entry, uint32_t p_addr,
+                               int64_t ready_cycle);
 
   bool has_older_store_pending(const MicroOp &load_uop) const;
   StoreForwardResult check_store_forward(uint32_t p_addr,

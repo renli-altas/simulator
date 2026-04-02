@@ -6,8 +6,6 @@
 #include "config.h"
 #include "util.h"
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <memory>
 static constexpr int64_t REQ_WAIT_RETRY = 0x7FFFFFFFFFFFFFFF;
 static constexpr int64_t REQ_WAIT_SEND = 0x7FFFFFFFFFFFFFFD;
@@ -55,45 +53,14 @@ void RealLsu::init() {
   reserve_addr = 0;
 
   replay_type = 0;
-  replay_count_ldq = 0;
-  replay_count_stq = 0;
-
   mshr_replay_count_ldq = 0;
   mshr_replay_count_stq = 0;
-  memset(issued_stq_addr, 0, sizeof(issued_stq_addr));
-  memset(issued_stq_addr_nxt, 0, sizeof(issued_stq_addr));
-  memset(issued_stq_addr_valid, 0, sizeof(issued_stq_addr_valid));
-  memset(issued_stq_addr_valid_nxt, 0, sizeof(issued_stq_addr_valid_nxt));
-
-  // 初始化所有 STQ LDQ 条目，防止未初始化内存导致的破坏
-  for (int i = 0; i < STQ_SIZE; i++) {
-    stq[i].valid = false;
-    stq[i].addr_valid = false;
-    stq[i].data_valid = false;
-    stq[i].committed = false;
-    stq[i].done = false;
-    stq[i].is_mmio = false;
-    stq[i].send = false;
-    stq[i].replay = 0;
-    stq[i].addr = 0;
-    stq[i].data = 0;
-    stq[i].br_mask = 0;
-    stq[i].rob_idx = 0;
-    stq[i].rob_flag = 0;
-    stq[i].func3 = 0;
-    stq[i].is_mmio = false;
+  for (auto &entry : stq) {
+    entry = StqEntry{};
   }
 
-  for (int i = 0; i < LDQ_SIZE; i++) {
-    ldq[i].valid = false;
-    ldq[i].killed = false;
-    ldq[i].sent = false;
-    ldq[i].waiting_resp = false;
-    ldq[i].wait_resp_since = 0;
-    ldq[i].tlb_retry = false;
-    ldq[i].is_mmio_wait = false;
-    ldq[i].uop = {};
-    ldq[i].replay_priority = 0;
+  for (auto &entry : ldq) {
+    entry = LdqEntry{};
   }
 }
 
@@ -172,12 +139,6 @@ void RealLsu::comb_recv() {
     mmio_req_used = true;
   }
 
-  //   Assert(out.dcache_req != nullptr && "out.dcache_req is not connected");
-  //   Assert(out.dcache_wreq != nullptr && "out.dcache_wreq is not connected");
-  //   Assert(in.dcache_resp != nullptr && "in.dcache_resp is not connected");
-  //   Assert(in.dcache_wready != nullptr && "in.dcache_wready is not
-  //   connected"); *out.dcache_req = {}; *out.dcache_wreq = {};
-
   // Retry STA address translations that previously returned MMU::RETRY.
   progress_pending_sta_addr();
 
@@ -239,12 +200,6 @@ void RealLsu::comb_recv() {
     const uint64_t wait_cycles = sim_time_u64 - entry.wait_resp_since;
     if (entry.killed) {
       if (wait_cycles >= LD_KILLED_GC_CYCLES) {
-        LSU_MEM_DBG_PRINTF(
-            "[LSU][KILLED LDQ GC] cyc=%lld ldq=%d rob=%u flag=%u pc=0x%08x "
-            "paddr=0x%08x inst_idx=%lld wait=%llu\n",
-            (long long)sim_time, i, (unsigned)entry.uop.rob_idx,
-            (unsigned)entry.uop.rob_flag, entry.uop.dbg.pc, entry.uop.diag_val,
-            (long long)entry.uop.dbg.inst_idx, (unsigned long long)wait_cycles);
         entry.sent = false;
         entry.waiting_resp = false;
         entry.wait_resp_since = 0;
@@ -257,14 +212,6 @@ void RealLsu::comb_recv() {
       continue;
     }
     if (wait_cycles >= LD_RESP_STUCK_RETRY_CYCLES) {
-      if (ctx != nullptr) {
-        ctx->perf.ld_resp_timeout_retry_count++;
-      }
-      LSU_MEM_DBG_PRINTF("[LSU][LD RESP TIMEOUT] cyc=%lld ldq=%d rob=%u "
-                         "pc=0x%08x paddr=0x%08x wait=%llu -> retry\n",
-                         (long long)sim_time, i, (unsigned)entry.uop.rob_idx,
-                         entry.uop.dbg.pc, entry.uop.diag_val,
-                         (unsigned long long)wait_cycles);
       entry.sent = false;
       entry.waiting_resp = false;
       entry.wait_resp_since = 0;
@@ -272,9 +219,6 @@ void RealLsu::comb_recv() {
       entry.replay_priority = 3;
     }
   }
-
-  replay_count_ldq = 0;
-  replay_count_stq = 0;
 
   // Rebuild MSHR replay pressure from queue state every cycle.
   // This avoids stale counters after flush/mispredict/recovery paths.
@@ -349,12 +293,6 @@ void RealLsu::comb_recv() {
       }
       if (mshr_has_free && entry.replay_priority == 1 && replay_type == 0 &&
           !has_replay) {
-        LSU_MEM_DBG_PRINTF("[LSU] Load replay triggered for LDQ entry %d (ROB "
-                           "idx %u) mshr_replay_count_ldq:%d "
-                           "mshr_replay_count_stq:%d replay_type=%d\n",
-                           i, (unsigned)entry.uop.rob_idx,
-                           mshr_replay_count_ldq, mshr_replay_count_stq,
-                           replay_type);
         entry.replay_priority = 4;
         has_replay = true;
       }
@@ -372,15 +310,9 @@ void RealLsu::comb_recv() {
       }
       if (mshr_has_free && entry.replay == 1 && replay_type == 1 &&
           !has_replay) {
-        LSU_MEM_DBG_PRINTF("[LSU] Store replay triggered for STQ entry %d (ROB "
-                           "idx %u) mshr_replay_count_ldq:%d "
-                           "mshr_replay_count_stq:%d replay_type=%d\n",
-                           (stq_head + i) % STQ_SIZE, (unsigned)entry.rob_idx,
-                           mshr_replay_count_ldq, mshr_replay_count_stq,
-                           replay_type);
         entry.replay = 0;
         has_replay = true;
-      } // 可能有问题
+      }
     }
   }
 
@@ -413,9 +345,6 @@ void RealLsu::comb_recv() {
             entry.uop.rob_idx == (uint32_t)in.rob_bcast->head_rob_idx &&
             peripheral_io.out.ready;
         if (!mmio_can_issue) {
-          if (ctx != nullptr) {
-            ctx->perf.mmio_head_block_cycles++;
-          }
           continue;
         }
         // MMIO response path expects uop.rob_idx to carry an LDQ-local
@@ -427,10 +356,6 @@ void RealLsu::comb_recv() {
         mmio_req.mmio_addr = entry.uop.diag_val;
         mmio_req.mmio_wdata = 0; // Load 没有写数据
         mmio_req.uop = mmio_uop;
-        LSU_MEM_DBG_PRINTF("[LSU][MMIO][LD ISSUE] cyc=%lld ldq=%d rob=%u "
-                           "paddr=0x%08x func3=0x%x\n",
-                           (long long)sim_time, j, (unsigned)entry.uop.rob_idx,
-                           entry.uop.diag_val, (unsigned)entry.uop.func3);
         mmio_req_used = true;
         pending_mmio_valid = true;
         pending_mmio_req = mmio_req;
@@ -440,12 +365,6 @@ void RealLsu::comb_recv() {
         entry.wait_resp_since = sim_time;
         entry.uop.cplt_time = REQ_WAIT_RESP;
         break;
-        // 这里直接调用外设接口，绕过正常的 Cache 请求流程
-        // 以确保 MMIO 访问的原子性和顺序性
-        // 注意：外设接口需要自行处理好与 ROB 的交互，确保在 MMIO load 到达 ROB
-        // 队头时能正确响应并触发指令完成
-
-        // 已到达 ROB 队头，允许发出
       }
       int rob_age = 0;
       if (in.rob_bcast->head_valid) {
@@ -467,18 +386,6 @@ void RealLsu::comb_recv() {
       out.lsu2dcache->req_ports.load_ports[i].addr = ldq[max_idx].uop.diag_val;
       out.lsu2dcache->req_ports.load_ports[i].req_id = max_idx;
       out.lsu2dcache->req_ports.load_ports[i].uop = req_uop;
-      // if (is_coremark_focus_addr(ldq[max_idx].uop.diag_val) ||
-      //     is_coremark_focus_load_pc(ldq[max_idx].uop.dbg.pc))
-      // {
-      //     std::printf("[FOCUS][LSU][LD ISSUE] cyc=%lld port=%d ldq=%d
-      //     req_id=%d rob=%u pc=0x%08x paddr=0x%08x func3=0x%x
-      //     replay_pri=%u\n",
-      //                 (long long)sim_time, i, max_idx, max_idx,
-      //                 (unsigned)ldq[max_idx].uop.rob_idx,
-      //                 ldq[max_idx].uop.dbg.pc, ldq[max_idx].uop.diag_val,
-      //                 ldq[max_idx].uop.func3,
-      //                 (unsigned)ldq[max_idx].replay_priority);
-      // }
       ldq[max_idx].sent = true;
       ldq[max_idx].waiting_resp = true;
       ldq[max_idx].wait_resp_since = sim_time;
@@ -494,9 +401,6 @@ void RealLsu::comb_recv() {
   // Per cycle, each STA port can issue at most one real store request.
   // Scan STQ from head and pick the oldest issuable entries.
   int issued_sta = 0;
-  memset(
-      issued_stq_addr_valid_nxt, 0,
-      sizeof(issued_stq_addr_valid_nxt)); // Clear next-cycle issued addresses
   for (int i = 0; i < stq_count && issued_sta < LSU_STA_COUNT; i++) {
     int stq_idx = (stq_head + i) % STQ_SIZE;
     auto &entry = stq[stq_idx];
@@ -511,32 +415,10 @@ void RealLsu::comb_recv() {
     if (entry.suppress_write) {
       continue;
     }
-    // LSU_MEM_DBG_PRINTF("[STQ SCAN] cyc=%lld stq_head=%d stq_idx=%d
-    // addr_valid=%d data_valid=%d committed=%d done=%d send=%d replay=%d
-    // addr=0x%08x wdata=0x%08x\n",
-    //             (long long)sim_time, stq_head, stq_idx, entry.addr_valid,
-    //             entry.data_valid, entry.committed, entry.done, entry.send,
-    //             entry.replay, entry.p_addr, entry.data);
     if (entry.done || entry.send || entry.replay) {
       continue;
     }
-    // for(int j=0;j<LSU_STA_COUNT;j++){
-    //     LSU_MEM_DBG_PRINTF("[STQ CHECK] cyc=%lld port=%d stq_idx=%d
-    //     issued_stq_addr[%d]=0x%08x issued_stq_addr_valid[%d]=%d
-    //     entry.addr=0x%08x\n",
-    //                 (long long)sim_time, j, stq_idx, j, issued_stq_addr[j],
-    //                 j, issued_stq_addr_valid[j], entry.addr);
-    // }
     bool continue_flag = false;
-    // for(int j=0;j<LSU_STA_COUNT;j++){
-    //     if(issued_stq_addr[j] == entry.addr&&issued_stq_addr_valid[j]==1){
-    //         continue_flag=true;
-    //         break;
-    //     }
-    // }
-    // if(continue_flag){
-    //     continue;
-    // }
     for (int j = 0; j < i; j++) {
       int older_stq_idx = (stq_head + j) % STQ_SIZE;
       auto &older_entry = stq[older_stq_idx];
@@ -555,9 +437,6 @@ void RealLsu::comb_recv() {
       }
     }
     if (continue_flag) {
-      if (ctx != nullptr) {
-        ctx->perf.stq_same_addr_block_count++;
-      }
       continue;
     }
     if (entry.is_mmio) {
@@ -582,10 +461,6 @@ void RealLsu::comb_recv() {
       // MMIO response path uses uop.rob_idx as STQ slot token.
       mmio_req.uop.rob_idx = stq_idx;
       mmio_req.uop.func3 = entry.func3;
-      LSU_MEM_DBG_PRINTF("[LSU][MMIO][ST ISSUE] cyc=%lld stq=%d rob=%u "
-                         "paddr=0x%08x data=0x%08x func3=0x%x\n",
-                         (long long)sim_time, stq_idx, (unsigned)entry.rob_idx,
-                         entry.p_addr, entry.data, (unsigned)entry.func3);
       mmio_req_used = true;
       pending_mmio_valid = true;
       pending_mmio_req = mmio_req;
@@ -593,8 +468,6 @@ void RealLsu::comb_recv() {
       issued_sta++;
       continue;
     }
-    issued_stq_addr_nxt[issued_sta] = entry.addr;
-    issued_stq_addr_valid_nxt[issued_sta] = 1;
     change_store_info(entry, issued_sta, stq_idx);
     entry.send = true; // Mark only when the request is truly driven.
     issued_sta++;
@@ -626,19 +499,6 @@ void RealLsu::comb_load_res() {
               (entry.uop.dbg.inst_idx == resp_uop.dbg.inst_idx) &&
               (entry.uop.rob_flag == resp_uop.rob_flag);
           if (!same_token) {
-            if (ctx != nullptr) {
-              ctx->perf.ld_resp_stale_drop_count++;
-            }
-            LSU_MEM_DBG_PRINTF(
-                "[LSU][LD RESP STALE] cyc=%lld port=%d ldq=%d replay=%u "
-                "resp_inst=%lld cur_inst=%lld resp_flag=%u cur_flag=%u "
-                "resp_pc=0x%08x cur_pc=0x%08x\n",
-                (long long)sim_time, i, idx,
-                (unsigned)in.dcache2lsu->resp_ports.load_resps[i].replay,
-                (long long)resp_uop.dbg.inst_idx,
-                (long long)entry.uop.dbg.inst_idx, (unsigned)resp_uop.rob_flag,
-                (unsigned)entry.uop.rob_flag, resp_uop.dbg.pc,
-                entry.uop.dbg.pc);
             continue;
           }
           if (!entry.killed) {
@@ -646,18 +506,6 @@ void RealLsu::comb_load_res() {
               uint32_t raw_data = in.dcache2lsu->resp_ports.load_resps[i].data;
               uint32_t extracted =
                   extract_data(raw_data, entry.uop.diag_val, entry.uop.func3);
-              // if (is_coremark_focus_addr(entry.uop.diag_val) ||
-              //     is_coremark_focus_load_pc(entry.uop.dbg.pc))
-              // {
-              //     std::printf("[FOCUS][LSU][LD WB] cyc=%lld port=%d ldq=%d
-              //     req_id=%zu rob=%u pc=0x%08x paddr=0x%08x func3=0x%x
-              //     raw=0x%08x result=0x%08x\n",
-              //                 (long long)sim_time, i, idx,
-              //                 in.dcache2lsu->resp_ports.load_resps[i].req_id,
-              //                 (unsigned)entry.uop.rob_idx, entry.uop.dbg.pc,
-              //                 entry.uop.diag_val, entry.uop.func3, raw_data,
-              //                 extracted);
-              // }
               if (is_amo_lr_uop(entry.uop)) {
                 reserve_addr = entry.uop.diag_val;
                 reserve_valid = true;
@@ -702,10 +550,6 @@ void RealLsu::comb_load_res() {
           entry.uop.dbg.difftest_skip = peripheral_io.out.uop.dbg.difftest_skip;
           entry.uop.cplt_time = sim_time;
           entry.uop.tma.is_cache_miss = false; // MMIO 访问不算 Cache Miss
-          LSU_MEM_DBG_PRINTF(
-              "[LSU][MMIO][LD RESP] cyc=%lld ldq=%d rob=%u data=0x%08x\n",
-              (long long)sim_time, idx, (unsigned)entry.uop.rob_idx,
-              entry.uop.result);
           finished_loads.push_back(entry.uop);
         }
       }
@@ -748,10 +592,6 @@ void RealLsu::comb_load_res() {
       if (entry.valid && !entry.done && entry.send) {
         entry.done = true;
         entry.send = false;
-        LSU_MEM_DBG_PRINTF("[LSU][MMIO][ST RESP] cyc=%lld stq=%d rob=%u "
-                           "paddr=0x%08x data=0x%08x\n",
-                           (long long)sim_time, stq_idx,
-                           (unsigned)entry.rob_idx, entry.p_addr, entry.data);
       }
     } else {
       Assert(false && "Invalid STQ index in MMIO store response");
@@ -792,7 +632,7 @@ void RealLsu::handle_load_req(const MicroOp &inst) {
   }
 
   MicroOp task = inst;
-  task.tma.is_cache_miss = false; // Initialize to false
+  task.tma.is_cache_miss = false;
   uint32_t p_addr;
   auto mmu_ret = mmu->translate(p_addr, task.result, 1, in.csr_status);
 
@@ -805,31 +645,13 @@ void RealLsu::handle_load_req(const MicroOp &inst) {
 
   if (mmu_ret == AbstractMmu::Result::FAULT) {
     task.page_fault_load = true;
-    task.diag_val = task.result; // Store faulting virtual address
+    task.diag_val = task.result;
     task.cplt_time = sim_time + 1;
   } else {
-    task.diag_val = p_addr;
-
-    // [Fix] Disable Store-to-Load Forwarding for MMIO ranges
-    // These addresses involve side effects and must read from consistent memory
-    bool is_mmio = is_mmio_addr(p_addr);
-    if (is_mmio && ctx != nullptr) {
-      ctx->perf.mmio_inst_count++;
-      ctx->perf.mmio_load_count++;
-    }
-    // task.flush_pipe = is_mmio;
-    ldq[ldq_idx].is_mmio_wait = is_mmio; // 延迟发送：等待到达 ROB 队头后再发出
-    auto fwd_res =
-        is_mmio ? StoreForwardResult{} : check_store_forward(p_addr, inst);
-
-    if (fwd_res.state == StoreForwardState::Hit) {
-      task.result = fwd_res.data;
-      task.cplt_time = sim_time + 0; // 这一拍直接完成！
-    } else if (fwd_res.state == StoreForwardState::NoHit) {
-      task.cplt_time = REQ_WAIT_SEND;
-    } else {
-      task.cplt_time = REQ_WAIT_RETRY;
-    }
+    ldq[ldq_idx].uop = task;
+    ldq[ldq_idx].tlb_retry = false;
+    update_load_ready_state(ldq[ldq_idx], p_addr, sim_time);
+    return;
   }
 
   ldq[ldq_idx].tlb_retry = false;
@@ -846,27 +668,6 @@ void RealLsu::handle_store_addr(const MicroOp &inst) {
 void RealLsu::handle_store_data(const MicroOp &inst) {
   Assert(inst.stq_idx >= 0 && inst.stq_idx < STQ_SIZE);
   if (!stq_entry_matches_uop(stq[inst.stq_idx], inst)) {
-    const auto &entry = stq[inst.stq_idx];
-    LSU_MEM_DBG_FPRINTF(
-        stderr,
-        "[LSU][STD_MISMATCH] cyc=%lld inst_idx=%lld pc=0x%08x stq_idx=%u "
-        "stq_flag=%u rob=%u flag=%u result=0x%08x func3=0x%x\n",
-        (long long)sim_time, (long long)inst.dbg.inst_idx,
-        (uint32_t)inst.dbg.pc, (unsigned)inst.stq_idx, (unsigned)inst.stq_flag,
-        (unsigned)inst.rob_idx, (unsigned)inst.rob_flag, (uint32_t)inst.result,
-        (unsigned)inst.func3);
-    LSU_MEM_DBG_FPRINTF(stderr,
-                        "[LSU][STD_MISMATCH][STQ %02u] valid=%d addr_v=%d "
-                        "data_v=%d committed=%d "
-                        "done=%d send=%d replay=%u rob=%u flag=%u func3=0x%x "
-                        "p_addr=0x%08x data=0x%08x\n",
-                        (unsigned)inst.stq_idx, (int)entry.valid,
-                        (int)entry.addr_valid, (int)entry.data_valid,
-                        (int)entry.committed, (int)entry.done, (int)entry.send,
-                        (unsigned)entry.replay, (unsigned)entry.rob_idx,
-                        (unsigned)entry.rob_flag, (unsigned)entry.func3,
-                        (uint32_t)entry.p_addr, (uint32_t)entry.data);
-    std::fflush(stderr);
     return;
   }
   stq[inst.stq_idx].data = inst.result;
@@ -879,21 +680,13 @@ bool RealLsu::reserve_stq_entry(mask_t br_mask, uint32_t rob_idx,
     return false;
   }
   const int alloc_idx = stq_tail;
-  stq[alloc_idx].valid = true;
-  stq[alloc_idx].addr_valid = false;
-  stq[alloc_idx].data_valid = false;
-  stq[alloc_idx].committed = false;
-  stq[alloc_idx].done = false;
-  stq[alloc_idx].is_mmio = false;
-  stq[alloc_idx].send = false;
-  stq[alloc_idx].replay = 0;
-  stq[alloc_idx].addr = 0;
-  stq[alloc_idx].data = 0;
-  stq[alloc_idx].suppress_write = 0;
-  stq[alloc_idx].br_mask = br_mask;
-  stq[alloc_idx].rob_idx = rob_idx;
-  stq[alloc_idx].rob_flag = rob_flag;
-  stq[alloc_idx].func3 = func3;
+  StqEntry &entry = stq[alloc_idx];
+  entry = StqEntry{};
+  entry.valid = true;
+  entry.br_mask = br_mask;
+  entry.rob_idx = rob_idx;
+  entry.rob_flag = rob_flag;
+  entry.func3 = func3;
   stq_tail = (stq_tail + 1) % STQ_SIZE;
   return true;
 }
@@ -916,20 +709,14 @@ bool RealLsu::reserve_ldq_entry(int idx, mask_t br_mask, uint32_t rob_idx,
   if (ldq[idx].valid) {
     return false;
   }
-  ldq[idx].valid = true;
-  ldq[idx].killed = false;
-  ldq[idx].sent = false;
-  ldq[idx].waiting_resp = false;
-  ldq[idx].wait_resp_since = 0;
-  ldq[idx].tlb_retry = false;
-  ldq[idx].is_mmio_wait = false;
-  ldq[idx].replay_priority = 0;
-  ldq[idx].uop = {};
-  ldq[idx].uop.br_mask = br_mask;
-  ldq[idx].uop.rob_idx = rob_idx;
-  ldq[idx].uop.rob_flag = rob_flag;
-  ldq[idx].uop.ldq_idx = idx;
-  ldq[idx].uop.cplt_time = REQ_WAIT_EXEC;
+  LdqEntry &entry = ldq[idx];
+  entry = LdqEntry{};
+  entry.valid = true;
+  entry.uop.br_mask = br_mask;
+  entry.uop.rob_idx = rob_idx;
+  entry.uop.rob_flag = rob_flag;
+  entry.uop.ldq_idx = idx;
+  entry.uop.cplt_time = REQ_WAIT_EXEC;
   ldq_count++;
   ldq_alloc_tail = (idx + 1) % LDQ_SIZE;
   return true;
@@ -953,8 +740,8 @@ bool RealLsu::is_mmio_addr(uint32_t paddr) const {
          (paddr == OPENSBI_TIMER_LOW_ADDR) ||
          (paddr == OPENSBI_TIMER_HIGH_ADDR);
 }
-void RealLsu::change_store_info(StqEntry &head, int port, int store_index) {
 
+void RealLsu::change_store_info(StqEntry &head, int port, int store_index) {
   uint32_t alignment_mask = (head.func3 & 0x3) == 0   ? 0
                             : (head.func3 & 0x3) == 1 ? 1
                                                       : 3;
@@ -985,14 +772,6 @@ void RealLsu::change_store_info(StqEntry &head, int port, int store_index) {
   out.lsu2dcache->req_ports.store_ports[port].data = wdata;
   out.lsu2dcache->req_ports.store_ports[port].uop = head;
   out.lsu2dcache->req_ports.store_ports[port].req_id = store_index;
-  // if (is_coremark_focus_addr(head.p_addr))
-  // {
-  //     std::printf("[FOCUS][LSU][ST ISSUE] cyc=%lld port=%d stq=%d rob=%u
-  //     paddr=0x%08x func3=0x%x data=0x%08x wdata=0x%08x wstrb=0x%x\n",
-  //                 (long long)sim_time, port, store_index,
-  //                 (unsigned)head.rob_idx, head.p_addr, head.func3, head.data,
-  //                 wdata, wstrb);
-  // }
 }
 
 void RealLsu::handle_global_flush() {
@@ -1090,16 +869,7 @@ void RealLsu::retire_stq_head_if_ready(int &pop_count) {
 
   // Normal store: comb 阶段已完成写握手
   // Suppressed store: 跳过写握手直接 retire
-  head.valid = false;
-  head.committed = false;
-  head.addr_valid = false;
-  head.data_valid = false;
-  head.done = false;
-  head.addr = 0;
-  head.data = 0;
-  head.br_mask = 0;
-  head.send = false;
-  head.replay = 0;
+  head = StqEntry{};
   // Keep the suppression tag on an invalid entry until the slot is reused so
   // commit-time difftest can still recognize a failed SC that intentionally
   // does not perform a memory write.
@@ -1113,44 +883,12 @@ void RealLsu::retire_stq_head_if_ready(int &pop_count) {
   pop_count++;
 }
 
-// void RealLsu::retire_stq_head_if_ready(int &pop_count)
-// {
-//     StqEntry &head = stq[stq_head];
-//     if (!(head.valid && head.addr_valid && head.data_valid && head.committed
-//     &&head.suppress_write))
-//     {
-//         return;
-//     }
-//     if (!(head.send && head.done))
-//     {
-//         return;
-//     }
-
-//     // Store write handshake succeeded in comb stage.
-//     head.valid = false;
-//     head.committed = false;
-//     head.addr_valid = false;
-//     head.data_valid = false;
-//     head.done = false;
-//     head.addr = 0;
-//     head.data = 0;
-//     head.br_mask = 0;
-//     head.send = false;
-//     head.replay = 0;
-//     head.suppress_write = 0;
-
-//     stq_head = (stq_head + 1) % STQ_SIZE;
-//     pop_count++;
-// }
-
 void RealLsu::commit_stores_from_rob() {
   for (int i = 0; i < COMMIT_WIDTH; i++) {
     if (!in.rob_commit->commit_entry[i].valid) {
       continue;
     }
     const auto &commit_uop = in.rob_commit->commit_entry[i].uop;
-    if (ctx != nullptr && is_load(commit_uop)) {
-    }
     if (!is_store(commit_uop)) {
       continue;
     }
@@ -1192,25 +930,7 @@ void RealLsu::progress_ldq_entries() {
         entry.uop.diag_val = entry.uop.result;
         entry.uop.cplt_time = sim_time + 1;
       } else {
-        entry.uop.diag_val = p_addr;
-        bool is_mmio = is_mmio_addr(p_addr);
-        if (is_mmio && ctx != nullptr) {
-          ctx->perf.mmio_inst_count++;
-          ctx->perf.mmio_load_count++;
-        }
-        entry.uop.flush_pipe =
-            false; // MMIO no longer triggers flush (non-speculative is enough)
-        entry.is_mmio_wait = is_mmio; // 延迟发送：等待到达 ROB 队头后再发出
-        auto fwd_res = is_mmio ? StoreForwardResult{}
-                               : check_store_forward(p_addr, entry.uop);
-        if (fwd_res.state == StoreForwardState::Hit) {
-          entry.uop.result = fwd_res.data;
-          entry.uop.cplt_time = sim_time;
-        } else if (fwd_res.state == StoreForwardState::NoHit) {
-          entry.uop.cplt_time = REQ_WAIT_SEND;
-        } else {
-          entry.uop.cplt_time = REQ_WAIT_RETRY;
-        }
+        update_load_ready_state(entry, p_addr, sim_time);
       }
       continue;
     }
@@ -1235,6 +955,27 @@ void RealLsu::progress_ldq_entries() {
       }
       free_ldq_entry(i);
     }
+  }
+}
+
+void RealLsu::update_load_ready_state(LdqEntry &entry, uint32_t p_addr,
+                                      int64_t ready_cycle) {
+  entry.uop.diag_val = p_addr;
+  entry.is_mmio_wait = is_mmio_addr(p_addr);
+  if (entry.is_mmio_wait) {
+    entry.uop.flush_pipe = false;
+  }
+
+  const StoreForwardResult fwd_res =
+      entry.is_mmio_wait ? StoreForwardResult{}
+                         : check_store_forward(p_addr, entry.uop);
+  if (fwd_res.state == StoreForwardState::Hit) {
+    entry.uop.result = fwd_res.data;
+    entry.uop.cplt_time = ready_cycle;
+  } else if (fwd_res.state == StoreForwardState::NoHit) {
+    entry.uop.cplt_time = REQ_WAIT_SEND;
+  } else {
+    entry.uop.cplt_time = REQ_WAIT_RETRY;
   }
 }
 
@@ -1283,10 +1024,6 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
     return true;
   }
   bool is_mmio = is_mmio_addr(pa);
-  if (is_mmio && ctx != nullptr) {
-    ctx->perf.mmio_inst_count++;
-    ctx->perf.mmio_store_count++;
-  }
   // MMIO store must not trigger ROB flush at STA writeback. Otherwise ROB may
   // flush globally before LSU consumes rob_commit, dropping the STQ commit.
   success_op.flush_pipe = false;
@@ -1314,14 +1051,7 @@ void RealLsu::progress_pending_sta_addr() {
 void RealLsu::free_ldq_entry(int idx) {
   Assert(idx >= 0 && idx < LDQ_SIZE);
   if (ldq[idx].valid) {
-    ldq[idx].valid = false;
-    ldq[idx].killed = false;
-    ldq[idx].sent = false;
-    ldq[idx].waiting_resp = false;
-    ldq[idx].wait_resp_since = 0;
-    ldq[idx].tlb_retry = false;
-    ldq[idx].is_mmio_wait = false;
-    ldq[idx].uop = {};
+    ldq[idx] = LdqEntry{};
     ldq_count--;
     Assert(ldq_count >= 0);
   }
@@ -1413,24 +1143,10 @@ void RealLsu::seq() {
   // Retire after load progress so same-cycle completed stores can still
   // participate in store-to-load forwarding.
   retire_stq_head_if_ready(pop_count);
-  if (pop_count > stq_count) {
-    const int scan_active = count_active_stq_entries();
-    const int scan_committed = count_committed_stq_prefix();
-    LSU_MEM_DBG_PRINTF("[LSU][STQ UNDERFLOW PRECHECK] cyc=%lld pop=%d "
-                       "stq_count=%d scan_active=%d scan_committed=%d head=%d "
-                       "commit=%d tail=%d head_flag=%d\n",
-                       (long long)sim_time, pop_count, stq_count, scan_active,
-                       scan_committed, stq_head, stq_commit, stq_tail,
-                       static_cast<int>(stq_head_flag));
-  }
   stq_count = stq_count - pop_count;
   if (stq_count < 0) {
     Assert(0 && "STQ Count Underflow! logic bug!");
   }
-
-  memcpy(issued_stq_addr, issued_stq_addr_nxt, sizeof(issued_stq_addr));
-  memcpy(issued_stq_addr_valid, issued_stq_addr_valid_nxt,
-         sizeof(issued_stq_addr_valid));
 
 #if LSU_LIGHT_ASSERT
   if (pop_count == 0) {
@@ -1463,36 +1179,22 @@ void RealLsu::seq() {
 // 辅助：基于 Tag 查找新的 Tail
 // =========================================================
 int RealLsu::find_recovery_tail(mask_t br_mask) {
-  // 从 Commit 指针（安全点）开始，向 Tail 扫描
-  // 我们要找的是“第一个”被误预测影响的指令
-  // 因为是顺序分配，一旦找到一个，后面（更年轻）的肯定也都要丢弃
-
   int ptr = stq_commit;
-
-  // 修正：正确计算未提交指令数，处理队列已满的情况 (Tail == Commit)
-  // stq_count 追踪总有效条目 (Head -> Tail)。
-  // Head -> Commit 之间的条目已提交。
-  // Commit -> Tail 之间的条目未提交。
   int committed_count = count_committed_stq_prefix();
   int active_count = count_active_stq_entries();
   int uncommitted_count = active_count - committed_count;
 
-  // 安全检查
   if (uncommitted_count < 0)
-    uncommitted_count = 0; // 不应该发生
+    uncommitted_count = 0;
   int count = uncommitted_count;
 
   for (int i = 0; i < count; i++) {
-    // 检查当前条目是否依赖于被误预测的分支
     if (stq[ptr].valid && (stq[ptr].br_mask & br_mask)) {
-      // 找到了！这个位置就是错误路径的开始
-      // 新的 Tail 应该回滚到这里
       return ptr;
     }
     ptr = (ptr + 1) % STQ_SIZE;
   }
 
-  // 扫描完所有未提交指令都没找到相关依赖 -> 不需要回滚
   return -1;
 }
 
@@ -1529,30 +1231,8 @@ int RealLsu::count_stq_entries_until(int stop_idx) const {
 void RealLsu::clear_stq_entries(int start_idx, int count) {
   int ptr = start_idx;
   for (int i = 0; i < count; i++) {
-    stq[ptr].valid = false;
-    stq[ptr].addr_valid = false;
-    stq[ptr].data_valid = false;
-    stq[ptr].committed = false;
-    stq[ptr].done = false;
-    stq[ptr].is_mmio = false;
-    stq[ptr].send = false;
-    stq[ptr].replay = 0;
-    stq[ptr].addr = 0;
-    stq[ptr].data = 0;
-    stq[ptr].suppress_write = 0;
-    stq[ptr].br_mask = 0;
-    stq[ptr].rob_idx = 0;
-    stq[ptr].rob_flag = 0;
-    stq[ptr].func3 = 0;
+    stq[ptr] = StqEntry{};
     ptr = (ptr + 1) % STQ_SIZE;
-  }
-}
-
-bool RealLsu::is_store_older(int s_idx, int s_flag, int l_idx, int l_flag) {
-  if (s_flag == l_flag) {
-    return s_idx < l_idx;
-  } else {
-    return s_idx > l_idx;
   }
 }
 
