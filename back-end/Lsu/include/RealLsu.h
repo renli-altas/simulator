@@ -2,8 +2,8 @@
 #include "AbstractLsu.h"
 #include "SimpleMmu.h"
 #include "config.h"
+#include <array>
 #include <cstdint>
-#include <deque>
 #include <memory>
 
 class Csr;
@@ -12,6 +12,77 @@ class PtwWalkPort;
 
 class RealLsu : public AbstractLsu {
 private:
+  template <int Capacity> struct MicroOpFifo {
+    std::array<MicroOp, Capacity> entries{};
+    int head = 0;
+    int tail = 0;
+    int count = 0;
+
+    void clear() {
+      head = 0;
+      tail = 0;
+      count = 0;
+    }
+
+    bool empty() const { return count == 0; }
+
+    bool push_back(const MicroOp &uop) {
+      if (count >= Capacity) {
+        return false;
+      }
+      entries[tail] = uop;
+      tail = (tail + 1) % Capacity;
+      count++;
+      return true;
+    }
+
+    bool pop_front(MicroOp &uop) {
+      if (count == 0) {
+        return false;
+      }
+      uop = entries[head];
+      head = (head + 1) % Capacity;
+      count--;
+      if (count == 0) {
+        head = 0;
+        tail = 0;
+      }
+      return true;
+    }
+
+    template <typename Fn> void for_each_mut(Fn &&fn) {
+      int idx = head;
+      for (int i = 0; i < count; i++) {
+        fn(entries[idx]);
+        idx = (idx + 1) % Capacity;
+      }
+    }
+
+    template <typename Pred> void remove_if(Pred &&pred) {
+      const int old_count = count;
+      int read = head;
+      int write = head;
+      int kept = 0;
+      for (int i = 0; i < old_count; i++) {
+        MicroOp item = entries[read];
+        read = (read + 1) % Capacity;
+        if (pred(item)) {
+          continue;
+        }
+        entries[write] = item;
+        write = (write + 1) % Capacity;
+        kept++;
+      }
+      count = kept;
+      if (kept == 0) {
+        head = 0;
+        tail = 0;
+      } else {
+        tail = (head + kept) % Capacity;
+      }
+    }
+  };
+
   struct LdqEntry {
     bool valid;
     bool killed;
@@ -60,13 +131,17 @@ private:
   bool stq_head_flag; // 用于区分环形缓冲区中的两轮
 
   bool replay_type; // 0 = LDQ, 1 = STQ
+  static constexpr int kFinishedLoadFifoCapacity = LDQ_SIZE + STQ_SIZE;
+  static constexpr int kFinishedStaFifoCapacity = STQ_SIZE;
   // 3. 完成的 Load 队列 (等待写回)
-  std::deque<MicroOp> finished_loads;
+  MicroOpFifo<kFinishedLoadFifoCapacity> finished_loads;
 
   // 4. 完成的 STA 队列 (等待访存流水线对齐写回)
-  std::deque<MicroOp> finished_sta_reqs;
-  // 5. STA 地址翻译重试队列 (DTLB/PTW miss -> RETRY)
-  std::deque<MicroOp> pending_sta_addr_reqs;
+  MicroOpFifo<kFinishedStaFifoCapacity> finished_sta_reqs;
+  // 5. STA 地址翻译重试状态 (DTLB/PTW miss -> RETRY)
+  bool pending_sta_addr_valid[STQ_SIZE];
+  MicroOp pending_sta_addr_uops[STQ_SIZE];
+  int pending_sta_addr_count;
   bool pending_mmio_valid = false;
   PeripheralInIO pending_mmio_req{};
 
@@ -137,6 +212,8 @@ private:
   void commit_stores_from_rob();
   void progress_ldq_entries();
   void progress_pending_sta_addr();
+  void clear_pending_sta_addr();
+  void enqueue_pending_sta_addr(const MicroOp &uop);
   bool finish_store_addr_once(const MicroOp &inst);
   void update_load_ready_state(LdqEntry &entry, uint32_t p_addr,
                                int64_t ready_cycle);

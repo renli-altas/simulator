@@ -44,7 +44,7 @@ void RealLsu::init() {
   stq_head_flag = false;
   finished_loads.clear();
   finished_sta_reqs.clear();
-  pending_sta_addr_reqs.clear();
+  clear_pending_sta_addr();
   pending_mmio_valid = false;
   pending_mmio_req = {};
   mmu->flush();
@@ -518,7 +518,8 @@ void RealLsu::comb_load_res() {
                   !in.dcache2lsu->resp_ports.load_resps[i]
                        .uop.tma.is_cache_miss;
               entry.replay_priority = 0;
-              finished_loads.push_back(entry.uop);
+              const bool queued = finished_loads.push_back(entry.uop);
+              Assert(queued && "finished_loads overflow");
               free_ldq_entry(idx);
             } else {
               // Handle load replay if needed (e.g., due to MSHR eviction)
@@ -550,7 +551,8 @@ void RealLsu::comb_load_res() {
           entry.uop.dbg.difftest_skip = peripheral_io.out.uop.dbg.difftest_skip;
           entry.uop.cplt_time = sim_time;
           entry.uop.tma.is_cache_miss = false; // MMIO 访问不算 Cache Miss
-          finished_loads.push_back(entry.uop);
+          const bool queued = finished_loads.push_back(entry.uop);
+          Assert(queued && "finished_loads overflow");
         }
       }
       free_ldq_entry(idx);
@@ -600,12 +602,11 @@ void RealLsu::comb_load_res() {
 
   // 2. 从完成队列填充端口 (Load)
   for (int i = 0; i < LSU_LOAD_WB_WIDTH; i++) {
-    if (!finished_loads.empty()) {
+    MicroOp wb_uop;
+    if (finished_loads.pop_front(wb_uop)) {
       out.lsu2exe->wb_req[i].valid = true;
       out.lsu2exe->wb_req[i].uop =
-          LsuExeIO::LsuExeRespUop::from_micro_op(finished_loads.front());
-
-      finished_loads.pop_front();
+          LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
     } else {
       break;
     }
@@ -613,11 +614,11 @@ void RealLsu::comb_load_res() {
 
   // 3. 从完成队列填充端口 (STA)
   for (int i = 0; i < LSU_STA_COUNT; i++) {
-    if (!finished_sta_reqs.empty()) {
+    MicroOp wb_uop;
+    if (finished_sta_reqs.pop_front(wb_uop)) {
       out.lsu2exe->sta_wb_req[i].valid = true;
       out.lsu2exe->sta_wb_req[i].uop =
-          LsuExeIO::LsuExeRespUop::from_micro_op(finished_sta_reqs.front());
-      finished_sta_reqs.pop_front();
+          LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
     } else {
       out.lsu2exe->sta_wb_req[i].valid = false;
     }
@@ -661,7 +662,7 @@ void RealLsu::handle_load_req(const MicroOp &inst) {
 void RealLsu::handle_store_addr(const MicroOp &inst) {
   Assert(inst.stq_idx >= 0 && inst.stq_idx < STQ_SIZE);
   if (!finish_store_addr_once(inst)) {
-    pending_sta_addr_reqs.push_back(inst);
+    enqueue_pending_sta_addr(inst);
   }
 }
 
@@ -682,6 +683,11 @@ bool RealLsu::reserve_stq_entry(mask_t br_mask, uint32_t rob_idx,
   const int alloc_idx = stq_tail;
   StqEntry &entry = stq[alloc_idx];
   entry = StqEntry{};
+  if (pending_sta_addr_valid[alloc_idx]) {
+    pending_sta_addr_valid[alloc_idx] = false;
+    pending_sta_addr_count--;
+    pending_sta_addr_uops[alloc_idx] = {};
+  }
   entry.valid = true;
   entry.br_mask = br_mask;
   entry.rob_idx = rob_idx;
@@ -782,7 +788,7 @@ void RealLsu::handle_global_flush() {
   stq_tail = stq_commit;
   stq_count = committed_count;
   clear_stq_entries(stq_tail, discard_count);
-  pending_sta_addr_reqs.clear();
+  clear_pending_sta_addr();
   pending_mmio_valid = false;
   pending_mmio_req = {};
   reserve_addr = 0;
@@ -807,30 +813,17 @@ void RealLsu::handle_mispred(mask_t mask) {
     }
   }
 
-  auto it_sta = finished_sta_reqs.begin();
-  while (it_sta != finished_sta_reqs.end()) {
-    if (is_killed(*it_sta)) {
-      it_sta = finished_sta_reqs.erase(it_sta);
-    } else {
-      ++it_sta;
-    }
-  }
+  finished_sta_reqs.remove_if(is_killed);
+  finished_loads.remove_if(is_killed);
 
-  auto it_finished = finished_loads.begin();
-  while (it_finished != finished_loads.end()) {
-    if (is_killed(*it_finished)) {
-      it_finished = finished_loads.erase(it_finished);
-    } else {
-      ++it_finished;
+  for (int i = 0; i < STQ_SIZE; i++) {
+    if (!pending_sta_addr_valid[i]) {
+      continue;
     }
-  }
-
-  auto it_sta_retry = pending_sta_addr_reqs.begin();
-  while (it_sta_retry != pending_sta_addr_reqs.end()) {
-    if (is_killed(*it_sta_retry)) {
-      it_sta_retry = pending_sta_addr_reqs.erase(it_sta_retry);
-    } else {
-      ++it_sta_retry;
+    if (is_killed(pending_sta_addr_uops[i])) {
+      pending_sta_addr_valid[i] = false;
+      pending_sta_addr_count--;
+      pending_sta_addr_uops[i] = {};
     }
   }
 
@@ -951,7 +944,8 @@ void RealLsu::progress_ldq_entries() {
           reserve_valid = true;
           reserve_addr = entry.uop.diag_val;
         }
-        finished_loads.push_back(entry.uop);
+        const bool queued = finished_loads.push_back(entry.uop);
+        Assert(queued && "finished_loads overflow");
       }
       free_ldq_entry(i);
     }
@@ -1000,7 +994,8 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
     if (is_amo_sc_uop(inst)) {
       reserve_valid = false;
     }
-    finished_sta_reqs.push_back(fault_op);
+    const bool queued = finished_sta_reqs.push_back(fault_op);
+    Assert(queued && "finished_sta_reqs overflow");
     stq[idx].p_addr = pa;
     stq[idx].addr_valid = false;
     return true;
@@ -1017,7 +1012,8 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
     success_op.op =
         UOP_LOAD; // Reuse existing LSU load wb/awake path for SC result
     stq[idx].suppress_write = !sc_success;
-    finished_loads.push_back(success_op);
+    const bool queued = finished_loads.push_back(success_op);
+    Assert(queued && "finished_loads overflow");
     stq[idx].is_mmio = false; // SC 结果不区分 MMIO，始终走正常内存路径
     stq[idx].p_addr = pa;
     stq[idx].addr_valid = true;
@@ -1028,24 +1024,46 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
   // flush globally before LSU consumes rob_commit, dropping the STQ commit.
   success_op.flush_pipe = false;
   stq[idx].is_mmio = is_mmio;
-  finished_sta_reqs.push_back(success_op);
+  const bool queued = finished_sta_reqs.push_back(success_op);
+  Assert(queued && "finished_sta_reqs overflow");
   stq[idx].p_addr = pa;
   stq[idx].addr_valid = true;
   return true;
 }
 
 void RealLsu::progress_pending_sta_addr() {
-  if (pending_sta_addr_reqs.empty()) {
+  if (pending_sta_addr_count == 0) {
     return;
   }
-  size_t n = pending_sta_addr_reqs.size();
-  for (size_t i = 0; i < n; i++) {
-    MicroOp op = pending_sta_addr_reqs.front();
-    pending_sta_addr_reqs.pop_front();
-    if (!finish_store_addr_once(op)) {
-      pending_sta_addr_reqs.push_back(op);
+  for (int offset = 0; offset < STQ_SIZE; offset++) {
+    const int idx = (stq_head + offset) % STQ_SIZE;
+    if (!pending_sta_addr_valid[idx]) {
+      continue;
+    }
+    if (finish_store_addr_once(pending_sta_addr_uops[idx])) {
+      pending_sta_addr_valid[idx] = false;
+      pending_sta_addr_count--;
+      pending_sta_addr_uops[idx] = {};
     }
   }
+}
+
+void RealLsu::clear_pending_sta_addr() {
+  pending_sta_addr_count = 0;
+  for (int i = 0; i < STQ_SIZE; i++) {
+    pending_sta_addr_valid[i] = false;
+    pending_sta_addr_uops[i] = {};
+  }
+}
+
+void RealLsu::enqueue_pending_sta_addr(const MicroOp &uop) {
+  const int idx = uop.stq_idx;
+  Assert(idx >= 0 && idx < STQ_SIZE);
+  if (!pending_sta_addr_valid[idx]) {
+    pending_sta_addr_valid[idx] = true;
+    pending_sta_addr_count++;
+  }
+  pending_sta_addr_uops[idx] = uop;
 }
 
 void RealLsu::free_ldq_entry(int idx) {
@@ -1078,7 +1096,7 @@ void RealLsu::comb_flush() {
     }
     finished_loads.clear();
     finished_sta_reqs.clear();
-    pending_sta_addr_reqs.clear();
+    clear_pending_sta_addr();
   }
 }
 
@@ -1113,12 +1131,13 @@ void RealLsu::seq() {
       if (stq[i].valid)
         stq[i].br_mask &= ~clear;
     }
-    for (auto &e : finished_sta_reqs)
-      e.br_mask &= ~clear;
-    for (auto &e : finished_loads)
-      e.br_mask &= ~clear;
-    for (auto &e : pending_sta_addr_reqs)
-      e.br_mask &= ~clear;
+    finished_sta_reqs.for_each_mut([&](MicroOp &e) { e.br_mask &= ~clear; });
+    finished_loads.for_each_mut([&](MicroOp &e) { e.br_mask &= ~clear; });
+    for (int i = 0; i < STQ_SIZE; i++) {
+      if (pending_sta_addr_valid[i]) {
+        pending_sta_addr_uops[i].br_mask &= ~clear;
+      }
+    }
   }
 
   if (is_mispred) {
@@ -1231,6 +1250,11 @@ int RealLsu::count_stq_entries_until(int stop_idx) const {
 void RealLsu::clear_stq_entries(int start_idx, int count) {
   int ptr = start_idx;
   for (int i = 0; i < count; i++) {
+    if (pending_sta_addr_valid[ptr]) {
+      pending_sta_addr_valid[ptr] = false;
+      pending_sta_addr_count--;
+      pending_sta_addr_uops[ptr] = {};
+    }
     stq[ptr] = StqEntry{};
     ptr = (ptr + 1) % STQ_SIZE;
   }
