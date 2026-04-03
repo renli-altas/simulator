@@ -90,12 +90,12 @@ public:
       }
     }
     if (inject_port < 0) {
-      inject_port = 0;
-      comb_.lsu_port0_preempted = comb_.issued_tags[0].valid;
-      if (comb_.lsu_port0_preempted &&
-          comb_.issued_tags[0].owner == Owner::LSU) {
-        comb_.preempted_lsu_tag = comb_.issued_tags[0];
-      }
+      // Do not preempt an LSU load slot when all LSU load ports are already
+      // occupied. The response side only has LSU_LDU_COUNT return slots, so a
+      // same-cycle PTW preemption replay can overwrite a real LSU response and
+      // strand the waiting LDQ entry forever. Let PTW wait for the next cycle
+      // with a free LSU load slot instead.
+      return;
     }
 
     auto &ptw_req = comb_.dcache_req.req_ports.load_ports[inject_port];

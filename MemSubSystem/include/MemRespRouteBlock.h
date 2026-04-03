@@ -555,9 +555,11 @@ private:
       return;
     }
 
-    if (evt.owner == Owner::PTW_WALK && evt.replay == REPLAY_WAIT_FILL) {
-      // PTW walk replay=2 is retried directly by MemPtwBlock on the next
-      // cycle. Do not leave a stale wait-fill tracker behind.
+    if (evt.owner == Owner::PTW_WALK) {
+      // Shared PTW walk replays are retried directly inside MemPtwBlock while
+      // the TLB-side request keeps waiting for the eventual final response.
+      // Leaving a route-block replay tracker behind can later inject a stale
+      // coarse wakeup into an already reissued walk and perturb req_id state.
       tracker->blocked = false;
       tracker->reason = REPLAY_NONE;
       tracker->req_addr = 0;

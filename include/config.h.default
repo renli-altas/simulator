@@ -145,6 +145,10 @@ constexpr uint32_t ICACHE_TAG_MASK = (1u << ICACHE_TAG_BITS) - 1u;
 #define CONFIG_MEM_USE_SIMPLE_DCACHE 1
 #endif
 
+
+#ifndef MSHR_OUTSTANDING
+#define MSHR_OUTSTANDING 4
+#endif
 // ============================================================
 // Core Resources
 // ============================================================
@@ -156,7 +160,7 @@ constexpr int MAX_BR_PER_CYCLE = DECODE_WIDTH;
 constexpr int CSR_NUM = 21;
 
 constexpr int ROB_BANK_NUM = DECODE_WIDTH;
-constexpr int ROB_NUM = 256;
+constexpr int ROB_NUM = 512;
 constexpr int ROB_LINE_NUM = ROB_NUM / ROB_BANK_NUM;
 
 // ============================================================

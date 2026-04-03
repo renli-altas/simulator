@@ -7,6 +7,25 @@
 #include <assert.h>
 #include <cstring>
 
+namespace {
+const char *ptw_walk_state_name(uint8_t raw_state) {
+  switch (raw_state) {
+  case 0:
+    return "IDLE";
+  case 1:
+    return "L1_REQ";
+  case 2:
+    return "L1_WAIT_RESP";
+  case 3:
+    return "L2_REQ";
+  case 4:
+    return "L2_WAIT_RESP";
+  default:
+    return "UNKNOWN";
+  }
+}
+} // namespace
+
 #if __has_include("UART16550_Device.h") && \
     __has_include("AXI_Interconnect.h") && \
     __has_include("AXI_Router_AXI4.h") && \
@@ -43,7 +62,6 @@ using MmioImpl = mmio::MMIO_Bus_AXI4;
 
 #if AXI_KIT_RUNTIME_ENABLED
 namespace {
-
 struct AxiLlcTableRuntime {
   DynamicGenericTable<SramTablePolicy> data;
   DynamicGenericTable<SramTablePolicy> meta;
@@ -836,8 +854,6 @@ void MemSubsystem::comb() {
   if (dcache2lsu != nullptr) {
 #if !CONFIG_MEM_USE_SIMPLE_DCACHE
     dcache2lsu->resp_ports.replay_resp = mshr_.out.replay_resp;
-#else
-    dcache2lsu->resp_ports.replay_resp = {};
 #endif
   }
 
@@ -923,5 +939,74 @@ void MemSubsystem::seq() {
             axi_kit_runtime->interconnect.get_llc_perf_counters());
     axi_kit_runtime->interconnect.seq();
   }
+#endif
+}
+
+void MemSubsystem::dump_debug_state() const {
+  std::printf("[DEADLOCK][MEM] simple_dcache=%d internal_axi_runtime=%d\n",
+              static_cast<int>(CONFIG_MEM_USE_SIMPLE_DCACHE),
+              static_cast<int>(internal_axi_runtime_active_));
+
+  std::printf(
+      "[DEADLOCK][MEM][REPLAY_RAW] replay=%d addr=0x%08x free_slots=%u\n",
+      static_cast<int>(dcache_resp_raw_.resp_ports.replay_resp.replay),
+      static_cast<uint32_t>(dcache_resp_raw_.resp_ports.replay_resp.replay_addr),
+      static_cast<unsigned>(dcache_resp_raw_.resp_ports.replay_resp.free_slots));
+
+  if (dcache2lsu != nullptr) {
+    std::printf(
+        "[DEADLOCK][MEM][REPLAY_LSU] replay=%d addr=0x%08x free_slots=%u\n",
+        static_cast<int>(dcache2lsu->resp_ports.replay_resp.replay),
+        static_cast<uint32_t>(dcache2lsu->resp_ports.replay_resp.replay_addr),
+        static_cast<unsigned>(dcache2lsu->resp_ports.replay_resp.free_slots));
+  }
+
+  const auto route = resp_route_block.debug_state();
+  std::printf(
+      "[DEADLOCK][MEM][ROUTE] walk_tracker{blocked=%d reason=%u addr=0x%08x} "
+      "wakeup{dtlb=%d,itlb=%d,walk=%d} "
+      "ptw_event_count=%u ptw_occupies_port0=%d lsu_port0_replayed=%d\n",
+      static_cast<int>(route.walk.blocked),
+      static_cast<unsigned>(route.walk.reason),
+      static_cast<uint32_t>(route.walk.req_addr),
+      static_cast<int>(route.wakeup.dtlb), static_cast<int>(route.wakeup.itlb),
+      static_cast<int>(route.wakeup.walk),
+      static_cast<unsigned>(route.ptw_event_count),
+      static_cast<int>(route.ptw_occupies_port0),
+      static_cast<int>(route.lsu_port0_replayed));
+
+  const auto ptw = ptw_block.debug_state();
+  std::printf(
+      "[DEADLOCK][MEM][PTW] walk_active=%d walk_state=%u(%s) walk_owner=%u "
+      "walk_req_id_valid=%d walk_req_id=%zu dtlb{mem_pend=%d mem_inflight=%d "
+      "walk_pend=%d walk_inflight=%d walk_resp=%d} "
+      "itlb{mem_pend=%d mem_inflight=%d walk_pend=%d walk_inflight=%d walk_resp=%d}\n",
+      static_cast<int>(ptw.walk_active), static_cast<unsigned>(ptw.walk_state),
+      ptw_walk_state_name(ptw.walk_state),
+      static_cast<unsigned>(ptw.walk_owner),
+      static_cast<int>(ptw.walk_req_id_valid), ptw.walk_req_id,
+      static_cast<int>(ptw.mem_req_pending[0]),
+      static_cast<int>(ptw.mem_req_inflight[0]),
+      static_cast<int>(ptw.walk_req_pending[0]),
+      static_cast<int>(ptw.walk_req_inflight[0]),
+      static_cast<int>(ptw.walk_resp_valid[0]),
+      static_cast<int>(ptw.mem_req_pending[1]),
+      static_cast<int>(ptw.mem_req_inflight[1]),
+      static_cast<int>(ptw.walk_req_pending[1]),
+      static_cast<int>(ptw.walk_req_inflight[1]),
+      static_cast<int>(ptw.walk_resp_valid[1]));
+
+#if CONFIG_MEM_USE_SIMPLE_DCACHE
+  dcache_.dump_debug_state();
+#else
+  std::printf(
+      "[DEADLOCK][MEM][MSHR] cur_count=%u fill_valid=%d fill_addr=0x%08x "
+      "replay=%d replay_addr=0x%08x free_slots=%u\n",
+      static_cast<unsigned>(mshr_.cur.mshr_count),
+      static_cast<int>(mshr_.cur.fill_valid),
+      static_cast<uint32_t>(mshr_.cur.fill_addr),
+      static_cast<int>(mshr_.out.replay_resp.replay),
+      static_cast<uint32_t>(mshr_.out.replay_resp.replay_addr),
+      static_cast<unsigned>(mshr_.out.replay_resp.free_slots));
 #endif
 }

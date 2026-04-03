@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <deque>
 
-
 class SimContext;
 
 class SimpleDcache : public AbstractDcache {
@@ -21,9 +20,10 @@ public:
   void init() override;
   void comb() override;
   void seq() override;
+  void dump_debug_state() const;
   CoherentQueryResult query_coherent_word(uint32_t addr, uint32_t &data) const;
 
-  // IO ports — keep only LSU <-> DCache interfaces.
+  // IO ports - keep only LSU <-> DCache interfaces.
   LsuDcacheIO *lsu2dcache = nullptr;
   DcacheLsuIO *dcache2lsu = nullptr;
 
@@ -43,6 +43,8 @@ private:
     MicroOp uop = {};
     size_t req_id = 0;
     bool was_miss = false;
+    uint8_t replay = 0;
+    uint8_t resp_detail = 0;
   };
 
   struct PendingStore {
@@ -50,8 +52,11 @@ private:
     uint32_t addr = 0;
     uint32_t data = 0;
     uint8_t strb = 0;
+    StqEntry uop = {};
     size_t req_id = 0;
     bool was_miss = false;
+    uint8_t replay = 0;
+    uint8_t resp_detail = 0;
   };
 
   uint64_t cycle_ = 0;

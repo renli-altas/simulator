@@ -2,6 +2,7 @@
 #include "AbstractLsu.h"
 #include "SimpleMmu.h" // Added MMU include
 #include "config.h"
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -44,6 +45,26 @@ private:
     uint32_t data = 0;
   };
 
+  struct PendingStoreCompletion {
+    bool valid = false;
+    uint64_t ready_cycle = 0;
+  };
+
+  static constexpr uint64_t kSimpleCacheHitLatency =
+      (SIMPLE_DCACHE_HIT_LATENCY > 0)
+          ? static_cast<uint64_t>(SIMPLE_DCACHE_HIT_LATENCY)
+          : 1ull;
+
+#if defined(MISSLATENCY)
+  static constexpr uint64_t kSimpleCacheMissLatency =
+      (MISSLATENCY > 0) ? static_cast<uint64_t>(MISSLATENCY) : 1ull;
+#else
+  static constexpr uint64_t kSimpleCacheMissLatency =
+      (SIMPLE_DCACHE_MISS_LATENCY > 0)
+          ? static_cast<uint64_t>(SIMPLE_DCACHE_MISS_LATENCY)
+          : 1ull;
+#endif
+
   // MMU Instance (Composition)
   std::unique_ptr<AbstractMmu> mmu;
 
@@ -77,6 +98,7 @@ private:
   uint32_t issued_stq_addr_nxt[LSU_STA_COUNT] = {}; // 每周期已发出的 Store 地址，用于 Store Forward 检测
   bool issued_stq_addr_valid[LSU_STA_COUNT] = {}; // 标记 issued_stq_addr 中哪些地址是有效的
   bool issued_stq_addr_valid_nxt[LSU_STA_COUNT] = {}; // 下一周期的有效地址标记
+  std::array<uint64_t, STQ_SIZE> store_issue_cycle_{};
   // 3. 完成的 Load 队列 (等待写回)
   std::deque<MicroOp> finished_loads;
 
@@ -84,6 +106,7 @@ private:
   std::deque<MicroOp> finished_sta_reqs;
   // 5. STA 地址翻译重试队列 (DTLB/PTW miss -> RETRY)
   std::deque<MicroOp> pending_sta_addr_reqs;
+  std::array<PendingStoreCompletion, STQ_SIZE> pending_store_completions_{};
   bool pending_mmio_valid = false;
   PeripheralInIO pending_mmio_req{};
 
@@ -96,6 +119,7 @@ public:
   void comb_recv() override;
   void comb_load_res() override;
   void comb_flush() override;
+  void dump_debug_state() const override;
 
   // 时序逻辑实现
   void seq() override;
@@ -154,6 +178,9 @@ private:
   void retire_stq_head_if_ready(int &pop_count);
   void commit_stores_from_rob();
   void progress_ldq_entries();
+  void progress_store_completions();
+  void complete_ready_loads_for_wb();
+  void complete_ready_stores_for_retire();
   void progress_pending_sta_addr();
   bool finish_store_addr_once(const MicroOp &inst);
 

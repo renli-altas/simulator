@@ -4,6 +4,7 @@
 #include "PhysMemory.h"
 #include "types.h"
 #include <cassert>
+#include <cstdio>
 
 namespace {
 
@@ -34,6 +35,10 @@ void fill_cache_line_from_pmemory(uint32_t addr) {
   write_dcache_line(f.set_idx, static_cast<uint32_t>(victim), f.tag, line_data);
 }
 
+inline uint8_t trace_detail_code(DiffMemTraceDetail d) {
+  return static_cast<uint8_t>(d);
+}
+
 } // namespace
 
 void SimpleDcache::init() {
@@ -45,9 +50,22 @@ void SimpleDcache::init() {
 
 SimpleDcache::CoherentQueryResult
 SimpleDcache::query_coherent_word(uint32_t addr, uint32_t &data) const {
-  (void)addr;
+  const int way = find_hit_way(addr);
+  if (way >= 0) {
+    const AddrFields f = decode(addr);
+    data = data_array[f.set_idx][way][f.word_off];
+    return CoherentQueryResult::Hit;
+  }
   data = 0;
   return CoherentQueryResult::Miss;
+}
+
+void SimpleDcache::dump_debug_state() const {
+  std::printf(
+      "[DEADLOCK][MEM][SIMPLE_DCACHE] cycle=%llu pending_loads=%zu "
+      "pending_stores=%zu\n",
+      static_cast<unsigned long long>(cycle_), pending_loads_.size(),
+      pending_stores_.size());
 }
 
 void SimpleDcache::comb() {
@@ -66,14 +84,19 @@ void SimpleDcache::comb() {
     p.ready_cycle = cycle_ + (hit ? kHitLatency : kMissLatency);
     p.addr = req.addr;
     p.uop = req.uop;
+    p.uop.tma.is_cache_miss = !hit;
     p.req_id = req.req_id;
     p.was_miss = !hit;
+    p.replay = 0;
+    p.resp_detail = trace_detail_code(DiffMemTraceDetail::OkDcacheHit);
     pending_loads_.push_back(p);
+
     diff_mem_trace::record(
         DiffMemTraceOp::Load, DiffMemTracePhase::Req, DiffMemTraceDetail::Req,
         static_cast<uint8_t>(i), static_cast<uint8_t>(req.uop.func3),
         req.req_id, req.uop.rob_idx, req.uop.rob_flag, req.addr, 0,
         hit ? 1u : 0u, static_cast<uint32_t>(p.ready_cycle & 0xffffffffu));
+
     if (ctx != nullptr) {
       ctx->perf.dcache_access_num++;
       if (!hit) {
@@ -93,15 +116,20 @@ void SimpleDcache::comb() {
     p.addr = req.addr;
     p.data = req.data;
     p.strb = static_cast<uint8_t>(req.strb);
+    p.uop = req.uop;
     p.req_id = req.req_id;
     p.was_miss = !hit;
+    p.replay = 0;
+    p.resp_detail = trace_detail_code(DiffMemTraceDetail::OkDcacheHit);
     pending_stores_.push_back(p);
+
     diff_mem_trace::record(
         DiffMemTraceOp::Store, DiffMemTracePhase::Req, DiffMemTraceDetail::Req,
         static_cast<uint8_t>(i), static_cast<uint8_t>(req.uop.func3),
         req.req_id, req.uop.rob_idx, req.uop.rob_flag, req.addr, req.data,
         static_cast<uint32_t>(p.strb) | (hit ? (1u << 8) : 0u),
         static_cast<uint32_t>(p.ready_cycle & 0xffffffffu));
+
     if (ctx != nullptr) {
       ctx->perf.dcache_access_num++;
       if (!hit) {
@@ -125,6 +153,7 @@ void SimpleDcache::comb() {
     if (!found_ready) {
       break;
     }
+
     int way = find_hit_way(head.addr);
     if (way < 0) {
       fill_cache_line_from_pmemory(head.addr);
@@ -133,7 +162,7 @@ void SimpleDcache::comb() {
     const AddrFields f = decode(head.addr);
     if (way >= 0) {
       apply_strobe(data_array[f.set_idx][way][f.word_off], head.data, head.strb);
-      dirty_array[f.set_idx][way] = false; // write-through model
+      dirty_array[f.set_idx][way] = false;
       lru_reset(f.set_idx, static_cast<uint32_t>(way));
     }
 
@@ -148,6 +177,15 @@ void SimpleDcache::comb() {
     resp.replay = 0;
     resp.req_id = head.req_id;
     resp.is_cache_miss = head.was_miss;
+
+    diff_mem_trace::record(
+        DiffMemTraceOp::Store, DiffMemTracePhase::Resp,
+        static_cast<DiffMemTraceDetail>(head.resp_detail),
+        static_cast<uint8_t>(i), static_cast<uint8_t>(head.uop.func3),
+        head.req_id, head.uop.rob_idx, head.uop.rob_flag, head.addr, head.data,
+        static_cast<uint32_t>(resp.replay) | (head.was_miss ? (1u << 8) : 0u) |
+            (static_cast<uint32_t>(head.strb) << 16),
+        mem_word);
   }
 
   for (int i = 0; i < LSU_LDU_COUNT; i++) {
@@ -165,6 +203,7 @@ void SimpleDcache::comb() {
     if (!found_ready) {
       break;
     }
+
     int way = find_hit_way(head.addr);
     if (way < 0) {
       fill_cache_line_from_pmemory(head.addr);
@@ -184,6 +223,16 @@ void SimpleDcache::comb() {
     resp.data = data;
     resp.uop = head.uop;
     resp.req_id = head.req_id;
+
+    const uint32_t way_info =
+        (way >= 0) ? static_cast<uint32_t>(way) : 0xffffffffu;
+    diff_mem_trace::record(
+        DiffMemTraceOp::Load, DiffMemTracePhase::Resp,
+        static_cast<DiffMemTraceDetail>(head.resp_detail),
+        static_cast<uint8_t>(i), static_cast<uint8_t>(head.uop.func3),
+        head.req_id, head.uop.rob_idx, head.uop.rob_flag, head.addr, data,
+        static_cast<uint32_t>(resp.replay) | (head.was_miss ? (1u << 8) : 0u),
+        way_info);
   }
 }
 

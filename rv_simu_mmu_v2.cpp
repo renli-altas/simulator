@@ -1,6 +1,7 @@
 #include "AbstractLsu.h"
 #include "BackTop.h"
 #include "Csr.h"
+#include "DeadlockDebug.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "diff.h"
@@ -15,6 +16,25 @@
 
 uint32_t *p_memory;
 namespace {
+AbstractLsu *g_deadlock_lsu = nullptr;
+MemSubsystem *g_deadlock_mem = nullptr;
+
+void deadlock_lsu_dump_cb() {
+  if (g_deadlock_lsu == nullptr) {
+    std::printf("[DEADLOCK] LSU callback bound but lsu pointer is null.\n");
+    return;
+  }
+  g_deadlock_lsu->dump_debug_state();
+}
+
+void deadlock_mem_dump_cb() {
+  if (g_deadlock_mem == nullptr) {
+    std::printf("[DEADLOCK] MemSubsystem callback bound but mem pointer is null.\n");
+    return;
+  }
+  g_deadlock_mem->dump_debug_state();
+}
+
 template <typename InterconnectT>
 void clear_axi_master_inputs(InterconnectT &interconnect) {
   for (int i = 0; i < axi_interconnect::NUM_READ_MASTERS; i++) {
@@ -419,6 +439,10 @@ void SimCpu::init() {
 
   // 第二阶段：构建模块对象（生成内部子模块实例）
   back.init();
+  g_deadlock_lsu = back.lsu;
+  g_deadlock_mem = &mem_subsystem;
+  deadlock_debug::register_lsu_dump_cb(deadlock_lsu_dump_cb);
+  deadlock_debug::register_mem_dump_cb(deadlock_mem_dump_cb);
 
   // 第三阶段：集中完成跨模块连线
   mem_subsystem.csr = back.csr;

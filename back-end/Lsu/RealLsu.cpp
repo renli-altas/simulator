@@ -15,14 +15,32 @@ static constexpr int64_t REQ_WAIT_RESP = 0x7FFFFFFFFFFFFFFE;
 static constexpr int64_t REQ_WAIT_EXEC = 0x7FFFFFFFFFFFFFFC;
 static constexpr uint64_t LD_RESP_STUCK_RETRY_CYCLES = 150;
 static constexpr uint64_t LD_KILLED_GC_CYCLES = 2;
+static constexpr uint32_t kFocusWordAddr = 0x89efb000u;
 static inline bool is_amo_lr_uop(const MicroOp &uop) {
   return ((uop.dbg.instruction & 0x7Fu) == 0x2Fu) &&
          ((uop.func7 >> 2) == AmoOp::LR);
+}
+static inline bool is_concrete_load_complete_time(int64_t cplt_time) {
+  return cplt_time != REQ_WAIT_RETRY && cplt_time != REQ_WAIT_SEND &&
+         cplt_time != REQ_WAIT_RESP && cplt_time != REQ_WAIT_EXEC;
 }
 namespace {
 inline bool stq_entry_matches_uop(const StqEntry &entry, const MicroOp &uop) {
   return entry.valid && entry.rob_idx == uop.rob_idx &&
          entry.rob_flag == uop.rob_flag;
+}
+
+inline uint32_t focus_word_addr(uint32_t addr) { return addr & ~0x3u; }
+
+inline bool is_focus_word_addr(uint32_t addr) {
+  return focus_word_addr(addr) == kFocusWordAddr;
+}
+
+inline bool overlaps_focus_word(uint32_t addr, uint32_t func3) {
+  const uint32_t start = addr;
+  const uint32_t size = 1u << (func3 & 0x3u);
+  const uint32_t end = start + size;
+  return start < (kFocusWordAddr + 4u) && end > kFocusWordAddr;
 }
 } // namespace
 
@@ -50,6 +68,8 @@ void RealLsu::init() {
   pending_mmio_valid = false;
   pending_mmio_req = {};
   mmu->flush();
+  pending_store_completions_.fill({});
+  store_issue_cycle_.fill(0);
 
   reserve_valid = false;
   reserve_addr = 0;
@@ -256,6 +276,15 @@ void RealLsu::comb_recv() {
     if (is_mmio_addr(entry.uop.diag_val)) {
       continue;
     }
+    // SimpleDcache is a queued timing model: once a request is accepted it is
+    // guaranteed to complete eventually, but queueing behind older ready
+    // entries can legitimately stretch the observed wait well beyond the
+    // nominal hit/miss latency. Retrying here only duplicates an already
+    // pending request, which inflates the SimpleDcache queue, causes stale
+    // responses when the LDQ slot gets reused, and slows the simulation down
+    // dramatically. Keep timeout retry as a safeguard for the complex cache
+    // path only.
+#if !CONFIG_MEM_USE_SIMPLE_DCACHE
     if (wait_cycles >= LD_RESP_STUCK_RETRY_CYCLES) {
       if (ctx != nullptr) {
         ctx->perf.ld_resp_timeout_retry_count++;
@@ -271,6 +300,7 @@ void RealLsu::comb_recv() {
       entry.uop.cplt_time = REQ_WAIT_SEND;
       entry.replay_priority = 3;
     }
+#endif
   }
 
   replay_count_ldq = 0;
@@ -590,6 +620,7 @@ void RealLsu::comb_recv() {
       pending_mmio_valid = true;
       pending_mmio_req = mmio_req;
       entry.send = true;
+      store_issue_cycle_[stq_idx] = static_cast<uint64_t>(sim_time);
       issued_sta++;
       continue;
     }
@@ -597,6 +628,7 @@ void RealLsu::comb_recv() {
     issued_stq_addr_valid_nxt[issued_sta] = 1;
     change_store_info(entry, issued_sta, stq_idx);
     entry.send = true; // Mark only when the request is truly driven.
+    store_issue_cycle_[stq_idx] = static_cast<uint64_t>(sim_time);
     issued_sta++;
   }
 
@@ -658,20 +690,35 @@ void RealLsu::comb_load_res() {
               //                 entry.uop.diag_val, entry.uop.func3, raw_data,
               //                 extracted);
               // }
-              if (is_amo_lr_uop(entry.uop)) {
-                reserve_addr = entry.uop.diag_val;
-                reserve_valid = true;
-              }
               entry.uop.result = extracted;
               entry.uop.dbg.difftest_skip =
                   in.dcache2lsu->resp_ports.load_resps[i].uop.dbg.difftest_skip;
+#if CONFIG_MEM_USE_SIMPLE_DCACHE
+              const bool is_cache_miss =
+                  in.dcache2lsu->resp_ports.load_resps[i].uop.tma.is_cache_miss;
+              const uint64_t complete_cycle =
+                  entry.wait_resp_since +
+                  (is_cache_miss ? kSimpleCacheMissLatency
+                                 : kSimpleCacheHitLatency);
+              entry.uop.cplt_time = static_cast<int64_t>(complete_cycle);
+              entry.uop.tma.is_cache_miss = is_cache_miss;
+              entry.replay_priority = 0;
+              entry.sent = false;
+              entry.waiting_resp = false;
+              entry.wait_resp_since = 0;
+#else
               entry.uop.cplt_time = sim_time;
               entry.uop.tma.is_cache_miss =
                   !in.dcache2lsu->resp_ports.load_resps[i]
                        .uop.tma.is_cache_miss;
+              if (is_amo_lr_uop(entry.uop)) {
+                reserve_addr = entry.uop.diag_val;
+                reserve_valid = true;
+              }
               entry.replay_priority = 0;
               finished_loads.push_back(entry.uop);
               free_ldq_entry(idx);
+#endif
             } else {
               // Handle load replay if needed (e.g., due to MSHR eviction)
               entry.replay_priority =
@@ -722,9 +769,20 @@ void RealLsu::comb_load_res() {
         auto &entry = stq[stq_idx];
         if (entry.valid && !entry.done && entry.send) {
           if (in.dcache2lsu->resp_ports.store_resps[i].replay == 0) {
+#if CONFIG_MEM_USE_SIMPLE_DCACHE
+            auto &pending = pending_store_completions_[stq_idx];
+            pending.valid = true;
+            pending.ready_cycle =
+                store_issue_cycle_[stq_idx] +
+                (in.dcache2lsu->resp_ports.store_resps[i].is_cache_miss
+                     ? kSimpleCacheMissLatency
+                     : kSimpleCacheHitLatency);
+            entry.replay = 0;
+#else
             entry.done = true;
             entry.replay = 0;
             entry.send = false;
+#endif
           } else {
             // Handle store replay if needed (e.g., due to MSHR eviction)
             uint8_t replay_code =
@@ -757,6 +815,9 @@ void RealLsu::comb_load_res() {
       Assert(false && "Invalid STQ index in MMIO store response");
     }
   }
+
+  complete_ready_stores_for_retire();
+  complete_ready_loads_for_wb();
 
   // 2. 从完成队列填充端口 (Load)
   for (int i = 0; i < LSU_LOAD_WB_WIDTH; i++) {
@@ -821,6 +882,26 @@ void RealLsu::handle_load_req(const MicroOp &inst) {
     ldq[ldq_idx].is_mmio_wait = is_mmio; // 延迟发送：等待到达 ROB 队头后再发出
     auto fwd_res =
         is_mmio ? StoreForwardResult{} : check_store_forward(p_addr, inst);
+
+    if (is_focus_word_addr(p_addr)) {
+      const char *fwd_name = "UNKNOWN";
+      if (fwd_res.state == StoreForwardState::NoHit) {
+        fwd_name = "NO_HIT";
+      } else if (fwd_res.state == StoreForwardState::Hit) {
+        fwd_name = "HIT";
+      } else if (fwd_res.state == StoreForwardState::Retry) {
+        fwd_name = "RETRY";
+      }
+      std::printf(
+          "[FOCUS][LSU][LD ADDR] cyc=%lld ldq=%d rob=%u flag=%u pc=0x%08x "
+          "vaddr=0x%08x paddr=0x%08x func3=0x%x stq_stop=(%u,%u) mmio=%d "
+          "fwd=%s data=0x%08x\n",
+          (long long)sim_time, ldq_idx, (unsigned)inst.rob_idx,
+          (unsigned)inst.rob_flag, (uint32_t)inst.dbg.pc,
+          (uint32_t)task.result, p_addr, (unsigned)inst.func3,
+          (unsigned)inst.stq_idx, (unsigned)inst.stq_flag, is_mmio ? 1 : 0,
+          fwd_name, fwd_res.data);
+    }
 
     if (fwd_res.state == StoreForwardState::Hit) {
       task.result = fwd_res.data;
@@ -1069,6 +1150,12 @@ void RealLsu::handle_mispred(mask_t mask) {
   stq_tail = recovery_tail;
   stq_count = count_stq_entries_until(recovery_tail);
   clear_stq_entries(stq_tail, active_count - stq_count);
+  for (int i = 0; i < STQ_SIZE; i++) {
+    if (!stq[i].valid) {
+      pending_store_completions_[i] = {};
+      store_issue_cycle_[i] = 0;
+    }
+  }
 }
 void RealLsu::retire_stq_head_if_ready(int &pop_count) {
   const int retire_idx = stq_head;
@@ -1100,6 +1187,8 @@ void RealLsu::retire_stq_head_if_ready(int &pop_count) {
   head.br_mask = 0;
   head.send = false;
   head.replay = 0;
+  pending_store_completions_[retire_idx] = {};
+  store_issue_cycle_[retire_idx] = 0;
   // Keep the suppression tag on an invalid entry until the slot is reused so
   // commit-time difftest can still recognize a failed SC that intentionally
   // does not perform a memory write.
@@ -1235,6 +1324,67 @@ void RealLsu::progress_ldq_entries() {
       }
       free_ldq_entry(i);
     }
+  }
+}
+
+void RealLsu::progress_store_completions() {
+  for (int i = 0; i < STQ_SIZE; i++) {
+    auto &pending = pending_store_completions_[i];
+    if (!pending.valid) {
+      continue;
+    }
+    auto &entry = stq[i];
+    if (!entry.valid) {
+      pending = {};
+      continue;
+    }
+    if (pending.ready_cycle > static_cast<uint64_t>(sim_time)) {
+      continue;
+    }
+    entry.done = true;
+    entry.replay = 0;
+    entry.send = false;
+    pending = {};
+  }
+}
+
+void RealLsu::complete_ready_loads_for_wb() {
+  for (int i = 0; i < LDQ_SIZE; i++) {
+    auto &entry = ldq[i];
+    if (!entry.valid || entry.killed || entry.sent || entry.waiting_resp) {
+      continue;
+    }
+    if (!is_concrete_load_complete_time(entry.uop.cplt_time) ||
+        entry.uop.cplt_time > sim_time) {
+      continue;
+    }
+    if (is_amo_lr_uop(entry.uop)) {
+      reserve_valid = true;
+      reserve_addr = entry.uop.diag_val;
+    }
+    finished_loads.push_back(entry.uop);
+    free_ldq_entry(i);
+  }
+}
+
+void RealLsu::complete_ready_stores_for_retire() {
+  for (int i = 0; i < STQ_SIZE; i++) {
+    auto &pending = pending_store_completions_[i];
+    if (!pending.valid) {
+      continue;
+    }
+    auto &entry = stq[i];
+    if (!entry.valid) {
+      pending = {};
+      continue;
+    }
+    if (pending.ready_cycle > static_cast<uint64_t>(sim_time)) {
+      continue;
+    }
+    entry.done = true;
+    entry.replay = 0;
+    entry.send = false;
+    pending = {};
   }
 }
 
@@ -1409,6 +1559,7 @@ void RealLsu::seq() {
     Assert(0 && "STQ Count Overflow! logic bug!");
   }
   progress_ldq_entries();
+  progress_store_completions();
 
   // Retire after load progress so same-cycle completed stores can still
   // participate in store-to-load forwarding.
@@ -1544,6 +1695,8 @@ void RealLsu::clear_stq_entries(int start_idx, int count) {
     stq[ptr].rob_idx = 0;
     stq[ptr].rob_flag = 0;
     stq[ptr].func3 = 0;
+    pending_store_completions_[ptr] = {};
+    store_issue_cycle_[ptr] = 0;
     ptr = (ptr + 1) % STQ_SIZE;
   }
 }
@@ -1595,6 +1748,17 @@ RealLsu::check_store_forward(uint32_t p_addr, const MicroOp &load_uop) {
   const int stop_idx = load_uop.stq_idx;
   const bool stop_flag = load_uop.stq_flag;
   int guard = 0;
+  const bool focus_load = is_focus_word_addr(p_addr);
+
+  if (focus_load) {
+    std::printf(
+        "[FOCUS][LSU][STLF BEGIN] cyc=%lld rob=%u flag=%u pc=0x%08x "
+        "paddr=0x%08x func3=0x%x head=(%d,%d) stop=(%d,%d) stq_count=%d\n",
+        (long long)sim_time, (unsigned)load_uop.rob_idx,
+        (unsigned)load_uop.rob_flag, (uint32_t)load_uop.dbg.pc, p_addr,
+        (unsigned)load_uop.func3, stq_head, (int)stq_head_flag, stop_idx,
+        (int)stop_flag, stq_count);
+  }
 
   // Scan [head, load.stop) in ring age order, where stop is (idx,flag).
   while (!(ptr_idx == stop_idx && ptr_flag == stop_flag)) {
@@ -1602,8 +1766,27 @@ RealLsu::check_store_forward(uint32_t p_addr, const MicroOp &load_uop) {
     Assert(guard <= STQ_SIZE + 1);
 
     StqEntry &entry = stq[ptr_idx];
+    const bool focus_store =
+        entry.valid && entry.addr_valid &&
+        overlaps_focus_word(entry.p_addr, entry.func3);
+    if (focus_load && (focus_store || ptr_idx == stop_idx)) {
+      std::printf(
+          "[FOCUS][LSU][STLF SCAN] cyc=%lld stq=(%d,%d) valid=%d addr_v=%d "
+          "data_v=%d committed=%d done=%d send=%d replay=%u suppress=%u "
+          "paddr=0x%08x data=0x%08x func3=0x%x\n",
+          (long long)sim_time, ptr_idx, (int)ptr_flag, (int)entry.valid,
+          (int)entry.addr_valid, (int)entry.data_valid, (int)entry.committed,
+          (int)entry.done, (int)entry.send, (unsigned)entry.replay,
+          (unsigned)entry.suppress_write, (uint32_t)entry.p_addr,
+          (uint32_t)entry.data, (unsigned)entry.func3);
+    }
     if (entry.valid && !entry.suppress_write) {
       if (!entry.addr_valid) {
+        if (focus_load) {
+          std::printf(
+              "[FOCUS][LSU][STLF END] cyc=%lld result=RETRY reason=ADDR_WAIT\n",
+              (long long)sim_time);
+        }
         return {StoreForwardState::Retry, 0};
       }
 
@@ -1621,6 +1804,12 @@ RealLsu::check_store_forward(uint32_t p_addr, const MicroOp &load_uop) {
         // sb/sh at non-zero byte offsets can still forward correctly.
         hit_any = true;
         if (!entry.data_valid) {
+          if (focus_load) {
+            std::printf(
+                "[FOCUS][LSU][STLF END] cyc=%lld result=RETRY "
+                "reason=DATA_WAIT stq=%d\n",
+                (long long)sim_time, ptr_idx);
+          }
           return {StoreForwardState::Retry, 0};
         }
         current_word = merge_data_to_word(current_word, entry.data,
@@ -1629,6 +1818,13 @@ RealLsu::check_store_forward(uint32_t p_addr, const MicroOp &load_uop) {
         hit_any = true;
         // Partial overlap is intentionally conservative: keep the load in
         // retry until the older store fully retires from STQ.
+        if (focus_load) {
+          std::printf(
+              "[FOCUS][LSU][STLF END] cyc=%lld result=RETRY "
+              "reason=PARTIAL_OVERLAP stq=%d s=[0x%08x,0x%08x) "
+              "l=[0x%08x,0x%08x)\n",
+              (long long)sim_time, ptr_idx, s_start, s_end, l_start, l_end);
+        }
         return {StoreForwardState::Retry, 0};
       }
     }
@@ -1641,10 +1837,20 @@ RealLsu::check_store_forward(uint32_t p_addr, const MicroOp &load_uop) {
   }
 
   if (!hit_any) {
+    if (focus_load) {
+      std::printf("[FOCUS][LSU][STLF END] cyc=%lld result=NO_HIT\n",
+                  (long long)sim_time);
+    }
     return {StoreForwardState::NoHit, 0};
   }
-  return {StoreForwardState::Hit,
-          extract_data(current_word, p_addr, load_uop.func3)};
+  const uint32_t forwarded = extract_data(current_word, p_addr, load_uop.func3);
+  if (focus_load) {
+    std::printf(
+        "[FOCUS][LSU][STLF END] cyc=%lld result=HIT current_word=0x%08x "
+        "forwarded=0x%08x\n",
+        (long long)sim_time, current_word, forwarded);
+  }
+  return {StoreForwardState::Hit, forwarded};
 }
 StqEntry RealLsu::get_stq_entry(int stq_idx) {
   Assert(stq_idx >= 0 && stq_idx < STQ_SIZE);
@@ -1672,4 +1878,112 @@ uint32_t RealLsu::coherent_read(uint32_t p_addr) {
   }
 
   return data;
+}
+
+void RealLsu::dump_debug_state() const {
+  const auto *tlb_mmu = dynamic_cast<const TlbMmu *>(mmu.get());
+  std::printf(
+      "[DEADLOCK][LSU] stq_head=%d stq_tail=%d stq_commit=%d stq_count=%d "
+      "ldq_count=%d ldq_alloc_tail=%d replay_type=%d replay_ldq=%d replay_stq=%d "
+      "mshr_replay_ldq=%d mshr_replay_stq=%d pending_mmio=%d "
+      "pending_sta_retry=%zu\n",
+      stq_head, stq_tail, stq_commit, stq_count, ldq_count, ldq_alloc_tail,
+      static_cast<int>(replay_type), replay_count_ldq, replay_count_stq,
+      mshr_replay_count_ldq, mshr_replay_count_stq,
+      static_cast<int>(pending_mmio_valid), pending_sta_addr_reqs.size());
+
+  if (tlb_mmu != nullptr) {
+    const auto mmu_dbg = tlb_mmu->debug_state();
+    std::printf(
+        "[DEADLOCK][LSU][MMU] walk_active=%d walk_req_sent=%d "
+        "vaddr=0x%08x type=%u satp=0x%08x eff_priv=%d mxr=%d sum=%d "
+        "retry_reason=%u\n",
+        static_cast<int>(mmu_dbg.walk_active),
+        static_cast<int>(mmu_dbg.walk_req_sent), mmu_dbg.walk_v_addr,
+        mmu_dbg.walk_type, mmu_dbg.walk_satp, mmu_dbg.walk_eff_priv,
+        static_cast<int>(mmu_dbg.walk_mxr), static_cast<int>(mmu_dbg.walk_sum),
+        static_cast<unsigned>(mmu_dbg.last_retry_reason));
+  }
+
+  if (pending_sta_addr_reqs.empty()) {
+    std::printf("[DEADLOCK][LSU][STA_RETRY] no pending store-address retries\n");
+  } else {
+    int printed_sta_retry = 0;
+    for (const auto &op : pending_sta_addr_reqs) {
+      std::printf(
+          "[DEADLOCK][LSU][STA_RETRY %02d] rob=%u flag=%u stq_idx=%u "
+          "pc=0x%08x vaddr=0x%08x inst_idx=%lld\n",
+          printed_sta_retry, static_cast<unsigned>(op.rob_idx),
+          static_cast<unsigned>(op.rob_flag), static_cast<unsigned>(op.stq_idx),
+          op.dbg.pc, op.result, static_cast<long long>(op.dbg.inst_idx));
+      printed_sta_retry++;
+      if (printed_sta_retry >= 16 &&
+          pending_sta_addr_reqs.size() > static_cast<size_t>(printed_sta_retry)) {
+        std::printf(
+            "[DEADLOCK][LSU][STA_RETRY] ... %zu more pending retries omitted\n",
+            pending_sta_addr_reqs.size() -
+                static_cast<size_t>(printed_sta_retry));
+        break;
+      }
+    }
+  }
+
+  int printed_ldq = 0;
+  for (int i = 0; i < LDQ_SIZE; i++) {
+    const auto &e = ldq[i];
+    if (!e.valid) {
+      continue;
+    }
+    if (printed_ldq == 0) {
+      std::printf("[DEADLOCK][LSU][LDQ] active entries:\n");
+    }
+    printed_ldq++;
+    std::printf(
+        "[DEADLOCK][LSU][LDQ %02d] valid=%d killed=%d sent=%d waiting=%d "
+        "tlb_retry=%d mmio_wait=%d replay_prio=%u wait_since=%llu cplt=%lld "
+        "rob=%u flag=%u ldq_idx=%u stq_idx=%u stq_flag=%u pc=0x%08x paddr=0x%08x "
+        "inst_idx=%lld\n",
+        i, static_cast<int>(e.valid), static_cast<int>(e.killed),
+        static_cast<int>(e.sent), static_cast<int>(e.waiting_resp),
+        static_cast<int>(e.tlb_retry), static_cast<int>(e.is_mmio_wait),
+        static_cast<unsigned>(e.replay_priority),
+        static_cast<unsigned long long>(e.wait_resp_since),
+        static_cast<long long>(e.uop.cplt_time), static_cast<unsigned>(e.uop.rob_idx),
+        static_cast<unsigned>(e.uop.rob_flag), static_cast<unsigned>(e.uop.ldq_idx),
+        static_cast<unsigned>(e.uop.stq_idx), static_cast<unsigned>(e.uop.stq_flag),
+        e.uop.dbg.pc, e.uop.diag_val, static_cast<long long>(e.uop.dbg.inst_idx));
+  }
+  if (printed_ldq == 0) {
+    std::printf("[DEADLOCK][LSU][LDQ] no active entries\n");
+  }
+
+  int printed_stq = 0;
+  for (int i = 0; i < STQ_SIZE; i++) {
+    const auto &e = stq[i];
+    if (!e.valid) {
+      continue;
+    }
+    if (printed_stq == 0) {
+      std::printf("[DEADLOCK][LSU][STQ] active entries:\n");
+    }
+    printed_stq++;
+    const auto &pending = pending_store_completions_[i];
+    std::printf(
+        "[DEADLOCK][LSU][STQ %02d] valid=%d committed=%d done=%d send=%d replay=%u "
+        "addr_v=%d data_v=%d mmio=%d suppress=%d pending=%d ready=%llu issue=%llu "
+        "rob=%u flag=%u paddr=0x%08x data=0x%08x func3=0x%x\n",
+        i, static_cast<int>(e.valid), static_cast<int>(e.committed),
+        static_cast<int>(e.done), static_cast<int>(e.send),
+        static_cast<unsigned>(e.replay), static_cast<int>(e.addr_valid),
+        static_cast<int>(e.data_valid), static_cast<int>(e.is_mmio),
+        static_cast<int>(e.suppress_write), static_cast<int>(pending.valid),
+        static_cast<unsigned long long>(pending.ready_cycle),
+        static_cast<unsigned long long>(store_issue_cycle_[i]),
+        static_cast<unsigned>(e.rob_idx), static_cast<unsigned>(e.rob_flag),
+        e.p_addr, e.data,
+        static_cast<unsigned>(e.func3));
+  }
+  if (printed_stq == 0) {
+    std::printf("[DEADLOCK][LSU][STQ] no active entries\n");
+  }
 }

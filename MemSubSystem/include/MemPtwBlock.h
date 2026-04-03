@@ -253,23 +253,18 @@ public:
 
     auto &wc = walk_clients[client_idx(walk_owner)];
     wc.req_inflight = false;
-    // Shared PTW walk is single-threaded. Parking the walker in WAIT_RESP for
-    // replay=2(wait_fill) can lose forward progress if the exact fill wakeup is
-    // consumed before the tracker arms. Re-arm the walk request directly so the
-    // next cycle retries through the normal arbiter path.
-    static constexpr uint8_t kReplayWaitFill = 2;
-    if (replay_reason == kReplayWaitFill) {
-      if (walk_state == WalkState::L1_WAIT_RESP) {
-        walk_state = WalkState::L1_REQ;
-      } else if (walk_state == WalkState::L2_WAIT_RESP) {
-        walk_state = WalkState::L2_REQ;
-      }
-      walk_req_id_valid = false;
-      walk_req_id = 0;
-      return WalkRespResult::HANDLED;
+    // Shared PTW walk is single-threaded. After any replay, leaving the walker
+    // parked in *_WAIT_RESP with no live req_id can deadlock progress because
+    // the client-visible TLB walk request is still waiting for a final answer
+    // while the internal shared walker no longer has an in-flight memory
+    // transaction to match against. Re-arm the walk request directly so the
+    // internal walker retries through the normal arbiter path on the next
+    // cycle, while the client keeps waiting on the same logical walk.
+    if (walk_state == WalkState::L1_WAIT_RESP) {
+      walk_state = WalkState::L1_REQ;
+    } else if (walk_state == WalkState::L2_WAIT_RESP) {
+      walk_state = WalkState::L2_REQ;
     }
-
-    // replay=1(MSHR full) still uses the coarse replay wakeup path.
     walk_req_id_valid = false;
     walk_req_id = 0;
     return WalkRespResult::HANDLED;

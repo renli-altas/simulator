@@ -73,6 +73,7 @@ public:
   void init();
   void comb();
   void seq();
+  void dump_debug_state() const;
   void on_commit_store(uint32_t paddr, uint32_t data, uint8_t func3);
   void sync_mmio_devices_from_backing();
   axi_interconnect::ReadMasterPort_t *icache_read_port();

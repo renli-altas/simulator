@@ -212,7 +212,7 @@ void Rob::comb_commit() {
     // Disabled: dump_all() here fires on every incomplete-store commit,
     // flooding the terminal.  The deadlock path (stall_cycle > 10000)
     // already calls dump_all().
-    // deadlock_debug::dump_all();
+    deadlock_debug::dump_all();
     // std::fflush(stdout);
     // std::fflush(stderr);
   };
@@ -428,7 +428,8 @@ void Rob::comb_commit() {
       }
     }
 
-    // deadlock_debug::dump_all();
+    deadlock_debug::dump_all();
+    fflush(stdout);
     Assert(0 && "ROB Deadlock detected (stall_cycle > 50000)");
   }
 }
