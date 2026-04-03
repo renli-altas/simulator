@@ -1,178 +1,97 @@
 #pragma once
-#include "AbstractLsu.h"
+#include "IO.h"
 #include "SimpleMmu.h"
 #include "config.h"
 #include <array>
 #include <cstdint>
 #include <memory>
 
-class Csr;
+#include "../BSD/finished.h"
+#include "../BSD/ldq.h"
+#include "../BSD/stq.h"
+
+class SimContext;
 class PtwMemPort;
 class PtwWalkPort;
 
-class RealLsu : public AbstractLsu {
+typedef struct {
+  RobCommitIO *rob_commit;
+  RobBroadcastIO *rob_bcast;
+  DecBroadcastIO *dec_bcast;
+  CsrStatusIO *csr_status;
+  DisLsuIO *dis2lsu;
+  ExeLsuIO *exe2lsu;
+  DcacheLsuIO *dcache2lsu;
+  PeripheralRespIO *peripheral_resp;
+} LsuIn;
+
+typedef struct {
+  LsuDisIO *lsu2dis;
+  LsuRobIO *lsu2rob;
+  LsuExeIO *lsu2exe;
+  LsuDcacheIO *lsu2dcache;
+  PeripheralReqIO *peripheral_req;
+} LsuOut;
+
+class RealLsu {
 private:
-  template <int Capacity> struct MicroOpFifo {
-    std::array<MicroOp, Capacity> entries{};
-    int head = 0;
-    int tail = 0;
-    int count = 0;
-
-    void clear() {
-      head = 0;
-      tail = 0;
-      count = 0;
-    }
-
-    bool empty() const { return count == 0; }
-
-    bool push_back(const MicroOp &uop) {
-      if (count >= Capacity) {
-        return false;
-      }
-      entries[tail] = uop;
-      tail = (tail + 1) % Capacity;
-      count++;
-      return true;
-    }
-
-    bool pop_front(MicroOp &uop) {
-      if (count == 0) {
-        return false;
-      }
-      uop = entries[head];
-      head = (head + 1) % Capacity;
-      count--;
-      if (count == 0) {
-        head = 0;
-        tail = 0;
-      }
-      return true;
-    }
-
-    template <typename Fn> void for_each_mut(Fn &&fn) {
-      int idx = head;
-      for (int i = 0; i < count; i++) {
-        fn(entries[idx]);
-        idx = (idx + 1) % Capacity;
-      }
-    }
-
-    template <typename Pred> void remove_if(Pred &&pred) {
-      const int old_count = count;
-      int read = head;
-      int write = head;
-      int kept = 0;
-      for (int i = 0; i < old_count; i++) {
-        MicroOp item = entries[read];
-        read = (read + 1) % Capacity;
-        if (pred(item)) {
-          continue;
-        }
-        entries[write] = item;
-        write = (write + 1) % Capacity;
-        kept++;
-      }
-      count = kept;
-      if (kept == 0) {
-        head = 0;
-        tail = 0;
-      } else {
-        tail = (head + kept) % Capacity;
-      }
-    }
-  };
-
-  struct LdqEntry {
-    bool valid;
-    bool killed;
-    bool sent;
-    bool waiting_resp;
-    uint64_t wait_resp_since;
-    bool tlb_retry;
-    bool is_mmio_wait;  // 地址已翻译为 MMIO，等待到达 ROB 队头后再发送
-    uint8_t replay_priority;
-    MicroOp uop;
-  };
-
-  enum class StoreForwardState : uint8_t {
-    NoHit = 0,
-    Hit = 1,
-    Retry = 2,
-  };
-
-  struct StoreForwardResult {
-    StoreForwardState state = StoreForwardState::NoHit;
-    uint32_t data = 0;
-  };
+  static constexpr int64_t REQ_WAIT_RETRY = 0x7FFFFFFFFFFFFFFF;
+  static constexpr int64_t REQ_WAIT_RESP = 0x7FFFFFFFFFFFFFFE;
+  static constexpr int64_t REQ_WAIT_SEND = 0x7FFFFFFFFFFFFFFD;
+  static constexpr int64_t REQ_WAIT_EXEC = 0x7FFFFFFFFFFFFFFC;
 
   // MMU Instance (Composition)
   std::unique_ptr<AbstractMmu> mmu;
 
   // === 内部状态寄存器 (对应 seq 更新) ===
 
-  // 1. Store Queue (简化的环形缓冲区)
-  StqEntry stq[STQ_SIZE];
-  int stq_head;   // deq 指针
-  int stq_commit; // commit 指针
-  int stq_tail;   // enq 指针
-  int stq_count;
-
-  // 2. 显式 LDQ（请求发出后即使被 squash 也要等回包释放）
-  LdqEntry ldq[LDQ_SIZE];
-  int ldq_count;
-  int ldq_alloc_tail;
+  LdqState ldq_state{};
+  StqState stq_state{};
+  FinishedState finished_state{};
 
   bool reserve_valid;
   uint32_t reserve_addr;
 
-  int mshr_replay_count_ldq;
-  int mshr_replay_count_stq;
-  bool stq_head_flag; // 用于区分环形缓冲区中的两轮
-
   bool replay_type; // 0 = LDQ, 1 = STQ
-  static constexpr int kFinishedLoadFifoCapacity = LDQ_SIZE + STQ_SIZE;
-  static constexpr int kFinishedStaFifoCapacity = STQ_SIZE;
-  // 3. 完成的 Load 队列 (等待写回)
-  MicroOpFifo<kFinishedLoadFifoCapacity> finished_loads;
-
-  // 4. 完成的 STA 队列 (等待访存流水线对齐写回)
-  MicroOpFifo<kFinishedStaFifoCapacity> finished_sta_reqs;
-  // 5. STA 地址翻译重试状态 (DTLB/PTW miss -> RETRY)
-  bool pending_sta_addr_valid[STQ_SIZE];
-  MicroOp pending_sta_addr_uops[STQ_SIZE];
-  int pending_sta_addr_count;
   bool pending_mmio_valid = false;
-  PeripheralInIO pending_mmio_req{};
+  PeripheralReqIO pending_mmio_req{};
 
 public:
-  RealLsu(SimContext *ctx);
+  explicit RealLsu(SimContext *ctx);
+  ~RealLsu() = default;
+
+  LsuIn in{};
+  LsuOut out{};
+  SimContext *ctx;
+  PtwMemPort *ptw_mem_port = nullptr;
+  PtwWalkPort *ptw_walk_port = nullptr;
 
   // 组合逻辑实现
-  void init() override;
-  void comb_lsu2dis_info() override;
-  void comb_recv() override;
-  void comb_load_res() override;
-  void comb_flush() override;
+  void init();
+  void comb_lsu2dis_info();
+  void comb_recv();
+  void comb_load_res();
+  void comb_flush();
 
   // 时序逻辑实现
-  void seq() override;
+  void seq();
 
-  StqEntry get_stq_entry(int stq_idx) override;
+  StqEntry get_stq_entry(int stq_idx);
 
-  void set_csr(Csr *c) override { this->csr_module = c; }
-  void set_ptw_mem_port(PtwMemPort *port) override {
-    ptw_mem_port = port;
+  void set_ptw_mem_port(PtwMemPort *port) {
     mmu->set_ptw_mem_port(port);
   }
-  void set_ptw_walk_port(PtwWalkPort *port) override {
-    ptw_walk_port = port;
+  void set_ptw_walk_port(PtwWalkPort *port) {
     mmu->set_ptw_walk_port(port);
+  }
+  void restore_reservation(bool valid, uint32_t addr) {
+    reserve_valid = valid;
+    reserve_addr = addr;
   }
 
   // 一致性访存接口 (供 MMU 使用)
-  uint32_t coherent_read(uint32_t p_addr) override;
-  bool has_committed_store_pending() const override {
+  uint32_t coherent_read(uint32_t p_addr);
+  bool has_committed_store_pending() const {
     int ptr = stq_head;
     int remain = stq_count;
     while (remain > 0) {
@@ -187,9 +106,18 @@ public:
   }
 
 private:
-  Csr *csr_module = nullptr;
   // 内部辅助函数
+  void init_ldq_state();
   void handle_load_req(const MicroOp &uop);
+  bool reserve_ldq_entry(int idx, mask_t br_mask, uint32_t rob_idx,
+                         uint32_t rob_flag);
+  void consume_ldq_alloc_reqs();
+  void progress_ldq_entries();
+  void update_load_ready_state(LdqEntry &entry, uint32_t p_addr,
+                               int64_t ready_cycle);
+  void free_ldq_entry(int idx);
+
+  void init_stq_state();
   void handle_store_addr(const MicroOp &uop);
   void handle_store_data(const MicroOp &uop);
   int find_recovery_tail(mask_t br_mask);
@@ -200,25 +128,85 @@ private:
   int count_committed_stq_prefix() const;
   int count_stq_entries_until(int stop_idx) const;
   void clear_stq_entries(int start_idx, int count);
-  bool reserve_ldq_entry(int idx, mask_t br_mask, uint32_t rob_idx,
-                         uint32_t rob_flag);
-  void consume_ldq_alloc_reqs();
-  void free_ldq_entry(int idx);
-  bool is_mmio_addr(uint32_t paddr) const;
   void change_store_info(StqEntry &entry, int port_idx, int stq_idx);
   void handle_global_flush();
   void handle_mispred(mask_t mask);
   void retire_stq_head_if_ready(int &pop_count);
   void commit_stores_from_rob();
-  void progress_ldq_entries();
   void progress_pending_sta_addr();
   void clear_pending_sta_addr();
   void enqueue_pending_sta_addr(const MicroOp &uop);
   bool finish_store_addr_once(const MicroOp &inst);
-  void update_load_ready_state(LdqEntry &entry, uint32_t p_addr,
-                               int64_t ready_cycle);
-
   bool has_older_store_pending(const MicroOp &load_uop) const;
   StoreForwardResult check_store_forward(uint32_t p_addr,
                                          const MicroOp &load_uop);
+
+  void init_finished_state();
+
+  int get_mem_width(int func3) const {
+    switch (func3 & 0b11) {
+    case 0b00:
+      return 1;
+    case 0b01:
+      return 2;
+    case 0b10:
+      return 4;
+    default:
+      return 4;
+    }
+  }
+  uint32_t extract_data(uint32_t raw_mem_val, uint32_t addr, int func3) const {
+    int bit_offset = (addr & 0x3) * 8;
+    uint32_t result = 0;
+    uint32_t shifted = raw_mem_val >> bit_offset;
+
+    switch (func3) {
+    case 0b000:
+      result = shifted & 0xFF;
+      if (result & 0x80)
+        result |= 0xFFFFFF00;
+      break;
+    case 0b001:
+      result = shifted & 0xFFFF;
+      if (result & 0x8000)
+        result |= 0xFFFF0000;
+      break;
+    case 0b010:
+      result = shifted;
+      break;
+    case 0b100:
+      result = shifted & 0xFF;
+      break;
+    case 0b101:
+      result = shifted & 0xFFFF;
+      break;
+    default:
+      result = shifted;
+      break;
+    }
+    return result;
+  }
+  uint32_t merge_data_to_word(uint32_t old_word, uint32_t new_data,
+                              uint32_t addr, int func3) const {
+    int bit_offset = (addr & 0x3) * 8;
+    uint32_t mask = 0;
+
+    switch (func3 & 0b11) {
+    case 0b00:
+      mask = 0xFF;
+      break;
+    case 0b01:
+      mask = 0xFFFF;
+      break;
+    default:
+      mask = 0xFFFFFFFF;
+      break;
+    }
+
+    uint32_t clear_mask = ~(mask << bit_offset);
+    uint32_t result = old_word & clear_mask;
+    result |= ((new_data & mask) << bit_offset);
+    return result;
+  }
+  bool is_mmio_addr(uint32_t paddr) const;
 };

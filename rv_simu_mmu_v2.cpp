@@ -1,6 +1,6 @@
-#include "AbstractLsu.h"
 #include "BackTop.h"
 #include "Csr.h"
+#include "RealLsu.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "diff.h"
@@ -442,13 +442,14 @@ void SimCpu::init() {
   // 第三阶段：集中完成跨模块连线
   mem_subsystem.csr = back.csr;
   mem_subsystem.memory = p_memory;
-  mem_subsystem.peripheral_io = &back.lsu->peripheral_io;
+  mem_subsystem.peripheral_req = back.lsu->out.peripheral_req;
+  mem_subsystem.peripheral_resp = back.lsu->in.peripheral_resp;
 
   front.in.csr_status = back.csr->out.csr_status;
   front.ctx = &ctx;
 
-  back.lsu->ptw_walk_port = mem_subsystem.dtlb_walk_port;
-  back.lsu->ptw_mem_port = mem_subsystem.dtlb_ptw_port;
+  back.lsu->set_ptw_walk_port(mem_subsystem.dtlb_walk_port);
+  back.lsu->set_ptw_mem_port(mem_subsystem.dtlb_ptw_port);
 
   mem_subsystem.lsu2dcache = back.lsu_dcache_req_io;
   mem_subsystem.dcache2lsu = back.lsu_dcache_resp_io;

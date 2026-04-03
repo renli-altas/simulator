@@ -1,7 +1,5 @@
 #pragma once
 
-#include "AbstractDcache.h"
-#include "AbstractLsu.h"
 #include "MSHR.h"
 #include "WriteBuffer.h"
 #include "config.h"
@@ -9,6 +7,8 @@
 #include "DcacheConfig.h"   
 #include "IO.h"
 #include <cstdint>
+
+class SimContext;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pending store write (hit path) — records a store hit so that seq() can apply
@@ -82,7 +82,7 @@ struct S1S2Reg {
 //
 // All SRAM state is updated in seq() only; comb() is pure-read + output logic.
 // ─────────────────────────────────────────────────────────────────────────────
-class RealDcache : public AbstractDcache {
+class RealDcache {
 public:
     enum class CoherentQueryResult : uint8_t {
         Miss = 0,
@@ -91,9 +91,9 @@ public:
     };
 
     void bind_context(SimContext *c) { ctx = c; }
-    void init() override;
-    void comb() override;
-    void seq()  override;
+    void init();
+    void comb();
+    void seq();
     CoherentQueryResult query_coherent_word(uint32_t addr,
                                             uint32_t &data) const;
 

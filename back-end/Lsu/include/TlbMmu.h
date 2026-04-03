@@ -8,7 +8,7 @@
 
 class SimContext;
 class PtwMemPort;
-class AbstractLsu;
+class RealLsu;
 
 class TlbMmu : public AbstractMmu {
 public:
@@ -21,7 +21,7 @@ public:
   };
 
   TlbMmu(SimContext *ctx, PtwMemPort *port = nullptr,
-         AbstractLsu *coherent_lsu = nullptr,
+         RealLsu *coherent_lsu = nullptr,
          int tlb_entries = DTLB_ENTRIES);
 
   Result translate(uint32_t &p_addr, uint32_t v_addr, uint32_t type,
@@ -71,7 +71,7 @@ private:
   bool walk_sum = false;
   bool walk_req_sent = false;
   RetryReason last_retry_reason_ = RetryReason::NONE;
-  AbstractLsu *coherent_lsu_ = nullptr;
+  RealLsu *coherent_lsu_ = nullptr;
 
   bool lookup(uint32_t v_addr, uint8_t asid, TlbEntry &hit) const;
   uint32_t compose_paddr(uint32_t v_addr, const TlbEntry &e) const;

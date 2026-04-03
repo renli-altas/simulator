@@ -1108,14 +1108,14 @@ struct MemRespIO {
   }
 };
 
-struct PeripheralInIO {
+struct PeripheralReqIO {
   wire<1> is_mmio;
   wire<1> wen;
   wire<32> mmio_addr;
   wire<32> mmio_wdata;
   MicroOp uop;
 
-  PeripheralInIO() {
+  PeripheralReqIO() {
     is_mmio = {};
     wen = {};
     mmio_addr = {};
@@ -1123,13 +1123,13 @@ struct PeripheralInIO {
     uop = {};
   }
 };
-struct PeripheralOutIO {
+struct PeripheralRespIO {
   wire<1> is_mmio;
   wire<1> ready;
   wire<32> mmio_rdata;
   MicroOp uop;
 
-  PeripheralOutIO() {
+  PeripheralRespIO() {
     is_mmio = {};
     ready = {};
     mmio_rdata = {};
@@ -1138,8 +1138,8 @@ struct PeripheralOutIO {
 };
 
 struct PeripheralIO {
-  PeripheralInIO in;
-  PeripheralOutIO out;
+  PeripheralReqIO req;
+  PeripheralRespIO resp;
 };
 
 // STQ 条目结构（定义在此以供 StoreReq 使用）

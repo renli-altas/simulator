@@ -1,5 +1,5 @@
 #include "TlbMmu.h"
-#include "AbstractLsu.h"
+#include "RealLsu.h"
 #include "PtwMemPort.h"
 #include "ref.h"
 
@@ -32,7 +32,7 @@ inline const char *mmu_result_name(AbstractMmu::Result ret) {
 }
 } // namespace
 
-TlbMmu::TlbMmu(SimContext *ctx, PtwMemPort *port, AbstractLsu *coherent_lsu,
+TlbMmu::TlbMmu(SimContext *ctx, PtwMemPort *port, RealLsu *coherent_lsu,
                int tlb_entries)
     : ctx(ctx), walker(port), dtlb(tlb_entries > 0 ? tlb_entries : 1),
       tlb_entries(tlb_entries > 0 ? tlb_entries : 1), repl_ptr(0),

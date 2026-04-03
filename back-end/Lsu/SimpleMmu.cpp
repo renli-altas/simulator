@@ -1,12 +1,12 @@
 #include "SimpleMmu.h"
-#include "AbstractLsu.h" // Added for coherent_read
+#include "RealLsu.h"
 #include "ref.h"         // For PTE_V, etc.
 #include <cstdio>
 
 // Helper extern from main.cpp (or wherever p_memory is defined globally)
 extern uint32_t *p_memory;
 
-SimpleMmu::SimpleMmu(SimContext *ctx, AbstractLsu *lsu) : ctx(ctx), lsu(lsu) {
+SimpleMmu::SimpleMmu(SimContext *ctx, RealLsu *lsu) : ctx(ctx), lsu(lsu) {
   // p_memory is extern global, no need to cache it (it's not ready at ctor time
   // anyway)
 }

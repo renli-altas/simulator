@@ -18,8 +18,8 @@
 对应模块关系：
 
 - LSU 侧接口定义在 [IO.h](/home/tututu/qimeng/simulator/back-end/include/IO.h)
-  - `PeripheralInIO`
-  - `PeripheralOutIO`
+  - `PeripheralReqIO`
+  - `PeripheralRespIO`
   - `PeripheralIO`
 - LSU 发起请求：
   - [RealLsu.cpp](/home/tututu/qimeng/simulator/back-end/Lsu/RealLsu.cpp)
@@ -76,7 +76,7 @@ MMIO load 不是地址一出来就发，而是要等到比较严格的条件：
 5. 这条 load 必须是 ROB 当前最老未提交指令
    - 使用 `in.rob_bcast->head_rob_idx`
 
-满足后，LSU 生成 `PeripheralInIO`：
+满足后，LSU 生成 `PeripheralReqIO`：
 
 - `is_mmio = 1`
 - `wen = 0`
@@ -135,7 +135,7 @@ MMIO load 不是地址一出来就发，而是要等到比较严格的条件：
 
 ### 3.3 MMIO load 如何回到 LSU
 
-无论是本地返回还是 AXI 返回，最后都通过 `PeripheralOutIO` 回 LSU：
+无论是本地返回还是 AXI 返回，最后都通过 `PeripheralRespIO` 回 LSU：
 
 - [PeripheralAxi.cpp](/home/tututu/qimeng/simulator/MemSubSystem/PeripheralAxi.cpp)
   - `peripheral_io->out.is_mmio`

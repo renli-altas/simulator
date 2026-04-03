@@ -26,7 +26,6 @@ void BackTop::init() {
   csr = new Csr();
   rob = new Rob(ctx);
   lsu = new RealLsu(ctx);
-  lsu->set_csr(csr);
 
   pre_idu_queue->out.dec2front = &dec2front;
   pre_idu_queue->out.issue = &pre_idu_issue;
@@ -134,11 +133,13 @@ void BackTop::init() {
   lsu->in.dec_bcast = &dec_bcast;
   lsu->in.rob_commit = &rob_commit;
   lsu->in.dcache2lsu  = &dcache2lsu_io;
+  lsu->in.peripheral_resp = &peripheral2lsu_resp_io;
 
   lsu->out.lsu2exe = &lsu2exe;
   lsu->out.lsu2dis = &lsu2dis;
   lsu->out.lsu2rob = &lsu2rob;
   lsu->out.lsu2dcache = &lsu2dcache_io;
+  lsu->out.peripheral_req = &lsu2peripheral_req_io;
 
   pre_idu_queue->init();
   idu->init();
