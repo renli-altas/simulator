@@ -134,11 +134,11 @@ constexpr uint32_t ICACHE_TAG_MASK = (1u << ICACHE_TAG_BITS) - 1u;
 #define DCACHE_WB_ENTRIES 8
 
 #ifndef SIMPLE_DCACHE_HIT_LATENCY
-#define SIMPLE_DCACHE_HIT_LATENCY 1
+#define SIMPLE_DCACHE_HIT_LATENCY 2
 #endif
 
 #ifndef SIMPLE_DCACHE_MISS_LATENCY
-#define SIMPLE_DCACHE_MISS_LATENCY 100
+#define SIMPLE_DCACHE_MISS_LATENCY 50
 #endif
 
 #ifndef CONFIG_MEM_USE_SIMPLE_DCACHE
@@ -160,7 +160,7 @@ constexpr int MAX_BR_PER_CYCLE = DECODE_WIDTH;
 constexpr int CSR_NUM = 21;
 
 constexpr int ROB_BANK_NUM = DECODE_WIDTH;
-constexpr int ROB_NUM = 512;
+constexpr int ROB_NUM = 256;
 constexpr int ROB_LINE_NUM = ROB_NUM / ROB_BANK_NUM;
 
 // ============================================================
