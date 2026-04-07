@@ -4,6 +4,7 @@
 #include "MSHR.h"
 #include "RISCV.h"
 #include "SimCpu.h"
+#include "WriteBuffer.h"
 #include "config.h"
 #include "diff.h"
 #include <cstdint>
@@ -83,7 +84,7 @@ void dump_dcache_word_visibility(uint32_t addr) {
   bool wb_hit = false;
   for (int i = 0; i < DCACHE_WB_ENTRIES; ++i) {
     const auto &e = write_buffer[i];
-    if (!e.valid || e.addr != line_addr) {
+    if (!write_buffer_entry_live(i) || e.addr != line_addr) {
       continue;
     }
     wb_hit = true;

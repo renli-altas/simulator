@@ -105,9 +105,9 @@ private:
   std::unique_ptr<AxiKitRuntime> axi_kit_runtime;
   bool internal_axi_runtime_active_ = true;
 
-  static constexpr size_t kPtwClientCount =
-      static_cast<size_t>(PtwClient::NUM_CLIENTS);
-  static size_t ptw_client_idx(PtwClient c) { return static_cast<size_t>(c); }
+  static constexpr uint32_t kPtwClientCount =
+      static_cast<uint32_t>(PtwClient::NUM_CLIENTS);
+  static uint32_t ptw_client_idx(PtwClient c) { return static_cast<uint32_t>(c); }
   static MemPtwBlock::Client to_block_client(PtwClient c);
   void refresh_ptw_client_outputs();
   bool ptw_mem_send_read_req(PtwClient client, uint32_t paddr);

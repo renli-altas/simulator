@@ -46,12 +46,12 @@ namespace debug_ptw_trace {
 
 inline std::array<DebugSatpWriteEvent, CONFIG_DEBUG_SATP_TRACE_BUFFER_SIZE>
     g_satp_events{};
-inline size_t g_satp_next = 0;
+inline uint32_t g_satp_next = 0;
 inline bool g_satp_wrapped = false;
 
 inline std::array<DebugPtwWalkRespEvent, CONFIG_DEBUG_PTW_WALK_TRACE_BUFFER_SIZE>
     g_ptw_walk_events{};
-inline size_t g_ptw_walk_next = 0;
+inline uint32_t g_ptw_walk_next = 0;
 inline bool g_ptw_walk_wrapped = false;
 
 inline void record_satp_write(uint32_t old_satp, uint32_t new_satp,
@@ -81,7 +81,7 @@ inline void record_ptw_walk_resp_detail(const uint32_t *memory, uint32_t req_add
   if (memory != nullptr) {
     const uint32_t word_base = slot.line_addr >> 2;
     for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-      slot.backing_words[static_cast<size_t>(w)] = memory[word_base + w];
+      slot.backing_words[static_cast<uint32_t>(w)] = memory[word_base + w];
     }
   }
   g_ptw_walk_next = (g_ptw_walk_next + 1) % g_ptw_walk_events.size();
@@ -91,14 +91,14 @@ inline void record_ptw_walk_resp_detail(const uint32_t *memory, uint32_t req_add
 }
 
 inline void dump_recent_satp_writes(
-    size_t dump_count = CONFIG_DEBUG_SATP_TRACE_DUMP_COUNT) {
-  const size_t count = g_satp_wrapped ? g_satp_events.size() : g_satp_next;
+    uint32_t dump_count = CONFIG_DEBUG_SATP_TRACE_DUMP_COUNT) {
+  const uint32_t count = g_satp_wrapped ? g_satp_events.size() : g_satp_next;
   if (count == 0) {
     std::printf("[DEADLOCK][PTW_TRACE][SATP] no satp writes recorded\n");
     return;
   }
-  const size_t recent = (dump_count < count) ? dump_count : count;
-  const size_t start =
+  const uint32_t recent = (dump_count < count) ? dump_count : count;
+  const uint32_t start =
       g_satp_wrapped
           ? ((g_satp_next + g_satp_events.size() - recent) %
              g_satp_events.size())
@@ -106,7 +106,7 @@ inline void dump_recent_satp_writes(
   std::printf(
       "[DEADLOCK][PTW_TRACE][SATP] dumping latest %zu satp writes (buffered=%zu)\n",
       recent, count);
-  for (size_t n = 0; n < recent; ++n) {
+  for (uint32_t n = 0; n < recent; ++n) {
     const auto &e = g_satp_events[(start + n) % g_satp_events.size()];
     std::printf(
         "[DEADLOCK][PTW_TRACE][SATP] cyc=%lld old=0x%08x new=0x%08x mode=%u asid=0x%03x ppn=0x%05x priv=%u\n",
@@ -119,16 +119,16 @@ inline void dump_recent_satp_writes(
 }
 
 inline void dump_recent_ptw_walk_resps(
-    size_t dump_count = CONFIG_DEBUG_PTW_WALK_TRACE_DUMP_COUNT) {
-  const size_t count =
+    uint32_t dump_count = CONFIG_DEBUG_PTW_WALK_TRACE_DUMP_COUNT) {
+  const uint32_t count =
       g_ptw_walk_wrapped ? g_ptw_walk_events.size() : g_ptw_walk_next;
   if (count == 0) {
     std::printf(
         "[DEADLOCK][PTW_TRACE][WALK] no ptw walk responses recorded\n");
     return;
   }
-  const size_t recent = (dump_count < count) ? dump_count : count;
-  const size_t start =
+  const uint32_t recent = (dump_count < count) ? dump_count : count;
+  const uint32_t start =
       g_ptw_walk_wrapped
           ? ((g_ptw_walk_next + g_ptw_walk_events.size() - recent) %
              g_ptw_walk_events.size())
@@ -136,7 +136,7 @@ inline void dump_recent_ptw_walk_resps(
   std::printf(
       "[DEADLOCK][PTW_TRACE][WALK] dumping latest %zu ptw walk responses (buffered=%zu)\n",
       recent, count);
-  for (size_t n = 0; n < recent; ++n) {
+  for (uint32_t n = 0; n < recent; ++n) {
     const auto &e = g_ptw_walk_events[(start + n) % g_ptw_walk_events.size()];
     const bool pte_v = (e.pte & PTE_V) != 0;
     const bool pte_r = (e.pte & PTE_R) != 0;
@@ -158,7 +158,7 @@ inline void dump_recent_ptw_walk_resps(
                 e.line_addr);
     for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
       std::printf("%s%08x", (w == 0) ? "" : " ",
-                  e.backing_words[static_cast<size_t>(w)]);
+                  e.backing_words[static_cast<uint32_t>(w)]);
     }
     std::printf("]\n");
   }

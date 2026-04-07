@@ -37,7 +37,7 @@ namespace deadlock_replay_trace {
 inline std::array<DeadlockReplayTraceEvent,
                   CONFIG_DEADLOCK_REPLAY_TRACE_BUFFER_SIZE>
     g_events{};
-inline size_t g_next = 0;
+inline uint32_t g_next = 0;
 inline bool g_wrapped = false;
 
 inline const char *kind_name(DeadlockReplayTraceKind kind) {
@@ -101,24 +101,24 @@ inline void record(DeadlockReplayTraceKind kind, uint16_t slot, uint8_t replay,
 }
 
 inline void dump_recent(
-    size_t dump_count = CONFIG_DEADLOCK_REPLAY_TRACE_DUMP_COUNT) {
-  const size_t count = g_wrapped ? g_events.size() : g_next;
+    uint32_t dump_count = CONFIG_DEADLOCK_REPLAY_TRACE_DUMP_COUNT) {
+  const uint32_t count = g_wrapped ? g_events.size() : g_next;
   if (count == 0) {
     std::printf(
         "[DEADLOCK][REPLAY_TRACE] no replay-related events have been "
         "recorded\n");
     return;
   }
-  const size_t recent = (dump_count < count) ? dump_count : count;
-  const size_t start =
+  const uint32_t recent = (dump_count < count) ? dump_count : count;
+  const uint32_t start =
       g_wrapped ? ((g_next + g_events.size() - recent) % g_events.size())
                 : (count - recent);
-  size_t printed = 0;
+  uint32_t printed = 0;
   std::printf(
       "[DEADLOCK][REPLAY_TRACE] dumping latest %zu replay events "
       "(buffered=%zu)\n",
       recent, count);
-  for (size_t n = 0; n < recent; ++n) {
+  for (uint32_t n = 0; n < recent; ++n) {
     const auto &e = g_events[(start + n) % g_events.size()];
     std::printf(
         "[DEADLOCK][REPLAY_TRACE] cyc=%lld kind=%s slot=%u replay=%u "

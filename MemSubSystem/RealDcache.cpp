@@ -2,15 +2,21 @@
 #include "PhysMemory.h"
 #include <oracle.h>
 #include <cassert>
-#include <cstdio>
+#include <cstddef>
 #include <cstring>
 
 namespace {
-constexpr const char *kColorReset     = "\033[0m";
-constexpr const char *kColorLoadReq   = "\033[1;36m"; // Cyan
-constexpr const char *kColorStoreReq  = "\033[1;33m"; // Yellow
-constexpr const char *kColorLoadResp  = "\033[1;32m"; // Green
-constexpr const char *kColorStoreResp = "\033[1;35m"; // Magenta
+
+constexpr uint8_t kLoadRespSrcSpecial = 1;
+constexpr uint8_t kLoadRespSrcMshrFill = 2;
+constexpr uint8_t kLoadRespSrcWbBypass = 3;
+constexpr uint8_t kLoadRespSrcDcacheHit = 4;
+constexpr uint8_t kLoadRespSrcReplayBankConflict = 11;
+constexpr uint8_t kLoadRespSrcReplayMshrPendingGuard = 12;
+constexpr uint8_t kLoadRespSrcReplayMshrHit = 13;
+constexpr uint8_t kLoadRespSrcReplayMshrFull = 14;
+constexpr uint8_t kLoadRespSrcReplayFirstAlloc = 15;
+constexpr uint8_t kLoadRespSrcReplaySameCycleStore = 16;
 
 struct PendingMissLine {
     bool valid = false;
@@ -47,6 +53,19 @@ void pending_miss_add(PendingMissLine *pending_miss_lines,
     pending_miss_count++;
 }
 
+bool has_same_cycle_store_hazard(const S1S2Reg &pipe, uint32_t load_addr) {
+    for (int i = 0; i < LSU_STA_COUNT; ++i) {
+        const auto &store = pipe.stores[i];
+        if (!store.valid || store.replayed) {
+            continue;
+        }
+        if (cache_line_match(load_addr, store.addr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +73,6 @@ void pending_miss_add(PendingMissLine *pending_miss_lines,
 // ─────────────────────────────────────────────────────────────────────────────
 // RealDcache::RealDcache(axi_interconnect::AXI_Interconnect *ic)
 //     : ic_(ic) {}
-
 void RealDcache::init() {
     init_dcache();
     s1s2_cur = {};
@@ -64,64 +82,6 @@ void RealDcache::init() {
     }
     for (auto &lru_update : lru_updates_) {
         lru_update = {};
-    }
-    for (auto &req_track : req_track_) {
-        req_track = {};
-    }
-    req_track_rr_ = 0;
-
-}
-
-bool RealDcache::begin_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
-                                 uint32_t rob_flag) {
-    int free_idx = -1;
-    for (int i = 0; i < kReqTrackSize; i++) {
-        const auto &e = req_track_[i];
-        if (!e.valid) {
-            if (free_idx < 0) {
-                free_idx = i;
-            }
-            continue;
-        }
-        if (e.is_store == is_store && e.req_id == req_id && e.rob_idx == rob_idx &&
-            e.rob_flag == rob_flag) {
-            return true;
-        }
-    }
-    int use_idx = free_idx;
-    if (use_idx < 0) {
-        use_idx = req_track_rr_;
-        req_track_rr_ = (req_track_rr_ + 1) % kReqTrackSize;
-    }
-    req_track_[use_idx].valid = true;
-    req_track_[use_idx].is_store = is_store;
-    req_track_[use_idx].req_id = req_id;
-    req_track_[use_idx].rob_idx = rob_idx;
-    req_track_[use_idx].rob_flag = rob_flag;
-    req_track_[use_idx].first_cycle =
-        (sim_time >= 0) ? static_cast<uint64_t>(sim_time) : 0;
-    return false;
-}
-
-void RealDcache::end_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
-                               uint32_t rob_flag) {
-    for (int i = 0; i < kReqTrackSize; i++) {
-        auto &e = req_track_[i];
-        if (!e.valid) {
-            continue;
-        }
-        if (e.is_store == is_store && e.req_id == req_id && e.rob_idx == rob_idx &&
-            e.rob_flag == rob_flag) {
-            if (ctx != nullptr && sim_time >= 0) {
-                const uint64_t now = static_cast<uint64_t>(sim_time);
-                if (now >= e.first_cycle) {
-                    ctx->perf.l1d_mem_inst_total_cycles += (now - e.first_cycle);
-                    ctx->perf.l1d_mem_inst_samples++;
-                }
-            }
-            e = {};
-            return;
-        }
     }
 }
 
@@ -138,7 +98,6 @@ bool RealDcache::special_load_addr(uint32_t addr,uint32_t &mem_val,MicroOp &uop)
 RealDcache::CoherentQueryResult
 RealDcache::query_coherent_word(uint32_t addr, uint32_t &data) const {
     const AddrFields f = decode(addr);
-    static constexpr uint8_t kFullWordStrb = 0x0Fu;
 
     for (int w = 0; w < DCACHE_WAYS; w++) {
         if (!valid_array[f.set_idx][w] || tag_array[f.set_idx][w] != f.tag) {
@@ -157,31 +116,8 @@ RealDcache::query_coherent_word(uint32_t addr, uint32_t &data) const {
         return CoherentQueryResult::Hit;
     }
 
-    for (int i = 0; i < DCACHE_WB_ENTRIES; i++) {
-        if (!write_buffer[i].valid ||
-            !cache_line_match(write_buffer[i].addr, addr)) {
-            continue;
-        }
-        data = write_buffer[i].data[f.word_off];
+    if (write_buffer_lookup_word(addr, data)) {
         return CoherentQueryResult::Hit;
-    }
-
-    if (mshr2dcache != nullptr && mshr2dcache->fill.valid &&
-        cache_line_match(mshr2dcache->fill.addr, addr)) {
-        data = mshr2dcache->fill.data[f.word_off];
-        return CoherentQueryResult::Hit;
-    }
-
-    for (int i = 0; i < DCACHE_MSHR_ENTRIES; i++) {
-        const auto &e = mshr_entries[i];
-        if (!e.valid || e.index != f.set_idx || e.tag != f.tag) {
-            continue;
-        }
-        if (e.merged_store_strb[f.word_off] == kFullWordStrb) {
-            data = e.merged_store_data[f.word_off];
-            return CoherentQueryResult::Hit;
-        }
-        return CoherentQueryResult::Retry;
     }
 
     if (find_mshr_entry(f.set_idx, f.tag)) {
@@ -194,14 +130,14 @@ RealDcache::query_coherent_word(uint32_t addr, uint32_t &data) const {
 // ─────────────────────────────────────────────────────────────────────────────
 // Stage 1 — called from comb().
 //
-// Reads incoming requests from lsu2dcache, detects bank conflicts, and
+// Reads incoming requests from in.lsu2dcache, detects bank conflicts, and
 // snapshots the SRAM arrays into s1s2_nxt.
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::stage1_comb() {
     s1s2_nxt = {};
 
-    bool mshr_fill = mshr2dcache->fill.valid;
-    AddrFields mshr_f = decode(mshr2dcache->fill.addr);
+    bool mshr_fill = in.mshr2dcache->fill.valid;
+    AddrFields mshr_f = decode(in.mshr2dcache->fill.addr);
     uint32_t mshr_fill_bank = mshr_fill ? mshr_f.bank : ~0u;         
 
     struct ReqInfo {
@@ -212,14 +148,14 @@ void RealDcache::stage1_comb() {
     } reqs[LSU_LDU_COUNT + LSU_STA_COUNT] = {};
 
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
-        const LoadReq &req = lsu2dcache->req_ports.load_ports[i];
+        const LoadReq &req = in.lsu2dcache->req_ports.load_ports[i];
         reqs[i].valid = req.valid;
         if (req.valid)
             reqs[i].f.bank = decode(req.addr).bank;
         reqs[i].f =  decode(req.addr);
     }
     for (int i = 0; i < LSU_STA_COUNT; i++) {
-        const StoreReq &req = lsu2dcache->req_ports.store_ports[i];
+        const StoreReq &req = in.lsu2dcache->req_ports.store_ports[i];
         int idx = LSU_LDU_COUNT + i;
         reqs[idx].valid = req.valid;
         reqs[idx].f = decode(req.addr);
@@ -256,7 +192,7 @@ void RealDcache::stage1_comb() {
     }
 
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
-        const LoadReq &req = lsu2dcache->req_ports.load_ports[i];
+        const LoadReq &req = in.lsu2dcache->req_ports.load_ports[i];
         S1S2Reg::LoadSlot &slot = s1s2_nxt.loads[i];
         if (!req.valid) continue;
 
@@ -269,6 +205,8 @@ void RealDcache::stage1_comb() {
         AddrFields f  = decode(req.addr);
         slot.set_idx  = f.set_idx;
         if(reqs[i].conflict) continue; // Don't need to snapshot SRAM if we're going to replay due to bank conflict
+        
+        #if !CONFIG_BSD
         for (int w = 0; w < DCACHE_WAYS; w++) {
             slot.tag_snap[w]   = tag_array[f.set_idx][w];
             slot.valid_snap[w] = valid_array[f.set_idx][w];
@@ -276,10 +214,24 @@ void RealDcache::stage1_comb() {
             for (int d = 0; d < DCACHE_LINE_WORDS; d++)
                 slot.data_snap[w][d] = data_array[f.set_idx][w][d];
         }
+        #else
+            // For BSD, we don't need to capture the full SRAM snapshot for each load slot,
+            // since we will simply replay the load on any potential bank conflict or MSHR hit
+            out.bsd_out[i]->valid = true;
+            out.bsd_out[i]->set_idx = f.set_idx;
+            memcpy(slot.tag_snap, in.bsd_in[i]->tag, sizeof(slot.tag_snap));
+            memcpy(slot.valid_snap, in.bsd_in[i]->valid, sizeof(slot.valid_snap));
+            memcpy(slot.dirty_snap, in.bsd_in[i]->dirty, sizeof(slot.dirty_snap));
+            for (int w = 0; w < DCACHE_WAYS; w++) {
+                for (int d = 0; d < DCACHE_LINE_WORDS; d++) {
+                    slot.data_snap[w][d] = in.bsd_in[i]->data[w][d];
+                }
+            }
+        #endif
     }
 
     for (int i = 0; i < LSU_STA_COUNT; i++) {
-        const StoreReq &req = lsu2dcache->req_ports.store_ports[i];
+        const StoreReq &req = in.lsu2dcache->req_ports.store_ports[i];
         S1S2Reg::StoreSlot &slot = s1s2_nxt.stores[i];
         if (!req.valid) continue;
 
@@ -296,38 +248,54 @@ void RealDcache::stage1_comb() {
         slot.set_idx  = f.set_idx;
         if(reqs[idx].conflict) continue; // Don't need to snapshot SRAM if we're going to replay due to bank conflict
         for (int w = 0; w < DCACHE_WAYS; w++) {
+        #if !CONFIG_BSD
             slot.tag_snap[w]   = tag_array[f.set_idx][w];
             slot.valid_snap[w] = valid_array[f.set_idx][w];
             slot.dirty_snap[w] = dirty_array[f.set_idx][w];
             for (int d = 0; d < DCACHE_LINE_WORDS; d++)
                 slot.data_snap[w][d] = data_array[f.set_idx][w][d];
+        #else
+            out.bsd_out[i+LSU_LDU_COUNT]->valid = true;
+            out.bsd_out[i+LSU_LDU_COUNT]->set_idx = f.set_idx;
+            memcpy(slot.tag_snap, in.bsd_in[i+LSU_LDU_COUNT]->tag, sizeof(slot.tag_snap));
+            memcpy(slot.valid_snap, in.bsd_in[i+LSU_LDU_COUNT]->valid, sizeof(slot.valid_snap));
+            memcpy(slot.dirty_snap, in.bsd_in[i+LSU_LDU_COUNT]->dirty, sizeof(slot.dirty_snap));
+            for (int w = 0; w < DCACHE_WAYS; w++) {
+                for (int d = 0; d < DCACHE_LINE_WORDS; d++) {
+                    slot.data_snap[w][d] = in.bsd_in[i+LSU_LDU_COUNT]->data[w][d];
+                }
+            }
+            // For BSD, we don't need to capture the full SRAM snapshot for each store slot,
+            // since we will simply replay the store on any potential bank conflict or MSHR hit
+            
+        #endif
         }
     }
 }
 
-void RealDcache::prepare_wb_queries_for_stage2() {
-    Assert(dcache2wb != nullptr && "dcache2wb pointer not set");
+void RealDcache::prepare_wb_queries_for_next_stage2() {
+    Assert(out.dcache2wb != nullptr && "out.dcache2wb pointer not set");
 
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
-        dcache2wb->bypass_req[i] = {};
-        const S1S2Reg::LoadSlot &slot = s1s2_cur.loads[i];
+        out.dcache2wb->bypass_req[i] = {};
+        const S1S2Reg::LoadSlot &slot = s1s2_nxt.loads[i];
         if (!slot.valid || slot.replayed) {
             continue;
         }
-        dcache2wb->bypass_req[i].valid = true;
-        dcache2wb->bypass_req[i].addr = slot.addr;
+        out.dcache2wb->bypass_req[i].valid = true;
+        out.dcache2wb->bypass_req[i].addr = slot.addr;
     }
 
     for (int i = 0; i < LSU_STA_COUNT; i++) {
-        dcache2wb->merge_req[i] = {};
-        const S1S2Reg::StoreSlot &slot = s1s2_cur.stores[i];
+        out.dcache2wb->merge_req[i] = {};
+        const S1S2Reg::StoreSlot &slot = s1s2_nxt.stores[i];
         if (!slot.valid || slot.replayed) {
             continue;
         }
-        dcache2wb->merge_req[i].valid = true;
-        dcache2wb->merge_req[i].addr = slot.addr;
-        dcache2wb->merge_req[i].data = slot.data;
-        dcache2wb->merge_req[i].strb = slot.strb;
+        out.dcache2wb->merge_req[i].valid = true;
+        out.dcache2wb->merge_req[i].addr = slot.addr;
+        out.dcache2wb->merge_req[i].data = slot.data;
+        out.dcache2wb->merge_req[i].strb = slot.strb;
     }
 }
 
@@ -345,7 +313,7 @@ void RealDcache::prepare_wb_queries_for_stage2() {
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::stage2_comb() {
     
-    dcache2lsu->resp_ports.clear();
+    out.dcache2lsu->resp_ports.clear();
     for (auto &pending_write : pending_writes_) {
         pending_write = {};
     }
@@ -353,46 +321,26 @@ void RealDcache::stage2_comb() {
         lru_update = {};
     }
 
-    uint32_t mshr_free_entries = mshr2dcache->free;
-    AddrFields mshr_f = decode(mshr2dcache->fill.addr);
+    uint32_t mshr_free_entries = in.mshr2dcache->free;
+    AddrFields mshr_f = decode(in.mshr2dcache->fill.addr);
     PendingMissLine pending_miss_lines[LSU_LDU_COUNT + LSU_STA_COUNT] = {};
     int pending_miss_count = 0;
 
     // ── Load ports ────────────────────────────────────────────────────────────
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
-        dcache2mshr->load_reqs[i].valid = false; // Default to no load request; set to true on load miss
+        out.dcache2mshr->load_reqs[i].valid = false; // Default to no load request; set to true on load miss
         const S1S2Reg::LoadSlot &slot = s1s2_cur.loads[i];
-        LoadResp &resp = dcache2lsu->resp_ports.load_resps[i];
+        LoadResp &resp = out.dcache2lsu->resp_ports.load_resps[i];
 
         if (!slot.valid) continue;
-        if (ctx != nullptr) {
-            ctx->perf.l1d_req_all++;
-        }
-        const bool is_replay_req =
-            begin_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
-        if (ctx != nullptr) {
-            if (is_replay_req) {
-                ctx->perf.l1d_req_replay++;
-            } else {
-                ctx->perf.l1d_req_initial++;
-                ctx->perf.dcache_access_num++;
-            }
-        }
 
         if (slot.replayed) {
             resp.valid  = true;
             resp.replay = 3;
             resp.req_id = slot.req_id;
             resp.uop    = slot.uop;
-            if (ctx != nullptr) {
-                ctx->perf.l1d_replay_bank_conflict++;
-                ctx->perf.l1d_replay_bank_conflict_load++;
-            }
-            if (ctx != nullptr && is_replay_req) {
-                ctx->perf.l1d_replay_squash_abort++;
-            }
-            LSU_MEM_DBG_PRINTF("%s[DCACHE LOAD RESP] cyc=%lld port=%d replay=3(bank_conflict) req_id=%zu slot.uop.rob_idx=%u addr=0x%08x reg=%d %s\n",
-                   kColorLoadResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, slot.uop.dest_preg, kColorReset);
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcReplayBankConflict;
             continue;
         }
 
@@ -402,6 +350,8 @@ void RealDcache::stage2_comb() {
             pending_miss_contains(pending_miss_lines, pending_miss_count,
                                   slot.set_idx, tag_expected) ||
             slot.mshr_hit || find_mshr_entry(slot.set_idx, tag_expected);
+        const bool same_cycle_store_hazard =
+            has_same_cycle_store_hazard(s1s2_cur, slot.addr);
 
         uint32_t mem_val = 0;
         MicroOp response_uop = slot.uop;
@@ -416,7 +366,7 @@ void RealDcache::stage2_comb() {
             }
         }
         const bool mshr_fill_match =
-            mshr2dcache->fill.valid && mshr_f.set_idx == slot.set_idx &&
+            in.mshr2dcache->fill.valid && mshr_f.set_idx == slot.set_idx &&
             mshr_f.tag == tag_expected;
 
         if(is_special){
@@ -425,15 +375,29 @@ void RealDcache::stage2_comb() {
             resp.uop = response_uop;
             resp.replay = 0;
             resp.req_id = slot.req_id;
-            end_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcSpecial;
+        }
+        else if (same_cycle_store_hazard) {
+            // Stores issued from STQ in the same cycle are older than any
+            // speculative load still in LDQ, but their cache-state update does
+            // not reach SRAM until seq(). Without this guard, a same-cycle load
+            // can observe the stale s1 snapshot instead of the older store.
+            resp.valid = true;
+            resp.replay = 3;
+            resp.req_id = slot.req_id;
+            resp.uop = slot.uop;
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcReplaySameCycleStore;
         }
         else if (mshr_pending_line && mshr_fill_match) {
             resp.valid = true;
-            resp.data = mshr2dcache->fill.data[f.word_off];
+            resp.data = in.mshr2dcache->fill.data[f.word_off];
             resp.uop = slot.uop;
             resp.replay = 0;
             resp.req_id = slot.req_id;
-            end_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcMshrFill;
         }
         else if (mshr_pending_line) {
             // Once a line has an active MSHR/fill in flight, the cache snapshot
@@ -444,26 +408,19 @@ void RealDcache::stage2_comb() {
             resp.replay = 2;
             resp.req_id = slot.req_id;
             resp.uop = slot.uop;
-            if (ctx != nullptr) {
-                ctx->perf.l1d_replay_wait_mshr++;
-                ctx->perf.l1d_replay_wait_mshr_load++;
-                ctx->perf.l1d_replay_wait_mshr_hit++;
-            }
-            if (ctx != nullptr && is_replay_req) {
-                ctx->perf.l1d_replay_squash_abort++;
-            }
-            LSU_MEM_DBG_PRINTF("%s[DCACHE LOAD RESP] cyc=%lld port=%d replay=2(mshr_pending_guard) req_id=%zu slot.uop.rob_idx=%u addr=0x%08x%s\n",
-                   kColorLoadResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcReplayMshrPendingGuard;
         }
-        else if (wb2dcache->bypass_resp[i].valid) {
+        else if (in.wb2dcache->bypass_resp[i].valid) {
             // Same-line dirty victims in WriteBuffer are newer than a clean
             // line that may have been refilled into DCache before WB drains.
             resp.valid = true;
             resp.replay = 0;
-            resp.data = wb2dcache->bypass_resp[i].data;
+            resp.data = in.wb2dcache->bypass_resp[i].data;
             resp.uop = slot.uop;
             resp.req_id = slot.req_id;
-            end_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcWbBypass;
         }
         else if (hit_way >= 0 ) {
             // ── Cache Hit ────────────────────────────────────────────────────
@@ -472,53 +429,40 @@ void RealDcache::stage2_comb() {
             resp.data   = slot.data_snap[hit_way][f.word_off];
             resp.uop    = slot.uop;
             resp.req_id = slot.req_id;
-            end_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
-            lru_updates_[i] = {true, slot.set_idx, hit_way};
+            // resp.debug_addr = slot.addr;
+            // resp.debug_src = kLoadRespSrcDcacheHit;
+            lru_updates_[i] = {true, slot.set_idx, (wire<DCACHE_WAY_BITS_PLUS>)(hit_way)};
         } else {
             if(mshr_fill_match){
                 resp.valid = true;
-                resp.data = mshr2dcache->fill.data[f.word_off];
+                resp.data = in.mshr2dcache->fill.data[f.word_off];
                 resp.uop = slot.uop;
                 resp.replay = 0; // waiting for fill to complete, replay next cycle
                 resp.req_id = slot.req_id;
-                end_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
+                // resp.debug_addr = slot.addr;
+                // resp.debug_src = kLoadRespSrcMshrFill;
             }
             else if (mshr_pending_line) {
                 resp.valid = true;
                 resp.replay = 2; // MSHR full, replay later
                 resp.req_id = slot.req_id;
                 resp.uop = slot.uop;
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_replay_wait_mshr++;
-                    ctx->perf.l1d_replay_wait_mshr_load++;
-                    ctx->perf.l1d_replay_wait_mshr_hit++;
-                }
-                if (ctx != nullptr && is_replay_req) {
-                    ctx->perf.l1d_replay_squash_abort++;
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE LOAD RESP] cyc=%lld port=%d replay=2(mshr_hit) req_id=%zu slot.uop.rob_idx=%u addr=0x%08x%s\n",
-                       kColorLoadResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
+                // resp.debug_addr = slot.addr;
+                // resp.debug_src = kLoadRespSrcReplayMshrHit;
             }
             else if(mshr_free_entries == 0){
                     resp.valid = true;
                     resp.replay = 1; // MSHR full, replay later
                     resp.req_id = slot.req_id;
                     resp.uop = slot.uop;
-                    if (ctx != nullptr) {
-                        ctx->perf.l1d_replay_mshr_full++;
-                        ctx->perf.l1d_replay_mshr_full_load++;
-                    }
-                    if (ctx != nullptr && is_replay_req) {
-                        ctx->perf.l1d_replay_squash_abort++;
-                    }
-                    LSU_MEM_DBG_PRINTF("%s[DCACHE LOAD RESP] cyc=%lld port=%d replay=1(mshr_full) req_id=%zu slot.uop.rob_idx=%u addr=0x%08x%s\n",
-                           kColorLoadResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
+                    // resp.debug_addr = slot.addr;
+                    // resp.debug_src = kLoadRespSrcReplayMshrFull;
             }
             else{
-                dcache2mshr->load_reqs[i].valid = true;
-                dcache2mshr->load_reqs[i].addr  = slot.addr;
-                dcache2mshr->load_reqs[i].uop   = slot.uop;
-                dcache2mshr->load_reqs[i].req_id = slot.req_id;
+                out.dcache2mshr->load_reqs[i].valid = true;
+                out.dcache2mshr->load_reqs[i].addr  = slot.addr;
+                out.dcache2mshr->load_reqs[i].uop   = slot.uop;
+                out.dcache2mshr->load_reqs[i].req_id = slot.req_id;
                 pending_miss_add(pending_miss_lines, pending_miss_count,
                                  LSU_LDU_COUNT + LSU_STA_COUNT, slot.set_idx,
                                  tag_expected);
@@ -528,18 +472,8 @@ void RealDcache::stage2_comb() {
                 resp.replay = 2;
                 resp.req_id = slot.req_id;
                 resp.uop = slot.uop;
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_replay_wait_mshr++;
-                    ctx->perf.l1d_replay_wait_mshr_load++;
-                    ctx->perf.l1d_replay_wait_mshr_first_alloc++;
-                    ctx->perf.l1d_miss_mshr_alloc++;
-                    ctx->perf.dcache_miss_num++;
-                    if (is_replay_req) {
-                        ctx->perf.l1d_replay_squash_abort++;
-                    }
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE LOAD RESP] cyc=%lld port=%d replay=2(first_mshr_alloc) req_id=%zu slot.uop.rob_idx=%u addr=0x%08x%s\n",
-                       kColorLoadResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
+                // resp.debug_addr = slot.addr;
+                // resp.debug_src = kLoadRespSrcReplayFirstAlloc;
                 mshr_free_entries = mshr_free_entries - 1;
             }
         } 
@@ -547,39 +481,17 @@ void RealDcache::stage2_comb() {
 
     // ── Store ports ───────────────────────────────────────────────────────────
     for (int i = 0; i < LSU_STA_COUNT; i++) {
-        dcache2mshr->store_reqs[i].valid = false; // Default to no store request; set to true on store miss
-        dcache2mshr->store_hit_updates[i].valid = false;
+        out.dcache2mshr->store_reqs[i].valid = false; // Default to no store request; set to true on store miss
+        out.dcache2mshr->store_hit_updates[i].valid = false;
         const S1S2Reg::StoreSlot &slot = s1s2_cur.stores[i];
-        StoreResp &resp = dcache2lsu->resp_ports.store_resps[i];
+        StoreResp &resp = out.dcache2lsu->resp_ports.store_resps[i];
 
         if (!slot.valid) continue;
-        if (ctx != nullptr) {
-            ctx->perf.l1d_req_all++;
-        }
-        const bool is_replay_req =
-            begin_req_track(true, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
-        if (ctx != nullptr) {
-            if (is_replay_req) {
-                ctx->perf.l1d_req_replay++;
-            } else {
-                ctx->perf.l1d_req_initial++;
-                ctx->perf.dcache_access_num++;
-            }
-        }
 
         if (slot.replayed) {
             resp.valid  = true;
             resp.replay = 3;
             resp.req_id = slot.req_id;
-            if (ctx != nullptr) {
-                ctx->perf.l1d_replay_bank_conflict++;
-                ctx->perf.l1d_replay_bank_conflict_store++;
-            }
-            if (ctx != nullptr && is_replay_req) {
-                ctx->perf.l1d_replay_squash_abort++;
-            }
-            LSU_MEM_DBG_PRINTF("%s[DCACHE STORE RESP] cyc=%lld port=%d replay=3(bank_conflict) req_id=%zu rob=%u addr=0x%08x%s\n",
-                   kColorStoreResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
             continue;
         }
 
@@ -602,138 +514,88 @@ void RealDcache::stage2_comb() {
             // absorb merges. Accepting the hit here would let cache state move
             // ahead of the in-flight writeback snapshot, so force a replay
             // until the older WB entry drains.
-            if (wb2dcache->merge_resp[i].busy) {
+            if (in.wb2dcache->merge_resp[i].busy) {
                 resp.valid = true;
                 resp.replay = 3;
                 resp.req_id = slot.req_id;
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_replay_bank_conflict++;
-                    ctx->perf.l1d_replay_bank_conflict_store++;
-                }
-                if (ctx != nullptr && is_replay_req) {
-                    ctx->perf.l1d_replay_squash_abort++;
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE STORE RESP] cyc=%lld port=%d replay=3(hit_wb_busy) req_id=%zu rob=%u addr=0x%08x%s\n",
-                       kColorStoreResp, (long long)sim_time, i, slot.req_id,
-                       slot.uop.rob_idx, slot.addr, kColorReset);
             }
 
             // If fill writes the same set/way in this cycle, this hit-line is
             // being replaced at seq(). A store-hit "success" here would be
             // overwritten by fill commit, so force replay.
-            else if (mshr2dcache->fill.valid &&
+            else if (in.mshr2dcache->fill.valid &&
                 mshr_f.set_idx == slot.set_idx &&
-                static_cast<int>(mshr2dcache->fill.way) == hit_way) {
+                static_cast<int>(in.mshr2dcache->fill.way) == hit_way) {
                 resp.valid = true;
                 resp.replay = 3;
                 resp.req_id = slot.req_id;
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_replay_wait_mshr++;
-                    ctx->perf.l1d_replay_wait_mshr_store++;
-                    ctx->perf.l1d_replay_wait_mshr_fill_wait++;
-                }
-                if (ctx != nullptr && is_replay_req) {
-                    ctx->perf.l1d_replay_squash_abort++;
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE STORE RESP] cyc=%lld port=%d replay=3(fill_replace_conflict) req_id=%zu rob=%u addr=0x%08x fill_line=0x%08x fill_way=%u hit_way=%d%s\n",
-                       kColorStoreResp, (long long)sim_time, i, slot.req_id,
-                       slot.uop.rob_idx, slot.addr, mshr2dcache->fill.addr,
-                       mshr2dcache->fill.way, hit_way, kColorReset);
             }else {
                 resp.valid  = true;
                 resp.replay = 0;
                 resp.req_id = slot.req_id;
-                end_req_track(true, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
 
                 pending_writes_[i] = {
                     true,
                     slot.set_idx,
-                    static_cast<uint32_t>(hit_way),
-                    f.word_off,
+                    static_cast<wire<DCACHE_WAY_BITS_PLUS>>(hit_way),
+                    static_cast<wire<DCACHE_OFFSET_BITS>>(f.word_off),
                     slot.data,
                     slot.strb
                 };
-                dcache2mshr->store_hit_updates[i].valid = true;
-                dcache2mshr->store_hit_updates[i].set_idx = slot.set_idx;
-                dcache2mshr->store_hit_updates[i].way_idx =
-                    static_cast<uint32_t>(hit_way);
-                dcache2mshr->store_hit_updates[i].word_off = f.word_off;
-                dcache2mshr->store_hit_updates[i].data = slot.data;
-                dcache2mshr->store_hit_updates[i].strb = slot.strb;
-                lru_updates_[LSU_LDU_COUNT + i] = {true, slot.set_idx, hit_way};
+                out.dcache2mshr->store_hit_updates[i].valid = true;
+                out.dcache2mshr->store_hit_updates[i].set_idx = slot.set_idx;
+                out.dcache2mshr->store_hit_updates[i].way_idx =
+                    static_cast<wire<DCACHE_WAY_BITS_PLUS>>(hit_way);
+                out.dcache2mshr->store_hit_updates[i].word_off = static_cast<wire<DCACHE_OFFSET_BITS>>(f.word_off);
+                out.dcache2mshr->store_hit_updates[i].data = slot.data;
+                out.dcache2mshr->store_hit_updates[i].strb = slot.strb;
+                lru_updates_[LSU_LDU_COUNT + i] = {true, slot.set_idx, static_cast<wire<DCACHE_WAY_BITS_PLUS>>(hit_way)};
             }
         } else {
-            if(wb2dcache->merge_resp[i].valid){
+            if(in.wb2dcache->merge_resp[i].valid){
                 resp.valid = true;
                 resp.replay = 0;
                 resp.req_id = slot.req_id;
-                end_req_track(true, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
             }
-            else if (wb2dcache->merge_resp[i].busy) {
+            else if (in.wb2dcache->merge_resp[i].busy) {
                 // The matching writeback line has already been issued to AXI.
                 // Do not ack the store and do not allocate a fresh MSHR for the
                 // same line; simply retry after the in-flight WB drains.
                 resp.valid = true;
                 resp.replay = 3;
                 resp.req_id = slot.req_id;
-                if (ctx != nullptr && is_replay_req) {
-                    ctx->perf.l1d_replay_squash_abort++;
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE STORE RESP] cyc=%lld port=%d replay=3(wb_busy) req_id=%zu rob=%u addr=0x%08x%s\n",
-                       kColorStoreResp, (long long)sim_time, i, slot.req_id,
-                       slot.uop.rob_idx, slot.addr, kColorReset);
             }
-            else if(mshr2dcache->fill.valid && mshr_f.set_idx == slot.set_idx && mshr_f.tag == tag_expected){
+            else if(in.mshr2dcache->fill.valid && mshr_f.set_idx == slot.set_idx && mshr_f.tag == tag_expected){
                 resp.valid = true;
                 resp.replay = 2; // waiting for fill to complete, replay next cycle
                 resp.req_id = slot.req_id;
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_replay_wait_mshr++;
-                    ctx->perf.l1d_replay_wait_mshr_store++;
-                    ctx->perf.l1d_replay_wait_mshr_fill_wait++;
-                }
-                if (ctx != nullptr && is_replay_req) {
-                    ctx->perf.l1d_replay_squash_abort++;
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE STORE RESP] cyc=%lld port=%d replay=2(fill_wait) req_id=%zu rob=%u addr=0x%08x%s\n",
-                       kColorStoreResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
             }
             else if (pending_miss_contains(pending_miss_lines,
                                            pending_miss_count, slot.set_idx,
                                            tag_expected) ||
                      slot.mshr_hit || find_mshr_entry(slot.set_idx, tag_expected)) {
-                dcache2mshr->store_reqs[i].valid = true;
-                dcache2mshr->store_reqs[i].addr  = slot.addr;
-                dcache2mshr->store_reqs[i].data  = slot.data;
-                dcache2mshr->store_reqs[i].strb  = slot.strb;
-                dcache2mshr->store_reqs[i].uop   = slot.uop;
-                dcache2mshr->store_reqs[i].req_id = slot.req_id;
+                out.dcache2mshr->store_reqs[i].valid = true;
+                out.dcache2mshr->store_reqs[i].addr  = slot.addr;
+                out.dcache2mshr->store_reqs[i].data  = slot.data;
+                out.dcache2mshr->store_reqs[i].strb  = slot.strb;
+                out.dcache2mshr->store_reqs[i].uop   = slot.uop;
+                out.dcache2mshr->store_reqs[i].req_id = slot.req_id;
                 resp.valid = true;
                 resp.replay = 0;
                 resp.req_id = slot.req_id;
-                end_req_track(true, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
             }
             else if(mshr_free_entries == 0){
                 resp.valid = true;
                 resp.replay = 1; // MSHR full, replay later
                 resp.req_id = slot.req_id;
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_replay_mshr_full++;
-                    ctx->perf.l1d_replay_mshr_full_store++;
-                }
-                if (ctx != nullptr && is_replay_req) {
-                    ctx->perf.l1d_replay_squash_abort++;
-                }
-                LSU_MEM_DBG_PRINTF("%s[DCACHE STORE RESP] cyc=%lld port=%d replay=1(mshr_full) req_id=%zu rob=%u addr=0x%08x%s\n",
-                       kColorStoreResp, (long long)sim_time, i, slot.req_id, slot.uop.rob_idx, slot.addr, kColorReset);
             }
             else {
-                dcache2mshr->store_reqs[i].valid = true;
-                dcache2mshr->store_reqs[i].addr  = slot.addr;
-                dcache2mshr->store_reqs[i].data  = slot.data;
-                dcache2mshr->store_reqs[i].strb  = slot.strb;
-                dcache2mshr->store_reqs[i].uop   = slot.uop;
-                dcache2mshr->store_reqs[i].req_id = slot.req_id;
+                out.dcache2mshr->store_reqs[i].valid = true;
+                out.dcache2mshr->store_reqs[i].addr  = slot.addr;
+                out.dcache2mshr->store_reqs[i].data  = slot.data;
+                out.dcache2mshr->store_reqs[i].strb  = slot.strb;
+                out.dcache2mshr->store_reqs[i].uop   = slot.uop;
+                out.dcache2mshr->store_reqs[i].req_id = slot.req_id;
                 pending_miss_add(pending_miss_lines, pending_miss_count,
                                  LSU_LDU_COUNT + LSU_STA_COUNT, slot.set_idx,
                                  tag_expected);
@@ -741,11 +603,6 @@ void RealDcache::stage2_comb() {
                 resp.replay = 0;
                 resp.req_id = slot.req_id;
                 resp.is_cache_miss = true;
-                end_req_track(true, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
-                if (ctx != nullptr) {
-                    ctx->perf.l1d_miss_mshr_alloc++;
-                    ctx->perf.dcache_miss_num++;
-                }
                 mshr_free_entries = mshr_free_entries - 1;
             }
         }
@@ -770,16 +627,16 @@ void RealDcache::stage2_comb() {
 //   9. Bridge mshr_.axi_out, wb_.axi_out → IC inputs
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::comb() {
-    assert(lsu2dcache  != nullptr && "lsu2dcache pointer not set");
-    assert(dcache2lsu  != nullptr && "dcache2lsu pointer not set");
+    assert(in.lsu2dcache  != nullptr && "in.lsu2dcache pointer not set");
+    assert(out.dcache2lsu  != nullptr && "out.dcache2lsu pointer not set");
 
     stage1_comb();
-    prepare_wb_queries_for_stage2();
+    prepare_wb_queries_for_next_stage2();
 
     stage2_comb();
 
 
-    // dcache2lsu->resp_ports.mshr_replay = mshr_.out.mshr_replay;
+    // out.dcache2lsu->resp_ports.mshr_replay = mshr_.out.mshr_replay;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -799,21 +656,21 @@ void RealDcache::seq() {
 
 
     // 2. Apply store hits.
-    if (mshr2dcache->fill.valid) {
-        write_dcache_line(decode(mshr2dcache->fill.addr).set_idx,
-                          mshr2dcache->fill.way,
-                          decode(mshr2dcache->fill.addr).tag,
-                          mshr2dcache->fill.data);
-        if (mshr2dcache->fill.dirty) {
-            dirty_array[decode(mshr2dcache->fill.addr).set_idx]
-                       [mshr2dcache->fill.way] = true;
+    if (in.mshr2dcache->fill.valid) {
+        write_dcache_line(decode(in.mshr2dcache->fill.addr).set_idx,
+                          in.mshr2dcache->fill.way,
+                          decode(in.mshr2dcache->fill.addr).tag,
+                          in.mshr2dcache->fill.data);
+        if (in.mshr2dcache->fill.dirty) {
+            dirty_array[decode(in.mshr2dcache->fill.addr).set_idx]
+                       [in.mshr2dcache->fill.way] = true;
         }
     }
 
     // 4. Apply LRU updates from hit accesses this cycle.
     for (int i = 0; i < LSU_LDU_COUNT + LSU_STA_COUNT; i++) {
         const LruUpdate &u = lru_updates_[i];
-        if (!u.valid || u.way < 0) continue;
+        if (!u.valid || u.way == DCACHE_WAYS) continue;
         lru_reset(u.set_idx, static_cast<uint32_t>(u.way));
     }
 

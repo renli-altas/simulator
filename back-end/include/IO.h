@@ -1168,7 +1168,7 @@ struct LoadReq {
   wire<1> valid;
   wire<32> addr;
   MicroOp uop;
-  size_t req_id;
+  wire<32> req_id;
 
   LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
 };
@@ -1179,7 +1179,7 @@ struct StoreReq {
   wire<32> data;
   wire<8> strb;
   StqEntry uop;
-  size_t req_id;
+  wire<32> req_id;
 
   StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
 };
@@ -1189,7 +1189,7 @@ struct LoadResp {
   wire<1> valid;
   wire<32> data;
   MicroOp uop;
-  size_t req_id;
+  wire<32> req_id;
   wire<2> replay;
   LoadResp() : valid(false), data(0), uop(), req_id(0), replay(0) {}
 };
@@ -1198,7 +1198,7 @@ struct LoadResp {
 struct StoreResp {
   wire<1> valid;
   wire<2> replay;
-  size_t req_id;
+  wire<32> req_id;
   wire<1> is_cache_miss;
 
   StoreResp() : valid(false), replay(0), req_id(0), is_cache_miss(false) {}
@@ -1221,7 +1221,7 @@ struct DCacheReqPorts {
 };
 struct ReplayResp {
   wire<2> replay;
-  size_t replay_addr;
+  uint32_t replay_addr;
   wire<8> free_slots;
 
   ReplayResp() : replay(0), replay_addr(0), free_slots(0) {}

@@ -61,7 +61,7 @@ public:
     // For latency=1 (single-cycle), pipeline must be empty
     // For latency=N, we can have N-1 instructions in flight
     // Fix: For latency=0, we treat it as 1 capacity (immediate completion)
-    size_t limit = (latency <= 0) ? 1 : static_cast<size_t>(latency);
+    uint32_t limit = (latency <= 0) ? 1 : static_cast<uint32_t>(latency);
     return pipeline.size() < limit;
   }
 

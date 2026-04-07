@@ -1314,8 +1314,8 @@ void RealLsu::progress_pending_sta_addr() {
   if (pending_sta_addr_reqs.empty()) {
     return;
   }
-  size_t n = pending_sta_addr_reqs.size();
-  for (size_t i = 0; i < n; i++) {
+  uint32_t n = pending_sta_addr_reqs.size();
+  for (uint32_t i = 0; i < n; i++) {
     MicroOp op = pending_sta_addr_reqs.front();
     pending_sta_addr_reqs.pop_front();
     if (!finish_store_addr_once(op)) {

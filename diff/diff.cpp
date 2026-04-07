@@ -2,6 +2,7 @@
 #include "Csr.h"
 #include "DcacheConfig.h"
 #include "DiffMemTrace.h"
+#include "WriteBuffer.h"
 #include "RISCV.h"
 #include "config.h"
 #include "util.h"
@@ -26,12 +27,13 @@ void dump_mem_subsystem_snapshot() {
                 static_cast<int>(e.fill), e.index, e.tag,
                 get_addr(e.index, e.tag, 0));
   }
-  for (int i = 0; i < DCACHE_WB_ENTRIES; ++i) {
-    const auto &e = write_buffer[i];
-    std::printf("[DIFF][WB] idx=%d v=%d send=%d addr=0x%08x data0=0x%08x\n", i,
-                static_cast<int>(e.valid), static_cast<int>(e.send), e.addr,
-                e.data[0]);
-  }
+  // for (int i = 0; i < DCACHE_WB_ENTRIES; ++i) {
+  //   const auto &e = write_buffer[i];
+  //   std::printf("[DIFF][WB] idx=%d v=%d send=%d addr=0x%08x data0=0x%08x\n",
+  //               i, static_cast<int>(write_buffer_entry_live(i)),
+  //               static_cast<int>(e.send), e.addr,
+  //               e.data[0]);
+  // }
 }
 
 void dump_code_line_snapshot(const char *tag, uint32_t pc) {

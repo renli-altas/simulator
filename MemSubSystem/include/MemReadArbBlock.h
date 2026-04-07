@@ -16,7 +16,7 @@ public:
     bool valid = false;
     Owner owner = Owner::NONE;
     uint32_t req_addr = 0;
-    size_t req_id = 0;
+    wire<32> req_id = 0;
     MicroOp uop = {};
   };
 
@@ -30,9 +30,9 @@ public:
     int injected_port = -1;
   };
 
-  static constexpr size_t kPtwReqIdBase = static_cast<size_t>(LDQ_SIZE);
-  static constexpr size_t kFirstDynamicPtwReqId =
-      static_cast<size_t>(LDQ_SIZE) + 16;
+  static constexpr wire<32> kPtwReqIdBase = static_cast<wire<32>>(LDQ_SIZE);
+  static constexpr wire<32> kFirstDynamicPtwReqId =
+      static_cast<wire<32>>(LDQ_SIZE) + 16;
 
   void init() {
     reset_state(cur_);
@@ -99,7 +99,7 @@ public:
     }
 
     auto &ptw_req = comb_.dcache_req.req_ports.load_ports[inject_port];
-    const size_t ptw_req_id = cur_.next_ptw_req_id;
+    const wire<32> ptw_req_id = cur_.next_ptw_req_id;
     ptw_req = {};
     ptw_req.valid = true;
     ptw_req.addr = ptw_addr;
@@ -124,7 +124,7 @@ public:
 
 private:
   struct State {
-    size_t next_ptw_req_id = kFirstDynamicPtwReqId;
+    wire<32> next_ptw_req_id = kFirstDynamicPtwReqId;
   };
 
   static void reset_state(State &state) {
@@ -143,8 +143,8 @@ private:
     result.injected_port = -1;
   }
 
-  static size_t next_ptw_req_id(size_t cur_req_id) {
-    const size_t next_req_id = cur_req_id + 1;
+  static wire<32> next_ptw_req_id(wire<32> cur_req_id) {
+    const wire<32> next_req_id = cur_req_id + 1;
     if (next_req_id < kFirstDynamicPtwReqId) {
       return kFirstDynamicPtwReqId;
     }

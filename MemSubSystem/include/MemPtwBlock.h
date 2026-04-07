@@ -28,7 +28,7 @@ public:
     uint8_t walk_state = 0;
     uint8_t walk_owner = 0;
     bool walk_req_id_valid = false;
-    size_t walk_req_id = 0;
+    wire<32> walk_req_id = 0;
     bool walk_req_pending[2] = {false, false};
     bool walk_req_inflight[2] = {false, false};
     bool walk_resp_valid[2] = {false, false};
@@ -110,7 +110,7 @@ public:
     return false;
   }
 
-  void on_walk_read_granted(size_t req_id) {
+  void on_walk_read_granted(wire<32> req_id) {
     if (walk_state == WalkState::L1_REQ) {
       walk_state = WalkState::L1_WAIT_RESP;
     } else if (walk_state == WalkState::L2_REQ) {
@@ -167,7 +167,7 @@ public:
     }
   }
 
-  WalkRespResult on_walk_mem_resp(size_t req_id, uint32_t req_addr,
+  WalkRespResult on_walk_mem_resp(wire<32> req_id, uint32_t req_addr,
                                   uint32_t pte) {
     const bool is_active_req = walk_active && walk_req_id_valid &&
                                (walk_req_id == req_id);
@@ -259,7 +259,7 @@ public:
     return WalkRespResult::HANDLED;
   }
 
-  WalkRespResult on_walk_mem_replay(size_t req_id, uint8_t replay_reason) {
+  WalkRespResult on_walk_mem_replay(wire<32> req_id, uint8_t replay_reason) {
     const bool is_active_req = walk_active && walk_req_id_valid &&
                                (walk_req_id == req_id);
     if (walk_drop_resp_credit > 0 && !is_active_req) {
@@ -418,7 +418,7 @@ public:
     d.walk_owner = static_cast<uint8_t>(walk_owner);
     d.walk_req_id_valid = walk_req_id_valid;
     d.walk_req_id = walk_req_id;
-    for (size_t i = 0; i < kClientCount; i++) {
+    for (uint32_t i = 0; i < kClientCount; i++) {
       d.walk_req_pending[i] = walk_clients[i].req_pending;
       d.walk_req_inflight[i] = walk_clients[i].req_inflight;
       d.walk_resp_valid[i] = walk_clients[i].resp_valid;
@@ -453,10 +453,10 @@ private:
     L2_WAIT_RESP,
   };
 
-  static constexpr size_t kClientCount =
-      static_cast<size_t>(Client::NUM_CLIENTS);
+  static constexpr uint32_t kClientCount =
+      static_cast<uint32_t>(Client::NUM_CLIENTS);
 
-  static size_t client_idx(Client c) { return static_cast<size_t>(c); }
+  static uint32_t client_idx(Client c) { return static_cast<uint32_t>(c); }
 
   bool has_resp_conflict(uint32_t req_addr) const {
     return coherent_source_ != nullptr &&
@@ -474,5 +474,5 @@ private:
   uint32_t walk_l1_pte = 0;
   uint32_t walk_drop_resp_credit = 0;
   bool walk_req_id_valid = false;
-  size_t walk_req_id = 0;
+  wire<32> walk_req_id = 0;
 };

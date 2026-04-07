@@ -83,16 +83,16 @@ struct AxiLlcTableRuntime {
     if (!write_req.enable) {
       return write_req;
     }
-    const size_t base =
-        unit_bytes == 0 ? 0 : static_cast<size_t>(req.way) * unit_bytes;
-    const size_t copy_bytes =
+    const uint32_t base =
+        unit_bytes == 0 ? 0 : static_cast<uint32_t>(req.way) * unit_bytes;
+    const uint32_t copy_bytes =
         std::min(req.payload.size(), row_bytes > base ? row_bytes - base : 0u);
     if (copy_bytes == 0) {
       return write_req;
     }
     std::memcpy(write_req.payload.data() + base, req.payload.data(), copy_bytes);
-    const size_t en_bytes = std::min(req.byte_enable.size(), copy_bytes);
-    for (size_t i = 0; i < en_bytes; ++i) {
+    const uint32_t en_bytes = std::min((uint32_t)req.byte_enable.size(), copy_bytes);
+    for (uint32_t i = 0; i < en_bytes; ++i) {
       write_req.chunk_enable[base + i] = req.byte_enable[i];
     }
     return write_req;
@@ -278,7 +278,7 @@ MemPtwBlock::Client MemSubsystem::to_block_client(PtwClient c) {
 }
 
 void MemSubsystem::refresh_ptw_client_outputs() {
-  for (size_t i = 0; i < kPtwClientCount; i++) {
+  for (uint32_t i = 0; i < kPtwClientCount; i++) {
     PtwClient client = static_cast<PtwClient>(i);
     ptw_mem_resp_ios[i].valid =
         ptw_block.client_resp_valid(to_block_client(client));
@@ -546,19 +546,17 @@ void MemSubsystem::init() {
   
   // Route LSU requests through MemReadArbBlock so PTW reads can be injected,
   // and capture raw DCache responses before routing them back to LSU/PTW.
-  dcache_.lsu2dcache  = &dcache_req_mux_;
-  dcache_.dcache2lsu  = &dcache_resp_raw_;
+  dcache_.in.lsu2dcache  = &dcache_req_mux_;
+  dcache_.out.dcache2lsu = &dcache_resp_raw_;
 
   // Internal MSHR ↔ DCache wires: RealDcache reads/writes MSHR IO structs
   // directly via pointers, keeping the connection zero-copy.
-  dcache_.mshr2dcache = &mshr_.out.mshr2dcache;  // MSHR output → DCache input
-  dcache_.dcache2mshr = &mshr_.in.dcachemshr;    // DCache output → MSHR input
+  dcache_.in.mshr2dcache  = &mshr_.out.mshr2dcache; // MSHR output → DCache input
+  dcache_.out.dcache2mshr = &mshr_.in.dcachemshr;   // DCache output → MSHR input
 
   // Internal WriteBuffer ↔ DCache wires.
-  dcache_.wb2dcache   = &wb_.out.wbdcache;       // WB output → DCache input
-  dcache_.dcache2wb   = &wb_.in.dcachewb;        // DCache output → WB input
-  dcache_.bind_context(ctx);
-  mshr_.bind_context(ctx);
+  dcache_.in.wb2dcache   = &wb_.out.wbdcache;    // WB output → DCache input
+  dcache_.out.dcache2wb  = &wb_.in.dcachewb;     // DCache output → WB input
   wb_.bind_context(ctx);
 
   // ── Initialise sub-modules ─────────────────────────────────────────────────
@@ -673,46 +671,13 @@ void MemSubsystem::dump_debug_state(FILE *out) const {
     return;
   }
   const auto ptw = ptw_block.debug_state();
-  std::fprintf(out,
-               "[MEM DEBUG][PTW] walk_active=%d state=%u owner=%u "
-               "req_id_valid=%d req_id=%zu dtlb(req_p=%d req_i=%d resp=%d "
-               "mem_p=%d mem_i=%d) itlb(req_p=%d req_i=%d resp=%d mem_p=%d "
-               "mem_i=%d)\n",
-               static_cast<int>(ptw.walk_active),
-               static_cast<unsigned>(ptw.walk_state),
-               static_cast<unsigned>(ptw.walk_owner),
-               static_cast<int>(ptw.walk_req_id_valid), ptw.walk_req_id,
-               static_cast<int>(ptw.walk_req_pending[0]),
-               static_cast<int>(ptw.walk_req_inflight[0]),
-               static_cast<int>(ptw.walk_resp_valid[0]),
-               static_cast<int>(ptw.mem_req_pending[0]),
-               static_cast<int>(ptw.mem_req_inflight[0]),
-               static_cast<int>(ptw.walk_req_pending[1]),
-               static_cast<int>(ptw.walk_req_inflight[1]),
-               static_cast<int>(ptw.walk_resp_valid[1]),
-               static_cast<int>(ptw.mem_req_pending[1]),
-               static_cast<int>(ptw.mem_req_inflight[1]));
 
   const auto route = resp_route_block.debug_state();
-  std::fprintf(out,
-               "[MEM DEBUG][ROUTE] ptw_event_count=%u wake(dtlb=%d itlb=%d "
-               "walk=%d) ptw_port0=%d lsu_port0_replayed=%d\n",
-               static_cast<unsigned>(route.ptw_event_count),
-               static_cast<int>(route.wakeup.dtlb),
-               static_cast<int>(route.wakeup.itlb),
-               static_cast<int>(route.wakeup.walk),
-               static_cast<int>(route.ptw_occupies_port0),
-               static_cast<int>(route.lsu_port0_replayed));
-  for (size_t i = 0; i < MemRespRouteBlock::kPtwTrackCount; i++) {
+  for (uint32_t i = 0; i < MemRespRouteBlock::kPtwTrackCount; i++) {
     const auto &track = route.ptw_tracks[i];
     if (!track.valid) {
       continue;
     }
-    std::fprintf(out,
-                 "[MEM DEBUG][ROUTE][PTWTRACK] idx=%zu owner=%u req_id=%zu "
-                 "addr=0x%08x\n",
-                 i, static_cast<unsigned>(track.owner), track.req_id,
-                 track.req_addr);
   }
 }
 
@@ -803,15 +768,15 @@ void MemSubsystem::comb() {
   // 2. MSHR comb_outputs uses that ready to decide whether an AXI read response
   //    may retire this cycle.
   // 3. DCache stage1 snapshots the new requests into s1s2_nxt.
-  // 4. DCache emits WB bypass/merge queries for s1s2_cur, the requests that
-  //    stage2 will actually evaluate in this cycle.
+  // 4. DCache emits WB bypass/merge queries for s1s2_nxt so WB responses are
+  //    ready when those requests reach stage2 in the following cycle.
   // 5. WB comb_inputs consumes those queries immediately.
   // 6. WB comb_outputs is refreshed so DCache stage2 sees same-cycle bypass.
   wb_.comb_outputs();
   mshr_.in.wbmshr = wb_.out.wbmshr;
   mshr_.comb_outputs();
   dcache_.stage1_comb();
-  dcache_.prepare_wb_queries_for_stage2();
+  dcache_.prepare_wb_queries_for_next_stage2();
 
   wb_.in.mshrwb   = mshr_.out.mshrwb;  // eviction push from MSHR current comb
   wb_.comb_inputs();

@@ -131,7 +131,7 @@ private:
   PendingRefill refill_comb_{};
   bool flush_pending_ = false;
   std::array<TraceEntry, 16> trace_hist_{};
-  size_t trace_hist_head_ = 0;
+  uint32_t trace_hist_head_ = 0;
 
   const WalkRegs &visible_walk_regs() const;
   WalkRegs &ensure_walk_comb();

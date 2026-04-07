@@ -17,7 +17,7 @@ struct SlotStats {
   uint64_t sampled_ns = 0;
 };
 
-constexpr size_t kSlotCount = static_cast<size_t>(Slot::Count);
+constexpr uint32_t kSlotCount = static_cast<uint32_t>(Slot::Count);
 
 constexpr std::array<const char *, kSlotCount> kSlotNames = {
     "front_top.total",
@@ -78,7 +78,7 @@ uint64_t monotonic_now_ns() {
 } // namespace
 
 void begin_sample(Slot slot, uint64_t &start_ns, bool &active) {
-  auto &stat = g_stats[static_cast<size_t>(slot)];
+  auto &stat = g_stats[static_cast<uint32_t>(slot)];
   const uint64_t calls = ++stat.calls;
   const uint64_t period = sample_period();
   active = (period == 1ull) || ((calls & (period - 1ull)) == 0ull);
@@ -94,13 +94,13 @@ void end_sample(Slot slot, uint64_t start_ns, bool active) {
   if (!active) {
     return;
   }
-  auto &stat = g_stats[static_cast<size_t>(slot)];
+  auto &stat = g_stats[static_cast<uint32_t>(slot)];
   stat.sampled_ns += monotonic_now_ns() - start_ns;
 }
 
 void print_summary() {
   struct Row {
-    size_t index = 0;
+    uint32_t index = 0;
     uint64_t calls = 0;
     uint64_t samples = 0;
     uint64_t sampled_ns = 0;
@@ -111,7 +111,7 @@ void print_summary() {
   rows.reserve(kSlotCount);
   uint64_t total_est_ns = 0;
   const uint64_t period = sample_period();
-  for (size_t i = 0; i < kSlotCount; ++i) {
+  for (uint32_t i = 0; i < kSlotCount; ++i) {
     const auto &stat = g_stats[i];
     if (stat.calls == 0 || stat.samples == 0) {
       continue;
@@ -161,7 +161,7 @@ void print_summary() {
   std::printf("=== End Frontend Host Profile ===\n");
 
   const auto slot_est_ns = [&](Slot slot) -> uint64_t {
-    const auto &stat = g_stats[static_cast<size_t>(slot)];
+    const auto &stat = g_stats[static_cast<uint32_t>(slot)];
     if (stat.calls == 0 || stat.samples == 0) {
       return 0;
     }

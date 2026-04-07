@@ -159,7 +159,7 @@ void Isu::comb_issue() {
     out.iss2prf->iss_entry[i].valid = false;
   }
 
-  for (size_t i = 0; i < iqs.size(); i++) {
+  for (uint32_t i = 0; i < iqs.size(); i++) {
     IssueQueue &q = iqs[i];
 
     // 调用新的 schedule
@@ -286,7 +286,7 @@ void Isu::comb_awake() {
 
 
   // 3. 输出给外部 (iss_awake) - 用于通知 rename table 等
-  for (size_t i = 0; i < MAX_WAKEUP_PORTS; i++) {
+  for (uint32_t i = 0; i < MAX_WAKEUP_PORTS; i++) {
     if (i < pregs.size()) {
       out.iss_awake->wake[i].valid = true;
       out.iss_awake->wake[i].preg = pregs[i];

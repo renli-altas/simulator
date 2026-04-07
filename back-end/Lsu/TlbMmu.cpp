@@ -87,8 +87,8 @@ void TlbMmu::dump_debug(FILE *out) const {
                walk.v_addr, walk.type, walk.satp,
                static_cast<unsigned>(last_retry_reason_),
                static_cast<int>(flush_pending_));
-  for (size_t i = 0; i < trace_hist_.size(); i++) {
-    const size_t idx = (trace_hist_head_ + i) % trace_hist_.size();
+  for (uint32_t i = 0; i < trace_hist_.size(); i++) {
+    const uint32_t idx = (trace_hist_head_ + i) % trace_hist_.size();
     const auto &e = trace_hist_[idx];
     if (!e.valid) {
       continue;

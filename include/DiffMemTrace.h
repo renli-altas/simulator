@@ -40,7 +40,7 @@ struct DiffMemTraceEvent {
   DiffMemTraceDetail detail = DiffMemTraceDetail::Req;
   uint8_t port = 0;
   uint8_t func3 = 0;
-  size_t req_id = 0;
+  uint32_t req_id = 0;
   uint32_t rob_idx = 0;
   uint32_t rob_flag = 0;
   uint32_t addr = 0;
@@ -53,7 +53,7 @@ namespace diff_mem_trace {
 
 inline std::array<DiffMemTraceEvent, CONFIG_DIFF_DEBUG_MEMTRACE_BUFFER_SIZE>
     g_events{};
-inline size_t g_next = 0;
+inline uint32_t g_next = 0;
 inline bool g_wrapped = false;
 
 inline const char *op_name(DiffMemTraceOp op) {
@@ -100,7 +100,7 @@ inline const char *detail_name(DiffMemTraceDetail detail) {
 
 inline void record(DiffMemTraceOp op, DiffMemTracePhase phase,
                    DiffMemTraceDetail detail, uint8_t port, uint8_t func3,
-                   size_t req_id, uint32_t rob_idx, uint32_t rob_flag,
+                   uint32_t req_id, uint32_t rob_idx, uint32_t rob_flag,
                    uint32_t addr, uint32_t data, uint32_t aux0,
                    uint32_t aux1) {
   auto &slot = g_events[g_next];
@@ -124,30 +124,31 @@ inline void record(DiffMemTraceOp op, DiffMemTracePhase phase,
 }
 
 inline void dump_recent(
-    size_t dump_count = CONFIG_DIFF_DEBUG_MEMTRACE_DUMP_COUNT) {
-  const size_t count = g_wrapped ? g_events.size() : g_next;
+    uint32_t dump_count = CONFIG_DIFF_DEBUG_MEMTRACE_DUMP_COUNT) {
+  const uint32_t count = g_wrapped ? g_events.size() : g_next;
   if (count == 0) {
     std::printf("[DIFF][MEMTRACE] no load/store events have been recorded\n");
     return;
   }
-  const size_t recent = (dump_count < count) ? dump_count : count;
-  const size_t start =
+  const uint32_t recent = (dump_count < count) ? dump_count : count;
+  const uint32_t start =
       g_wrapped ? ((g_next + g_events.size() - recent) % g_events.size())
                 : (count - recent);
-  size_t printed = 0;
+  uint32_t printed = 0;
   std::printf("[DIFF][MEMTRACE] dumping latest %zu events (buffered=%zu)\n",
               recent, count);
-  for (size_t n = 0; n < recent; ++n) {
-    const DiffMemTraceEvent &e = g_events[(start + n) % g_events.size()];
-    std::printf(
-        "[DIFF][MEMTRACE] cyc=%lld op=%s phase=%s detail=%s port=%u req_id=%zu "
-        "rob=%u flag=%u addr=0x%08x data=0x%08x func3=0x%x aux0=0x%08x "
-        "aux1=0x%08x\n",
-        e.cycle, op_name(e.op), phase_name(e.phase), detail_name(e.detail),
-        static_cast<unsigned>(e.port), e.req_id, e.rob_idx, e.rob_flag, e.addr,
-        e.data, static_cast<unsigned>(e.func3), e.aux0, e.aux1);
-    ++printed;
-  }
+  // for (uint32_t n = 0; n < recent; ++n) {
+  //   const DiffMemTraceEvent &e = g_events[(start + n) % g_events.size()];
+  //   std::printf(
+  //       "[DIFF][MEMTRACE] cyc=%lld op=%s phase=%s detail=%s port=%u req_id=%u "
+  //       "rob=%u flag=%u addr=0x%08x data=0x%08x func3=0x%x aux0=0x%08x "
+  //       "aux1=0x%08x\n",
+  //       e.cycle, op_name(e.op), phase_name(e.phase), detail_name(e.detail),
+  //       static_cast<unsigned>(e.port), static_cast<unsigned>(e.req_id),
+  //       e.rob_idx, e.rob_flag, e.addr,
+  //       e.data, static_cast<unsigned>(e.func3), e.aux0, e.aux1);
+  //   ++printed;
+  // }
   if (printed == 0) {
     std::printf("[DIFF][MEMTRACE] no load/store events in the requested range\n");
   }

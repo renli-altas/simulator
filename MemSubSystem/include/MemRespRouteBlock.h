@@ -10,7 +10,7 @@ struct load_resp {
   bool valid = false;
   uint32_t data = 0;
   MicroOp uop = {};
-  size_t req_id = 0;
+  wire<32> req_id = 0;
   uint8_t replay = 0;
   uint32_t req_addr = 0;
 
@@ -52,9 +52,9 @@ class MemRespRouteBlock {
 public:
   using Owner = MemReadArbBlock::Owner;
   using IssueTag = MemReadArbBlock::IssuedTag;
-  static constexpr size_t kPtwReqIdBase = MemReadArbBlock::kPtwReqIdBase;
-  static constexpr size_t kPtwTrackCount = 3;
-  static constexpr size_t kLsuReqTrackCount = static_cast<size_t>(LDQ_SIZE);
+  static constexpr uint32_t kPtwReqIdBase = MemReadArbBlock::kPtwReqIdBase;
+  static constexpr uint32_t kPtwTrackCount = 3;
+  static constexpr uint32_t kLsuReqTrackCount = static_cast<uint32_t>(LDQ_SIZE);
 
   struct PtwRouteEvent {
     bool valid = false;
@@ -62,7 +62,7 @@ public:
     uint32_t data = 0;
     uint8_t replay = 0;
     uint32_t req_addr = 0;
-    size_t req_id = 0;
+    wire<32> req_id = 0;
   };
 
   struct ReplayWakeup {
@@ -91,7 +91,7 @@ public:
     struct PtwReqTrackState {
       bool valid = false;
       uint8_t owner = 0;
-      size_t req_id = 0;
+      wire<32> req_id = 0;
       uint32_t req_addr = 0;
     };
 
@@ -168,7 +168,7 @@ public:
     d.walk.blocked = cur_.walk.blocked;
     d.walk.reason = cur_.walk.reason;
     d.walk.req_addr = cur_.walk.req_addr;
-    for (size_t i = 0; i < kPtwTrackCount; i++) {
+    for (uint32_t i = 0; i < kPtwTrackCount; i++) {
       d.ptw_tracks[i].valid = cur_.ptw_tracks[i].valid;
       d.ptw_tracks[i].owner = static_cast<uint8_t>(cur_.ptw_tracks[i].owner);
       d.ptw_tracks[i].req_id = cur_.ptw_tracks[i].req_id;
@@ -242,14 +242,14 @@ private:
 
   struct PtwReqTrack {
     bool valid = false;
-    size_t req_id = 0;
+    wire<32> req_id = 0;
     Owner owner = Owner::NONE;
     uint32_t req_addr = 0;
   };
 
   struct LsuReqTrack {
     bool valid = false;
-    size_t req_id = 0;
+    wire<32> req_id = 0;
     uint32_t req_addr = 0;
   };
 
@@ -359,10 +359,10 @@ private:
     }
   }
 
-  static bool lookup_ptw_track(const State &state, size_t req_id,
+  static bool lookup_ptw_track(const State &state, wire<32> req_id,
                                IssueTag &tag) {
     int slot = -1;
-    for (size_t i = 0; i < kPtwTrackCount; i++) {
+    for (uint32_t i = 0; i < kPtwTrackCount; i++) {
       if (!state.ptw_tracks[i].valid) {
         continue;
       }
@@ -384,7 +384,7 @@ private:
   }
 
   static bool lookup_issue_tag_by_req_id(
-      const IssueTag (&issue_tags)[LSU_LDU_COUNT], size_t req_id,
+      const IssueTag (&issue_tags)[LSU_LDU_COUNT], wire<32> req_id,
       IssueTag &tag) {
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
       if (!issue_tags[i].valid) {
@@ -399,8 +399,8 @@ private:
     return false;
   }
 
-  static void clear_ptw_track(State &state, size_t req_id) {
-    for (size_t i = 0; i < kPtwTrackCount; i++) {
+  static void clear_ptw_track(State &state, wire<32> req_id) {
+    for (uint32_t i = 0; i < kPtwTrackCount; i++) {
       if (!state.ptw_tracks[i].valid) {
         continue;
       }
@@ -411,7 +411,7 @@ private:
     }
   }
 
-  static bool lookup_lsu_track(const State &state, size_t req_id,
+  static bool lookup_lsu_track(const State &state, wire<32> req_id,
                                IssueTag &tag) {
     if (req_id >= kLsuReqTrackCount) {
       return false;
@@ -429,7 +429,7 @@ private:
     return true;
   }
 
-  static void clear_lsu_track(State &state, size_t req_id) {
+  static void clear_lsu_track(State &state, wire<32> req_id) {
     if (req_id >= kLsuReqTrackCount) {
       return;
     }
@@ -451,7 +451,7 @@ private:
       if (!raw.valid) {
         continue;
       }
-      const bool req_is_lsu = (raw.req_id < (size_t)LDQ_SIZE);
+      const bool req_is_lsu = (raw.req_id < (uint32_t)LDQ_SIZE);
 
       IssueTag routed_tag{};
       if (!req_is_lsu) {

@@ -184,7 +184,7 @@ public:
       if (preg >= PRF_NUM) {
         continue;
       }
-      size_t row_base = matrix_row_base(preg);
+      uint32_t row_base = matrix_row_base(preg);
 
       for (int w = 0; w < wake_words_per_row; w++) {
         uint64_t mask1 = wake_matrix_src1[row_base + w];
@@ -350,8 +350,8 @@ public:
   const std::vector<IqStoredEntry> &get_entries_1() const { return entry_1; }
 
 private:
-  size_t matrix_row_base(uint32_t preg) const {
-    return static_cast<size_t>(preg) * static_cast<size_t>(wake_words_per_row);
+  uint32_t matrix_row_base(uint32_t preg) const {
+    return static_cast<uint32_t>(preg) * static_cast<uint32_t>(wake_words_per_row);
   }
 
   uint64_t slot_bit(int idx) const {

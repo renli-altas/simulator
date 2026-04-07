@@ -7,38 +7,39 @@
 class SimContext;
 
 extern WriteBufferEntry write_buffer_nxt[DCACHE_WB_ENTRIES];
+bool write_buffer_entry_live(uint32_t idx);
+bool write_buffer_lookup_word(uint32_t addr, uint32_t &data);
 
 struct WBState {
-    uint32_t count; // number of valid entries in the buffer
-    uint32_t head;  // index of the oldest entry (next to evict)
-    uint32_t tail;  // index of the next free slot for new entry
-    uint32_t send;  // flag to indicate if a request is currently being sent
-    uint32_t issue_pending; // saw req_ready hint, waiting real acceptance
+    wire<DCACHE_WB_BITS> count; // number of valid entries in the buffer
+    wire<DCACHE_WB_BITS> head;  // index of the oldest entry (next to evict)
+    wire<1> send;  // flag to indicate if a request is currently being sent
+    wire<1> issue_pending; // saw req_ready hint, waiting real acceptance
 
-    uint32_t bypassdata[LSU_LDU_COUNT];
-    bool bypassvalid[LSU_LDU_COUNT];
+    wire<32> bypassdata[LSU_LDU_COUNT];
+    wire<1> bypassvalid[LSU_LDU_COUNT];
 
-    bool mergevalid[LSU_STA_COUNT];
-    bool mergebusy[LSU_STA_COUNT];
+    wire<1> mergevalid[LSU_STA_COUNT];
+    wire<1> mergebusy[LSU_STA_COUNT];
 };
 
 // AXI write-channel interface signals (IC's write_ports[MASTER_DCACHE_W]).
 // axi_in  — inputs from IC to WriteBuffer (driven by RealDcache bridge).
 // axi_out — outputs from WriteBuffer to IC (consumed by RealDcache bridge).
 struct WbAxiIn {
-    bool req_ready  = false;  // IC is ready to accept the current request
-    bool req_accepted = false; // one-cycle pulse when IC actually accepts it
-    bool resp_valid = false;  // B response available
+    wire<1> req_ready  = false;  // IC is ready to accept the current request
+    wire<1> req_accepted = false; // one-cycle pulse when IC actually accepts it
+    wire<1> resp_valid = false;  // B response available
 };
 
 struct WbAxiOut {
-    bool     req_valid      = false;  // AW+W request to IC
-    uint32_t req_addr       = 0;
-    uint8_t  req_total_size = 0;
-    uint8_t  req_id         = 0;
-    uint64_t req_wstrb      = 0;
-    uint32_t req_wdata[DCACHE_LINE_WORDS] = {};
-    bool     resp_ready     = false;  // ready to accept B response
+    wire<1>     req_valid      = false;  // AW+W request to IC
+    wire<32> req_addr       = 0;
+    wire<8>  req_total_size = 0;
+    wire<8>  req_id         = 0;
+    wire<64> req_wstrb      = 0;
+    wire<32> req_wdata[DCACHE_LINE_WORDS] = {};
+    wire<1>     resp_ready     = false;  // ready to accept B response
 };
 
 

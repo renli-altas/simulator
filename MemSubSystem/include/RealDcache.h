@@ -8,26 +8,28 @@
 #include "types.h"
 #include "DcacheConfig.h"   
 #include "IO.h"
+#include <cstddef>
 #include <cstdint>
 
+#define DCACHE_WAY_BITS_PLUS (DCACHE_WAY_BITS + 1) // Extra bit for encoding "no way matched" in LRU updates
 // ─────────────────────────────────────────────────────────────────────────────
 // Pending store write (hit path) — records a store hit so that seq() can apply
 // the byte-merge to the data SRAM.
 // ─────────────────────────────────────────────────────────────────────────────
 struct PendingWrite {
-    bool     valid    = false;
-    uint32_t set_idx  = 0;
-    uint32_t way_idx  = 0;
-    uint32_t word_off = 0;
-    uint32_t data     = 0;
-    uint8_t  strb     = 0;   // byte-enable (4 bits used for a 32-bit word)
+    wire<1>     valid    = false;
+    wire<DCACHE_SET_BITS> set_idx  = 0;
+    wire<DCACHE_WAY_BITS> way_idx  = 0;
+    wire<DCACHE_OFFSET_BITS> word_off = 0;
+    wire<32> data     = 0;
+    wire<4>  strb     = 0;   // byte-enable (4 bits used for a 32-bit word)
 };
 
 struct FillWrite{
-    bool     valid    = false;
-    uint32_t set_idx  = 0;
-    uint32_t way_idx  = 0;
-    uint32_t data[DCACHE_LINE_WORDS] = {};
+    wire<1>     valid    = false;
+    wire<DCACHE_SET_BITS> set_idx  = 0;
+    wire<DCACHE_WAY_BITS> way_idx  = 0;
+    wire<32> data[DCACHE_LINE_WORDS] = {};
 };
 // ─────────────────────────────────────────────────────────────────────────────
 // S1S2Reg — pipeline register between Stage 1 (SRAM read) and Stage 2 (hit check)
@@ -35,38 +37,38 @@ struct FillWrite{
 struct S1S2Reg {
     // Load slots
     struct LoadSlot {
-        bool     valid    = false;
-        bool     replayed = false; // bank conflict — do not process in S2
-        uint32_t addr     = 0;
+        wire<1>     valid    = false;
+        wire<1>     replayed = false; // bank conflict — do not process in S2
+        wire<32> addr     = 0;
         MicroOp  uop;
-        size_t   req_id   = 0;
+        wire<32>   req_id   = 0;
 
         // SRAM snapshot captured in S1 (index already decoded)
-        uint32_t set_idx  = 0;
-        uint32_t tag_snap [DCACHE_WAYS] = {};
-        bool     valid_snap[DCACHE_WAYS] = {};
-        bool     dirty_snap[DCACHE_WAYS] = {};
-        uint32_t data_snap [DCACHE_WAYS][DCACHE_LINE_WORDS] = {};
+        wire<DCACHE_SET_BITS> set_idx  = 0;
+        wire<32> tag_snap [DCACHE_WAYS] = {};
+        wire<1>  valid_snap[DCACHE_WAYS] = {};
+        wire<1>  dirty_snap[DCACHE_WAYS] = {};
+        wire<32> data_snap [DCACHE_WAYS][DCACHE_LINE_WORDS] = {};
 
-        bool mshr_hit = false; // for load hits, whether the MSHR entry is the primary one (for write-allocate ordering)
+        wire<1> mshr_hit = false; // for load hits, whether the MSHR entry is the primary one (for write-allocate ordering)
     } loads[LSU_LDU_COUNT];
 
     // Store slots
     struct StoreSlot {
-        bool     valid    = false;
-        bool     replayed = false;
-        uint32_t addr     = 0;
-        uint32_t data     = 0; // word to write
-        uint8_t  strb     = 0; // byte-enable
+        wire<1>     valid    = false;
+        wire<1>     replayed = false;
+        wire<32> addr     = 0;
+        wire<32> data     = 0; // word to write
+        wire<4>  strb     = 0; // byte-enable
         StqEntry uop;
-        size_t   req_id   = 0;
+        wire<32>   req_id   = 0;
 
-        uint32_t set_idx  = 0;
-        uint32_t tag_snap [DCACHE_WAYS] = {};
-        bool     valid_snap[DCACHE_WAYS] = {};
-        bool     dirty_snap[DCACHE_WAYS] = {};
-        uint32_t data_snap [DCACHE_WAYS][DCACHE_LINE_WORDS] = {};
-        bool mshr_hit = false; // for store misses, whether there's a primary MSHR entry matching this line (for write-allocate decision)
+        wire<DCACHE_SET_BITS> set_idx  = 0;
+        wire<32> tag_snap [DCACHE_WAYS] = {};
+        wire<1>  valid_snap[DCACHE_WAYS] = {};
+        wire<1>  dirty_snap[DCACHE_WAYS] = {};
+        wire<32> data_snap [DCACHE_WAYS][DCACHE_LINE_WORDS] = {};
+        wire<1> mshr_hit = false; // for store misses, whether there's a primary MSHR entry matching this line (for write-allocate decision)
     } stores[LSU_STA_COUNT];
 };
 
@@ -82,6 +84,8 @@ struct S1S2Reg {
 //
 // All SRAM state is updated in seq() only; comb() is pure-read + output logic.
 // ─────────────────────────────────────────────────────────────────────────────
+
+
 class RealDcache : public AbstractDcache {
 public:
     enum class CoherentQueryResult : uint8_t {
@@ -90,7 +94,6 @@ public:
         Hit = 2,
     };
 
-    void bind_context(SimContext *c) { ctx = c; }
     void init() override;
     void comb() override;
     void seq()  override;
@@ -98,39 +101,20 @@ public:
                                             uint32_t &data) const;
 
     // IO ports — set by the owning module (e.g. MemSubsystem) before init().
-    LsuDcacheIO  *lsu2dcache  = nullptr;  // LSU → DCache requests
-    DcacheLsuIO  *dcache2lsu  = nullptr;  // DCache → LSU responses
-    MSHRDcacheIO *mshr2dcache = nullptr;  // MSHR fill/free → DCache
-    DcacheMSHRIO *dcache2mshr = nullptr;  // DCache miss alloc → MSHR
-    DcacheWBIO   *dcache2wb   = nullptr;  // DCache bypass/merge req → WB
-    WBDcacheIO   *wb2dcache   = nullptr;  // WB bypass/merge resp → DCache
+    DcacheINIO in;
+    DcacheOUTIO out;
 
     // Stage 1: decode incoming requests, detect bank conflicts, snapshot SRAMs.
     void stage1_comb();
 
-    // Drive WB bypass/merge queries for the S2 pipeline register currently
-    // being evaluated. This must stay aligned with s1s2_cur rather than the
-    // new requests seen by stage1 in the same cycle.
-    void prepare_wb_queries_for_stage2();
+    // Drive WB bypass/merge queries for the requests just captured by stage1
+    // into s1s2_nxt. WB responses may return one cycle later, so queries must
+    // be issued one cycle ahead of the S2 evaluation that will consume them.
+    void prepare_wb_queries_for_next_stage2();
 
     // Stage 2: evaluate S1S2 pipeline register, generate responses.
     void stage2_comb();
 private:
-    SimContext *ctx = nullptr;
-
-    struct ReqTrack {
-        bool valid = false;
-        bool is_store = false;
-        size_t req_id = 0;
-        uint32_t rob_idx = 0;
-        uint32_t rob_flag = 0;
-        uint64_t first_cycle = 0;
-    };
-    static constexpr int kReqTrackSize = 256;
-    ReqTrack req_track_[kReqTrackSize]{};
-    int req_track_rr_ = 0;
-
-
     // // Sub-modules
     // MSHR        mshr_;
     // WriteBuffer wb_;
@@ -148,15 +132,11 @@ private:
 
     // ── LRU update log (recorded by comb(), applied by seq()) ─────────────────
     struct LruUpdate {
-        bool     valid   = false;
-        uint32_t set_idx = 0;
-        int      way     = -1;
+        wire<1>     valid   = false;
+        wire<DCACHE_SET_BITS> set_idx = 0;
+        wire<DCACHE_WAY_BITS_PLUS>  way     = 0;
     } lru_updates_[LSU_LDU_COUNT + LSU_STA_COUNT];
 
 
     bool special_load_addr(uint32_t addr,uint32_t& mem_val,MicroOp &uop);
-    bool begin_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
-                         uint32_t rob_flag);
-    void end_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
-                       uint32_t rob_flag);
 };

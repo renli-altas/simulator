@@ -29,8 +29,8 @@ struct DynamicTableConfig {
 struct DynamicTablePayload {
   std::vector<uint8_t> bytes{};
 
-  void reset(size_t size) { bytes.assign(size, 0); }
-  size_t size() const { return bytes.size(); }
+  void reset(uint32_t size) { bytes.assign(size, 0); }
+  uint32_t size() const { return bytes.size(); }
   bool empty() const { return bytes.empty(); }
   uint8_t *data() { return bytes.data(); }
   const uint8_t *data() const { return bytes.data(); }
@@ -76,12 +76,12 @@ public:
   const DynamicTableConfig &config() const { return config_; }
   uint32_t chunk_bytes() const { return (config_.chunk_bits + 7u) / 8u; }
   uint32_t row_bytes() const { return config_.chunks * chunk_bytes(); }
-  size_t total_storage_bytes() const {
-    return static_cast<size_t>(config_.rows) * static_cast<size_t>(row_bytes());
+  uint32_t total_storage_bytes() const {
+    return static_cast<uint32_t>(config_.rows) * static_cast<uint32_t>(row_bytes());
   }
 
   bool valid_address(uint32_t address) const { return address < config_.rows; }
-  size_t payload_bytes() const { return static_cast<size_t>(row_bytes()); }
+  uint32_t payload_bytes() const { return static_cast<uint32_t>(row_bytes()); }
 
   void copy_row_to_payload(uint32_t address, DynamicTablePayload &payload) const {
     payload.reset(payload_bytes());
@@ -111,17 +111,17 @@ public:
       if (!write_req.chunk_enable[chunk]) {
         continue;
       }
-      std::memcpy(dst + static_cast<size_t>(chunk) * cbytes,
-                  src + static_cast<size_t>(chunk) * cbytes, cbytes);
+      std::memcpy(dst + static_cast<uint32_t>(chunk) * cbytes,
+                  src + static_cast<uint32_t>(chunk) * cbytes, cbytes);
     }
   }
 
 private:
   uint8_t *row_ptr(uint32_t address) {
-    return storage_.data() + static_cast<size_t>(address) * row_bytes();
+    return storage_.data() + static_cast<uint32_t>(address) * row_bytes();
   }
   const uint8_t *row_ptr(uint32_t address) const {
-    return storage_.data() + static_cast<size_t>(address) * row_bytes();
+    return storage_.data() + static_cast<uint32_t>(address) * row_bytes();
   }
 
   DynamicTableConfig config_{};
@@ -166,7 +166,7 @@ public:
     return true;
   }
 
-  size_t payload_bytes() const { return storage_.payload_bytes(); }
+  uint32_t payload_bytes() const { return storage_.payload_bytes(); }
   uint32_t row_bytes() const { return storage_.row_bytes(); }
   uint32_t chunk_bytes() const { return storage_.chunk_bytes(); }
   const DynamicTableConfig &config() const { return storage_.config(); }
@@ -235,7 +235,7 @@ public:
     return true;
   }
 
-  size_t payload_bytes() const { return storage_.payload_bytes(); }
+  uint32_t payload_bytes() const { return storage_.payload_bytes(); }
   uint32_t row_bytes() const { return storage_.row_bytes(); }
   uint32_t chunk_bytes() const { return storage_.chunk_bytes(); }
   const DynamicTableConfig &config() const { return storage_.config(); }
