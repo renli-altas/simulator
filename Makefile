@@ -86,7 +86,7 @@ DEPS := $(OBJS:.o=.d)
 # Rules
 # ==========================================
 
-.PHONY: all clean run gdb coverage help gdb_linux linux profile-config default small medium large
+.PHONY: all clean run gdb coverage help gdb_linux linux lsu-regression profile-config default small medium large
 
 all: $(SIM_EXE)
 
@@ -126,6 +126,9 @@ run: $(SIM_EXE)
 linux: $(SIM_EXE)
 	./$(SIM_EXE) ./baremetal/linux.bin  
 
+lsu-regression: $(SIM_EXE)
+	./script/lsu_stq_regression.sh
+
 # Debug with GDB
 gdb: CXXFLAGS += -g -O0
 gdb: $(SIM_EXE)
@@ -154,6 +157,7 @@ help:
 	@echo "  make medium   - Build with medium profile"
 	@echo "  make small    - Build with small profile"
 	@echo "  make run      - Build and run the simulator"
+	@echo "  make lsu-regression - Run LSU/STQ directed regression suite"
 	@echo "  make DEBUG=1  - Build with debug symbols"
 	@echo "  make clean    - Clean build files"
 	@echo "  make gdb_linux - Debug linux"

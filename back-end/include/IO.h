@@ -280,7 +280,10 @@ struct RobCommitIO {
 
     wire<1> dest_en;
     wire<7> func7;
+    wire<ROB_IDX_WIDTH> rob_idx;
+    wire<1> rob_flag;
     wire<STQ_IDX_WIDTH> stq_idx;
+    wire<1> stq_flag;
 
     wire<1> page_fault_inst;
     wire<1> page_fault_load;
@@ -308,7 +311,10 @@ struct RobCommitIO {
       dst.uop.br_taken = br_taken;
       dst.uop.dest_en = dest_en;
       dst.uop.func7 = func7;
+      dst.uop.rob_idx = rob_idx;
+      dst.uop.rob_flag = rob_flag;
       dst.uop.stq_idx = stq_idx;
+      dst.uop.stq_flag = stq_flag;
       dst.uop.page_fault_inst = page_fault_inst;
       dst.uop.page_fault_load = page_fault_load;
       dst.uop.page_fault_store = page_fault_store;
@@ -1108,14 +1114,14 @@ struct MemRespIO {
   }
 };
 
-struct PeripheralInIO {
+struct PeripheralReqIO {
   wire<1> is_mmio;
   wire<1> wen;
   wire<32> mmio_addr;
   wire<32> mmio_wdata;
   MicroOp uop;
 
-  PeripheralInIO() {
+  PeripheralReqIO() {
     is_mmio = {};
     wen = {};
     mmio_addr = {};
@@ -1123,13 +1129,13 @@ struct PeripheralInIO {
     uop = {};
   }
 };
-struct PeripheralOutIO {
+struct PeripheralRespIO {
   wire<1> is_mmio;
   wire<1> ready;
   wire<32> mmio_rdata;
   MicroOp uop;
 
-  PeripheralOutIO() {
+  PeripheralRespIO() {
     is_mmio = {};
     ready = {};
     mmio_rdata = {};
@@ -1137,31 +1143,47 @@ struct PeripheralOutIO {
   }
 };
 
-struct PeripheralIO {
-  PeripheralInIO in;
-  PeripheralOutIO out;
+// STQ 条目结构
+struct StqCommitEntry {
+  wire<1> addr_valid = false;
+  wire<1> data_valid = false;
+  wire<1> is_mmio = false;
+  wire<1> suppress_write = false; // Failed SC keeps the slot but skips memory write
+  wire<32> p_addr = 0;
+  wire<32> data = 0;
+  wire<2> func3 = 0;
+  wire<64> br_mask = {};
+  wire<ROB_IDX_WIDTH> rob_idx = 0;
+  wire<1> rob_flag = 0;
+  wire<STQ_IDX_WIDTH> stq_idx = 0;
+  wire<1> stq_flag = 0;
 };
 
-// STQ 条目结构（定义在此以供 StoreReq 使用）
-struct StqEntry {
-  bool valid = false;
-  bool addr_valid = false;
-  bool data_valid = false;
-  bool committed = false;
-  bool done = false;
-  bool is_mmio = false;
-  bool send =
-      false; // Whether the store has been sent to DCache (for replay logic)
-  uint8_t replay = 0;
-  uint32_t addr = 0;
-  uint32_t p_addr = 0;
-  uint32_t suppress_write =
-      0; // For MMIO: bits to suppress in the write (e.g., for LR/SC)
-  uint32_t data = 0;
-  uint32_t func3 = 0;
-  mask_t br_mask = {};
-  uint32_t rob_idx = 0;
-  uint32_t rob_flag = 0;
+struct StqDoneEntry {
+  wire<1> done = false;
+  wire<1> inflight = false;
+  wire<1> is_mmio = false;
+  wire<1> suppress_write = false; // Failed SC keeps the slot but skips memory write
+  uint8_t replay_priority = 0;
+  wire<32> p_addr = 0;
+  wire<32> data = 0;
+  wire<2> func3 = 0;
+  wire<ROB_IDX_WIDTH> rob_idx = 0;
+  wire<1> rob_flag = 0;
+  wire<STQ_IDX_WIDTH> stq_idx = 0;
+  wire<1> stq_flag = 0;
+};
+
+struct LdqEntry {
+  wire<1> valid;
+  wire<1> killed;
+  wire<1> sent;
+  wire<1> waiting_resp;
+  uint64_t wait_resp_since;
+  wire<1> tlb_retry;
+  wire<1> is_mmio_wait; // 地址已翻译为 MMIO，等待到达 ROB 队头后再发送
+  uint8_t replay_priority;
+  MicroOp uop;
 };
 
 struct LoadReq {
@@ -1178,10 +1200,9 @@ struct StoreReq {
   wire<32> addr;
   wire<32> data;
   wire<8> strb;
-  StqEntry uop;
   size_t req_id;
 
-  StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
+  StoreReq() : valid(false), addr(0), data(0), strb(0xF), req_id(0) {}
 };
 
 // Load响应结构
@@ -1363,6 +1384,7 @@ struct DisLsuIO {
   wire<3> func3[MAX_STQ_DISPATCH_WIDTH];
   wire<ROB_IDX_WIDTH> rob_idx[MAX_STQ_DISPATCH_WIDTH];
   wire<1> rob_flag[MAX_STQ_DISPATCH_WIDTH];
+  wire<STQ_IDX_WIDTH> stq_idx[MAX_STQ_DISPATCH_WIDTH];
   wire<1> stq_flag[MAX_STQ_DISPATCH_WIDTH];
 
   wire<1> ldq_alloc_req[MAX_LDQ_DISPATCH_WIDTH];
@@ -1381,6 +1403,8 @@ struct DisLsuIO {
     for (auto &v : rob_idx)
       v = 0;
     for (auto &v : rob_flag)
+      v = 0;
+    for (auto &v : stq_idx)
       v = 0;
     for (auto &v : stq_flag)
       v = 0;

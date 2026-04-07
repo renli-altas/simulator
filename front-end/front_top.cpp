@@ -1,4 +1,5 @@
 #include "BPU/BPU.h"
+#include "FrontTop.h"
 #include "front_IO.h"
 #include "front_module.h"
 #include "host_profile.h"

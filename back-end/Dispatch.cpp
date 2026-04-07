@@ -489,6 +489,7 @@ void Dispatch::comb_fire() {
           out.dis2rob->uop[inst_idx].br_mask & ~clear_mask;
       out.dis2lsu->rob_idx[k] = out.dis2rob->uop[inst_idx].rob_idx;
       out.dis2lsu->rob_flag[k] = out.dis2rob->uop[inst_idx].rob_flag;
+      out.dis2lsu->stq_idx[k] = out.dis2rob->uop[inst_idx].stq_idx;
       out.dis2lsu->stq_flag[k] = out.dis2rob->uop[inst_idx].stq_flag;
       out.dis2lsu->func3[k] = out.dis2rob->uop[inst_idx].func3;
     }
@@ -748,6 +749,40 @@ void Dispatch::seq() {
   std::memcpy(busy_table, busy_table_1, sizeof(busy_table));
 }
 
+void Dispatch::dump_debug_state() const {
+  std::printf(
+      "[DEADLOCK][DIS] dis2ren_ready=%d rob{ready=%d empty=%d stall=%d} "
+      "lsu{stq_free=%u ldq_free=%u} iq_ready{int=%u ld=%u sta=%u std=%u "
+      "br=%u}\n",
+      (int)(out.dis2ren != nullptr ? out.dis2ren->ready : 0),
+      (int)(in.rob2dis != nullptr ? in.rob2dis->ready : 0),
+      (int)(in.rob2dis != nullptr ? in.rob2dis->empty : 0),
+      (int)(in.rob2dis != nullptr ? in.rob2dis->stall : 0),
+      (unsigned)(in.lsu2dis != nullptr ? in.lsu2dis->stq_free : 0),
+      (unsigned)(in.lsu2dis != nullptr ? in.lsu2dis->ldq_free : 0),
+      (unsigned)(in.iss2dis != nullptr ? in.iss2dis->ready_num[IQ_INT] : 0),
+      (unsigned)(in.iss2dis != nullptr ? in.iss2dis->ready_num[IQ_LD] : 0),
+      (unsigned)(in.iss2dis != nullptr ? in.iss2dis->ready_num[IQ_STA] : 0),
+      (unsigned)(in.iss2dis != nullptr ? in.iss2dis->ready_num[IQ_STD] : 0),
+      (unsigned)(in.iss2dis != nullptr ? in.iss2dis->ready_num[IQ_BR] : 0));
+
+  for (int i = 0; i < DECODE_WIDTH; ++i) {
+    if (!inst_valid[i]) {
+      continue;
+    }
+    std::printf(
+        "[DEADLOCK][DIS][%d] pc=0x%08x inst=0x%08x type=%u dis2rob_valid=%d "
+        "dis_fire=%d dispatch_ok=%d stq=%u/%u ldq=%u rob=%u/%u\n",
+        i, (uint32_t)inst_r[i].dbg.pc, (uint32_t)inst_r[i].dbg.instruction,
+        (unsigned)inst_r[i].type,
+        (int)(out.dis2rob != nullptr ? out.dis2rob->valid[i] : 0),
+        (int)(out.dis2rob != nullptr ? out.dis2rob->dis_fire[i] : 0),
+        (int)dispatch_success_flags[i], (unsigned)inst_alloc[i].stq_idx,
+        (unsigned)inst_alloc[i].stq_flag, (unsigned)inst_alloc[i].ldq_idx,
+        (unsigned)inst_alloc[i].rob_idx, (unsigned)inst_alloc[i].rob_flag);
+    }
+}
+
 DisIssIO::DisIssUop Dispatch::make_dis_iss_uop(const DispatchInst &inst) const {
   DisIssIO::DisIssUop uop;
   uop.dest_preg = inst.dest_preg;
@@ -969,6 +1004,19 @@ int Dispatch::decompose_inst(const DispatchInst &inst, UopPacket *out_uops) {
     }
     count = 1;
     break;
+  }
+  if (inst.rob_idx == 133 && inst.rob_flag == 0) {
+    TEMP_BUG_TRACE_PRINTF("[DIS TRACE] rob=%u/%u type=%d cnt=%d ops=",
+                          (unsigned)inst.rob_idx, (unsigned)inst.rob_flag,
+                          (int)type, count);
+    for (int i = 0; i < count; ++i) {
+      TEMP_BUG_TRACE_PRINTF("%d%s", (int)out_uops[i].uop.op,
+                            (i + 1 == count) ? "" : ",");
+    }
+    TEMP_BUG_TRACE_PRINTF(" stq=%u/%u ldq=%u pc=0x%08x inst=0x%08x\n",
+                          (unsigned)inst.stq_idx, (unsigned)inst.stq_flag,
+                          (unsigned)inst.ldq_idx, (uint32_t)inst.dbg.pc,
+                          (uint32_t)inst.dbg.instruction);
   }
   return count;
 }

@@ -34,6 +34,7 @@ constexpr uint64_t div_round_u64(uint64_t numerator, uint64_t denominator) {
 #define CONFIG_PERF_COUNTER
 #define CONFIG_BPU
 #define CONFIG_TLB_MMU
+#define CONFIG_BSD
 
 // Replay throttling heuristics.
 constexpr int REPLAY_STORE_COUNT_UPPER_BOUND = 32;

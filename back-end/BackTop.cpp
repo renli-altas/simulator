@@ -26,7 +26,6 @@ void BackTop::init() {
   csr = new Csr();
   rob = new Rob(ctx);
   lsu = new RealLsu(ctx);
-  lsu->set_csr(csr);
 
   pre_idu_queue->out.dec2front = &dec2front;
   pre_idu_queue->out.issue = &pre_idu_issue;
@@ -134,11 +133,13 @@ void BackTop::init() {
   lsu->in.dec_bcast = &dec_bcast;
   lsu->in.rob_commit = &rob_commit;
   lsu->in.dcache2lsu  = &dcache2lsu_io;
+  lsu->in.peripheral_resp = &peripheral_resp_io;
 
   lsu->out.lsu2exe = &lsu2exe;
   lsu->out.lsu2dis = &lsu2dis;
   lsu->out.lsu2rob = &lsu2rob;
   lsu->out.lsu2dcache = &lsu2dcache_io;
+  lsu->out.peripheral_req = &peripheral_req_io;
 
   pre_idu_queue->init();
   idu->init();
@@ -346,6 +347,7 @@ void BackTop::comb() {
   exu->comb_pipeline();
   dis->comb_pipeline();
   rename->comb_pipeline();
+  lsu->comb_pipeline();
 }
 
 void BackTop::seq() {
@@ -446,7 +448,6 @@ void BackTop::restore_from_ref() {
   dut_cpu.store_strb = state.store_strb;
   dut_cpu.reserve_valid = state.reserve_valid;
   dut_cpu.reserve_addr = state.reserve_addr;
-  lsu->restore_reservation(state.reserve_valid, state.reserve_addr);
 
   // Ensure the pipeline starts with a refetch from the restored PC
   out.flush = true;
@@ -537,7 +538,6 @@ void BackTop::restore_checkpoint(const std::string &filename) {
   dut_cpu.store_strb = state.store_strb;
   dut_cpu.reserve_valid = state.reserve_valid;
   dut_cpu.reserve_addr = state.reserve_addr;
-  lsu->restore_reservation(state.reserve_valid, state.reserve_addr);
 
   // 2. 恢复内存
   if (p_memory == nullptr) {

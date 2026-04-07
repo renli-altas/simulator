@@ -40,6 +40,20 @@ extern long long sim_time;
     }                                                                          \
   } while (0)
 
+// Temporary trace switch for debug/trace points added during the current
+// bring-up conversation. Keep this disabled by default; flip to 1 only when
+// reusing those breadcrumbs, and later it can be deleted in one sweep.
+#ifndef TEMP_BUG_TRACE_ENABLE
+#define TEMP_BUG_TRACE_ENABLE 0
+#endif
+
+#define TEMP_BUG_TRACE_PRINTF(...)                                             \
+  do {                                                                         \
+    if (TEMP_BUG_TRACE_ENABLE) {                                               \
+      std::printf(__VA_ARGS__);                                                \
+    }                                                                          \
+  } while (0)
+
 // Custom Assert Macro to avoid WSL2 issues
 #define Assert(cond)                                                           \
   do {                                                                         \

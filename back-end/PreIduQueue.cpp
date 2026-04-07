@@ -81,6 +81,10 @@ void PreIduQueue::init() {
   front_accept = false;
   push_count = 0;
   pop_count = 0;
+  dbg_last_incoming_valid_num = 0;
+  dbg_last_ftq_ok = false;
+  dbg_last_ib_ok = false;
+  dbg_last_ready = false;
   for (int i = 0; i < FTQ_SIZE; i++) {
     ftq_entries[i] = FTQEntry();
   }
@@ -149,6 +153,10 @@ void PreIduQueue::comb_accept_front() {
   bool ftq_ok = (ftq_count < FTQ_SIZE);
   bool ib_ok = ibuf.can_accept(incoming_valid_num);
   out.dec2front->ready = ftq_ok && ib_ok;
+  dbg_last_incoming_valid_num = incoming_valid_num;
+  dbg_last_ftq_ok = ftq_ok;
+  dbg_last_ib_ok = ib_ok;
+  dbg_last_ready = out.dec2front->ready;
   if (ctx != nullptr && incoming_valid_num > 0 && !out.dec2front->ready) {
     if (!ib_ok) {
       ctx->perf.ib_blocked_cycles++;
@@ -223,6 +231,22 @@ void PreIduQueue::comb_accept_front() {
     ctx->perf.ib_write_cycle_total++;
     ctx->perf.ib_write_inst_total += static_cast<uint64_t>(push_count);
   }
+}
+
+void PreIduQueue::dump_debug_state() const {
+  std::printf(
+      "[DEADLOCK][PREIDU] ftq_count=%d/%d head=%d tail=%d ibuf_count=%d/%d "
+      "ibuf_free=%d push=%d pop=%d front_accept=%d\n",
+      ftq_count, FTQ_SIZE, ftq_head, ftq_tail, ibuf.count(),
+      IDU_INST_BUFFER_SIZE, ibuf.free_slots(), push_count, pop_count,
+      (int)front_accept);
+  std::printf(
+      "[DEADLOCK][PREIDU][READY] incoming_valid=%d ftq_ok=%d ib_ok=%d ready=%d "
+      "flush=%d mispred=%d\n",
+      dbg_last_incoming_valid_num, (int)dbg_last_ftq_ok, (int)dbg_last_ib_ok,
+      (int)dbg_last_ready,
+      (int)(in.rob_bcast != nullptr && in.rob_bcast->flush),
+      (int)br_latch.mispred);
 }
 
 void PreIduQueue::comb_consume_issue() {

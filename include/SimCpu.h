@@ -31,6 +31,7 @@ public:
   // Oracle 模式下的一拍保留寄存，避免“后端当拍阻塞”导致前端指令丢失。
   bool oracle_pending_valid = false;
   front_top_out oracle_pending_out = {};
+  uint64_t empty_rob_streak = 0;
 
   void init();
   void sync_mmio_devices_from_backing();
@@ -39,6 +40,7 @@ public:
   void cycle();
   void front_cycle();
   void back2front_comb();
+  void dump_empty_rob_debug_state() const;
   bool ready_to_exit() const;
   uint32_t get_reg(uint8_t arch_idx) { return back.get_reg(arch_idx); }
   // 由 SimContext 在提交路径调用的本地辅助逻辑。

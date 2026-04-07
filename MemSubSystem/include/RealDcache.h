@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AbstractDcache.h"
-#include "AbstractLsu.h"
 #include "MSHR.h"
 #include "WriteBuffer.h"
 #include "config.h"
@@ -58,7 +57,6 @@ struct S1S2Reg {
         uint32_t addr     = 0;
         uint32_t data     = 0; // word to write
         uint8_t  strb     = 0; // byte-enable
-        StqEntry uop;
         size_t   req_id   = 0;
 
         uint32_t set_idx  = 0;

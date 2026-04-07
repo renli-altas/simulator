@@ -1,6 +1,7 @@
 #include "Exu.h"
 #include "FPU.h"
 #include "config.h"
+#include <cstdio>
 
 static inline bool is_br_killed(const ExuInst &uop, const DecBroadcastIO *db) {
   if (!db->mispred) return false;
@@ -309,6 +310,12 @@ void Exu::comb_exec() {
 
   for (int i = 0; i < ISSUE_WIDTH; i++) {
     if (inst_r[i].valid) {
+      if (inst_r[i].uop.rob_idx == 133 && inst_r[i].uop.rob_flag == 0) {
+        TEMP_BUG_TRACE_PRINTF("[EXU TRACE] inst_r rob=%u/%u port=%d op=%d valid=1\n",
+                              (unsigned)inst_r[i].uop.rob_idx,
+                              (unsigned)inst_r[i].uop.rob_flag, i,
+                              (int)inst_r[i].uop.op);
+      }
       bool is_killed = false;
       if (in.rob_bcast->flush)
         is_killed = true;
@@ -332,8 +339,21 @@ void Exu::comb_exec() {
       }
 
       if (target_fu && target_fu->can_accept()) {
+        if (inst_r[i].uop.rob_idx == 133 && inst_r[i].uop.rob_flag == 0) {
+          TEMP_BUG_TRACE_PRINTF("[EXU TRACE] accept rob=%u/%u port=%d op=%d fu_lsu_idx=%d\n",
+                                (unsigned)inst_r[i].uop.rob_idx,
+                                (unsigned)inst_r[i].uop.rob_flag, i,
+                                (int)inst_r[i].uop.op,
+                                target_fu->get_lsu_port_id());
+        }
         target_fu->accept(inst_r[i].uop);
       } else {
+        if (inst_r[i].uop.rob_idx == 133 && inst_r[i].uop.rob_flag == 0) {
+          TEMP_BUG_TRACE_PRINTF("[EXU TRACE] stall rob=%u/%u port=%d op=%d target_fu=%p\n",
+                                (unsigned)inst_r[i].uop.rob_idx,
+                                (unsigned)inst_r[i].uop.rob_flag, i,
+                                (int)inst_r[i].uop.op, (void *)target_fu);
+        }
         issue_stall[i] = true;
       }
     }
@@ -407,6 +427,12 @@ void Exu::comb_exec() {
     if (!flushed) {
       int lsu_idx = winner_fu->get_lsu_port_id();
       if (u->op == UOP_STA || u->op == UOP_LOAD) {
+        if (u->rob_idx == 133 && u->rob_flag == 0) {
+          TEMP_BUG_TRACE_PRINTF("[EXU TRACE] emit agu rob=%u/%u op=%d lsu_idx=%d result=0x%08x\n",
+                                (unsigned)u->rob_idx,
+                                (unsigned)u->rob_flag, (int)u->op, lsu_idx,
+                                (uint32_t)u->result);
+        }
         out.exe2lsu->agu_req[lsu_idx].valid = true;
         out.exe2lsu->agu_req[lsu_idx].uop = u->to_exe_lsu_req_uop();
       } else if (u->op == UOP_STD) {

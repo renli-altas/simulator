@@ -32,6 +32,7 @@ public:
   void comb_alloc(); // 分配寄存器
   void comb_pipeline();
   void seq();
+  void dump_debug_state() const;
 
   // register
   DecRenIO::DecRenInst inst_r[DECODE_WIDTH];

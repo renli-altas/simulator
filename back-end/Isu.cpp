@@ -1,5 +1,6 @@
 #include "Isu.h"
 #include "config.h"
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -12,17 +13,27 @@ void Isu::add_iq(const IssueQueueConfig &cfg) {
 }
 
 void Isu::apply_wakeup_to_uop(IqStoredUop &uop) const {
-  for (int k = 0; k < MAX_WAKEUP_PORTS; k++) {
-    if (!out.iss_awake->wake[k].valid) {
-      continue;
-    }
-    uint32_t preg = out.iss_awake->wake[k].preg;
+  auto apply_preg = [&](uint32_t preg) {
     if (uop.src1_en && uop.src1_preg == preg) {
       uop.src1_busy = false;
     }
     if (uop.src2_en && uop.src2_preg == preg) {
       uop.src2_busy = false;
     }
+  };
+
+  for (int k = 0; k < LSU_LOAD_WB_WIDTH; k++) {
+    if (!in.prf_awake->wake[k].valid) {
+      continue;
+    }
+    apply_preg(in.prf_awake->wake[k].preg);
+  }
+
+  for (int k = 0; k < MAX_WAKEUP_PORTS; k++) {
+    if (!out.iss_awake->wake[k].valid) {
+      continue;
+    }
+    apply_preg(out.iss_awake->wake[k].preg);
   }
 }
 
@@ -131,6 +142,15 @@ void Isu::comb_enq() {
         IqStoredUop uop = IqStoredUop::from_dis_iss_uop(in.dis2iss->req[i][w].uop);
         // 本拍入队前叠加唤醒总线，避免把“可读源”误标成 busy。
         apply_wakeup_to_uop(uop);
+        if (uop.rob_idx == 133 && uop.rob_flag == 0) {
+          TEMP_BUG_TRACE_PRINTF("[ISU TRACE] enq rob=%u/%u iq=%d op=%u s1=%d/%d preg=%u s2=%d/%d preg=%u pc=0x%08x\n",
+                                (unsigned)uop.rob_idx, (unsigned)uop.rob_flag,
+                                i, (unsigned)uop.op, (int)uop.src1_en,
+                                (int)uop.src1_busy, (unsigned)uop.src1_preg,
+                                (int)uop.src2_en, (int)uop.src2_busy,
+                                (unsigned)uop.src2_preg,
+                                (uint32_t)uop.dbg.pc);
+        }
 
         IqStoredEntry new_entry;
         new_entry.uop = uop;
@@ -176,6 +196,14 @@ void Isu::comb_issue() {
       if (in.exe2iss->ready[phys_port] &&
           (in.exe2iss->fu_ready_mask[phys_port] & req_bit) &&
           !in.rob_bcast->flush && !in.dec_bcast->mispred) {
+        if (q.entry[entry_idx].uop.rob_idx == 133 &&
+            q.entry[entry_idx].uop.rob_flag == 0) {
+          TEMP_BUG_TRACE_PRINTF("[ISU TRACE] issue rob=%u/%u iq=%zu op=%u phys_port=%d pc=0x%08x\n",
+                                (unsigned)q.entry[entry_idx].uop.rob_idx,
+                                (unsigned)q.entry[entry_idx].uop.rob_flag, i,
+                                (unsigned)q.entry[entry_idx].uop.op, phys_port,
+                                (uint32_t)q.entry[entry_idx].uop.dbg.pc);
+        }
 
         // 发射到指定的物理端口
         out.iss2prf->iss_entry[phys_port].valid = true;
@@ -275,6 +303,13 @@ void Isu::comb_awake() {
     }
   }
 
+  for (uint32_t preg : pregs) {
+    if (preg == 12) {
+      TEMP_BUG_TRACE_PRINTF("[ISU TRACE] wake preg=12\n");
+      break;
+    }
+  }
+
   Assert(pregs.size() <= MAX_WAKEUP_PORTS);
   
   // === 统一广播 ===
@@ -346,4 +381,27 @@ void Isu::seq() {
   }
 
   latency_pipe = latency_pipe_1;
+}
+
+void Isu::dump_debug_state() const {
+  std::printf("[DEADLOCK][ISU] latency_pipe=%zu\n", latency_pipe.size());
+  for (size_t iq_idx = 0; iq_idx < iqs.size(); ++iq_idx) {
+    const auto &q = iqs[iq_idx];
+    std::printf("[DEADLOCK][ISU][IQ %zu] id=%d count=%d/%d ports=%zu\n", iq_idx,
+                q.id, q.count, q.size, q.ports.size());
+    for (int slot = 0; slot < q.size; ++slot) {
+      if (!q.entry[slot].valid) {
+        continue;
+      }
+      const auto &uop = q.entry[slot].uop;
+      std::printf(
+          "[DEADLOCK][ISU][IQ %zu][%d] op=%u rob=%u/%u stq=%u/%u ldq=%u "
+          "src_busy=%d/%d pc=0x%08x inst=0x%08x\n",
+          iq_idx, slot, (unsigned)uop.op, (unsigned)uop.rob_idx,
+          (unsigned)uop.rob_flag, (unsigned)uop.stq_idx,
+          (unsigned)uop.stq_flag, (unsigned)uop.ldq_idx,
+          (int)uop.src1_busy, (int)uop.src2_busy, (uint32_t)uop.dbg.pc,
+          (uint32_t)uop.dbg.instruction);
+    }
+  }
 }

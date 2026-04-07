@@ -1,6 +1,6 @@
-#include "AbstractLsu.h"
 #include "BackTop.h"
 #include "Csr.h"
+#include "RealLsu.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "diff.h"
@@ -327,15 +327,16 @@ void SimCpu::commit_sync(InstInfo *inst) {
         this->ctx.perf.cond_addr_mispred++;
       }
       this->ctx.perf.cond_mispred_num++;
-    }
+    } 
   }
 
   if (inst->tma.mem_commit_is_store && !inst->page_fault_store) {
-    StqEntry e = back->lsu->get_stq_entry(inst->stq_idx);
+    StqDoneEntry e =
+        back->lsu->get_done_stq_entry(inst->stq_idx, inst->rob_idx, inst->rob_flag);
     const bool sc_suppressed = is_amo_sc_inst(*inst) && e.suppress_write &&
                                e.rob_idx == inst->rob_idx &&
                                e.rob_flag == inst->rob_flag;
-    if (!sc_suppressed && e.addr_valid && e.data_valid) {
+    if (!sc_suppressed) {
       mem_subsystem.on_commit_store(e.p_addr, e.data, e.func3);
     }
   }
@@ -356,20 +357,21 @@ void SimCpu::difftest_prepare(InstEntry *inst_entry, bool *skip) {
   }
 
   if (inst->tma.mem_commit_is_store && !inst->page_fault_store) {
-    StqEntry e = back->lsu->get_stq_entry(inst->stq_idx);
+    StqDoneEntry e =
+        back->lsu->get_done_stq_entry(inst->stq_idx, inst->rob_idx, inst->rob_flag);
     const bool sc_suppressed = is_amo_sc_inst(*inst) && e.suppress_write &&
                                e.rob_idx == inst->rob_idx &&
                                e.rob_flag == inst->rob_flag;
     if (sc_suppressed) {
       dut_cpu.store = false;
     } else {
-      if (!(e.addr_valid && e.data_valid)) {
-        // Store addr/data sideband can lag the ROB commit signal by a cycle on
-        // some recovery paths. Let the REF execute the instruction normally and
-        // skip the per-instruction sideband check instead of aborting the run.
-        *skip = true;
-        dut_cpu.store = false;
-      } else {
+      // if (!(e.addr_valid && e.data_valid)) {
+      //   // Store addr/data sideband can lag the ROB commit signal by a cycle on
+      //   // some recovery paths. Let the REF execute the instruction normally and
+      //   // skip the per-instruction sideband check instead of aborting the run.
+      //   *skip = true;
+      //   dut_cpu.store = false;
+      // } else {
         dut_cpu.store = true;
         dut_cpu.store_addr = e.p_addr;
         if (e.func3 == 0b00)
@@ -381,7 +383,7 @@ void SimCpu::difftest_prepare(InstEntry *inst_entry, bool *skip) {
 
         dut_cpu.store_data = dut_cpu.store_data
                              << (dut_cpu.store_addr & 0b11) * 8;
-      }
+      // }
     }
   } else {
     dut_cpu.store = false;
@@ -442,13 +444,14 @@ void SimCpu::init() {
   // 第三阶段：集中完成跨模块连线
   mem_subsystem.csr = back.csr;
   mem_subsystem.memory = p_memory;
-  mem_subsystem.peripheral_io = &back.lsu->peripheral_io;
+  mem_subsystem.peripheral_req = back.lsu->out.peripheral_req;
+  mem_subsystem.peripheral_resp = back.lsu->in.peripheral_resp;
 
   front.in.csr_status = back.csr->out.csr_status;
   front.ctx = &ctx;
 
-  back.lsu->ptw_walk_port = mem_subsystem.dtlb_walk_port;
-  back.lsu->ptw_mem_port = mem_subsystem.dtlb_ptw_port;
+  back.lsu->set_ptw_walk_port(mem_subsystem.dtlb_walk_port);
+  back.lsu->set_ptw_mem_port(mem_subsystem.dtlb_ptw_port);
 
   mem_subsystem.lsu2dcache = back.lsu_dcache_req_io;
   mem_subsystem.dcache2lsu = back.lsu_dcache_resp_io;
@@ -516,6 +519,39 @@ void SimCpu::restore_pc(uint32_t pc) {
 
   // 刷新 CSR 状态输出 (SATP, Privilege) 以确保 MMU 模式正确
   back.comb_csr_status();
+}
+
+void SimCpu::dump_empty_rob_debug_state() const {
+  std::printf(
+      "[EMPTY ROB] cyc=%lld streak=%llu front.FIFO_valid=%d back.stall=%d "
+      "read_empty_total=%llu\n",
+      (long long)sim_time, (unsigned long long)empty_rob_streak,
+      (int)front.out.FIFO_valid, (int)back.out.stall,
+      (unsigned long long)ctx.perf.front2back_read_empty_cycle_total);
+  for (int j = 0; j < FETCH_WIDTH; ++j) {
+    std::printf("[EMPTY ROB][BACK IN %d] valid=%d pc=0x%08x inst=0x%08x\n", j,
+                (int)back.in.valid[j], (uint32_t)back.in.pc[j],
+                (uint32_t)back.in.inst[j]);
+  }
+  if (back.pre_idu_queue != nullptr) {
+    back.pre_idu_queue->dump_debug_state();
+  }
+  if (back.idu != nullptr) {
+    back.idu->dump_debug_state();
+  }
+  if (back.rename != nullptr) {
+    back.rename->dump_debug_state();
+  }
+  if (back.dis != nullptr) {
+    back.dis->dump_debug_state();
+  }
+  if (back.isu != nullptr) {
+    back.isu->dump_debug_state();
+  }
+  if (back.lsu != nullptr) {
+    back.lsu->dump_debug_state();
+  }
+  front.dump_debug_state();
 }
 
 void SimCpu::cycle() {
@@ -606,6 +642,17 @@ void SimCpu::cycle() {
     axi_mmio.seq();
   }
   ctx.perf.perf_maybe_capture_simtime_snapshot();
+
+  if (back.rob != nullptr && back.rob->out.rob2dis != nullptr &&
+      back.rob->out.rob2dis->empty) {
+    empty_rob_streak++;
+    if (empty_rob_streak == 50000 ||
+        (empty_rob_streak > 50000 && (empty_rob_streak % 50000) == 0)) {
+      dump_empty_rob_debug_state();
+    }
+  } else {
+    empty_rob_streak = 0;
+  }
 
   if (ctx.exit_reason != ExitReason::NONE) {
     printf("Simulation Exited with Reason: %d\n", (int)ctx.exit_reason);

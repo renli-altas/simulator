@@ -63,6 +63,7 @@ public:
 
   // 时序逻辑
   void seq();
+  void dump_debug_state() const;
 
 private:
   void add_iq(const IssueQueueConfig &cfg);

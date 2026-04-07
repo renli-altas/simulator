@@ -39,6 +39,7 @@ public:
   void comb_flush_recover();
   void comb_commit_reclaim();
   void seq();
+  void dump_debug_state() const;
   const FTQEntry *lookup_ftq_entry(uint32_t idx) const;
 
 private:
@@ -73,4 +74,9 @@ private:
   InstructionBufferEntry push_entries[FETCH_WIDTH];
   int push_count = 0;
   int pop_count = 0;
+
+  int dbg_last_incoming_valid_num = 0;
+  bool dbg_last_ftq_ok = false;
+  bool dbg_last_ib_ok = false;
+  bool dbg_last_ready = false;
 };

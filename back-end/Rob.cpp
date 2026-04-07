@@ -3,6 +3,7 @@
 
 #include "DeadlockDebug.h"
 #include "RISCV.h"
+#include "SimCpu.h"
 #include "config.h"
 #include "util.h"
 #include <cmath>
@@ -428,7 +429,12 @@ void Rob::comb_commit() {
       }
     }
 
-    // deadlock_debug::dump_all();
+    if (is_empty() && ctx != nullptr && ctx->cpu != nullptr) {
+      ctx->cpu->dump_empty_rob_debug_state();
+    }
+    if (TEMP_BUG_TRACE_ENABLE) {
+      deadlock_debug::dump_all();
+    }
     Assert(0 && "ROB Deadlock detected (stall_cycle > 50000)");
   }
 }

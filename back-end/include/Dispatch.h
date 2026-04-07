@@ -120,6 +120,7 @@ public:
   void comb_fire();
   void comb_pipeline();
   void seq();
+  void dump_debug_state() const;
   RenDisIO::RenDisInst inst_r[DECODE_WIDTH];
   RenDisIO::RenDisInst inst_r_1[DECODE_WIDTH];
   reg<1> inst_valid[DECODE_WIDTH];

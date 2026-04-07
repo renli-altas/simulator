@@ -193,6 +193,14 @@ public:
           int idx = (w << 6) + bit;
           if (idx < size && entry_1[idx].valid && entry_1[idx].uop.src1_en &&
               entry_1[idx].uop.src1_busy && entry_1[idx].uop.src1_preg == preg) {
+            if (entry_1[idx].uop.rob_idx == 133 &&
+                entry_1[idx].uop.rob_flag == 0) {
+              TEMP_BUG_TRACE_PRINTF("[IQ TRACE] wake src1 rob=%u/%u iq=%d idx=%d preg=%u pc=0x%08x\n",
+                                    (unsigned)entry_1[idx].uop.rob_idx,
+                                    (unsigned)entry_1[idx].uop.rob_flag, id,
+                                    idx, (unsigned)preg,
+                                    (uint32_t)entry_1[idx].uop.dbg.pc);
+            }
             entry_1[idx].uop.src1_busy = false;
           }
           mask1 &= (mask1 - 1);
@@ -224,6 +232,13 @@ public:
       }
       bool match_mask = (entry_1[i].uop.br_mask & br_mask) != 0;
       if (match_mask) {
+        if (entry_1[i].uop.rob_idx == 133 && entry_1[i].uop.rob_flag == 0) {
+          TEMP_BUG_TRACE_PRINTF("[IQ TRACE] flush rob=%u/%u iq=%d idx=%d op=%u pc=0x%08x\n",
+                                (unsigned)entry_1[i].uop.rob_idx,
+                                (unsigned)entry_1[i].uop.rob_flag, id, i,
+                                (unsigned)entry_1[i].uop.op,
+                                (uint32_t)entry_1[i].uop.dbg.pc);
+        }
         clear_dep_bits_for_slot(entry_1[i], i);
         entry_1[i].valid = false;
         count_1--;

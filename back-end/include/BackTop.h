@@ -63,7 +63,7 @@ class Prf;
 class Exu;
 class Rob;
 class Csr;
-class AbstractLsu;
+class RealLsu;
 class AbstractMMU;
 class MemSubsystem;
 
@@ -103,6 +103,8 @@ private:
   LsuRobIO lsu2rob;
   LsuDcacheIO lsu2dcache_io;   // LSU → DCache multi-port request bus
   DcacheLsuIO dcache2lsu_io;   // DCache → LSU multi-port response bus
+  PeripheralReqIO peripheral_req_io;   // LSU → PeripheralAxi MMIO requests
+  PeripheralRespIO peripheral_resp_io; // PeripheralAxi → LSU MMIO responses
 
   RobDisIO rob2dis;
   RobCsrIO rob2csr;
@@ -130,7 +132,7 @@ public:
   Exu *exu;
   Csr *csr;
   Rob *rob;
-  AbstractLsu *lsu;
+  RealLsu *lsu;
 
   Back_in in;
   Back_out out;

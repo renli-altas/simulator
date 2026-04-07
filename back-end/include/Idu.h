@@ -34,6 +34,7 @@ public:
   void comb_branch(); // 分支处理
   void comb_fire();  // 发射握手与分支tag推进
   void seq();              // 时钟跳变，状态更新
+  void dump_debug_state() const;
 
   // 状态
   reg<BR_MASK_WIDTH> now_br_mask;

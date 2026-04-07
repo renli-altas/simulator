@@ -361,7 +361,37 @@ void Ren ::comb_pipeline() {
       }
     }
   }
+}
 
+void Ren::dump_debug_state() const {
+  int valid_count = 0;
+  for (int i = 0; i < DECODE_WIDTH; ++i) {
+    if (inst_valid[i]) {
+      valid_count++;
+    }
+  }
+  std::printf("[DEADLOCK][REN] ren2dec_ready=%d dis2ren_ready=%d valid_count=%d\n",
+              (int)(out.ren2dec != nullptr ? out.ren2dec->ready : 0),
+              (int)(in.dis2ren != nullptr ? in.dis2ren->ready : 0),
+              valid_count);
+  for (int i = 0; i < DECODE_WIDTH; ++i) {
+    if (!inst_valid[i]) {
+      continue;
+    }
+    std::printf(
+        "[DEADLOCK][REN][%d] pc=0x%08x inst=0x%08x type=%u dest_en=%d "
+        "ren2dis_valid=%d dest_preg=%u old_preg=%u src_busy=%d/%d "
+        "br_mask=0x%llx\n",
+        i, (uint32_t)inst_r[i].dbg.pc, (uint32_t)inst_r[i].dbg.instruction,
+        (unsigned)inst_r[i].type, (int)inst_r[i].dest_en,
+        (int)(out.ren2dis != nullptr ? out.ren2dis->valid[i] : 0),
+        (unsigned)(out.ren2dis != nullptr ? out.ren2dis->uop[i].dest_preg : 0),
+        (unsigned)(out.ren2dis != nullptr ? out.ren2dis->uop[i].old_dest_preg
+                                          : 0),
+        (int)(out.ren2dis != nullptr ? out.ren2dis->uop[i].src1_busy : 0),
+        (int)(out.ren2dis != nullptr ? out.ren2dis->uop[i].src2_busy : 0),
+        (unsigned long long)inst_r[i].br_mask);
+  }
 }
 
 void Ren ::seq() {

@@ -257,6 +257,52 @@ void Idu::seq() {
   }
 }
 
+void Idu::dump_debug_state() const {
+  int issue_valid_count = 0;
+  int dec_valid_count = 0;
+  if (in.issue != nullptr) {
+    for (int i = 0; i < DECODE_WIDTH; ++i) {
+      if (in.issue->entries[i].valid) {
+        issue_valid_count++;
+      }
+    }
+  }
+  if (out.dec2ren != nullptr) {
+    for (int i = 0; i < DECODE_WIDTH; ++i) {
+      if (out.dec2ren->valid[i]) {
+        dec_valid_count++;
+      }
+    }
+  }
+
+  std::printf(
+      "[DEADLOCK][IDU] ren2dec_ready=%d issue_valid=%d dec_valid=%d "
+      "now_br_mask=0x%llx pending_free=0x%llx latch_mispred=%d "
+      "clear_mask=0x%llx\n",
+      (int)(in.ren2dec != nullptr ? in.ren2dec->ready : 0), issue_valid_count,
+      dec_valid_count, (unsigned long long)now_br_mask,
+      (unsigned long long)pending_free_mask, (int)br_latch.mispred,
+      (unsigned long long)br_latch.clear_mask);
+
+  if (in.issue == nullptr || out.dec2ren == nullptr) {
+    return;
+  }
+
+  for (int i = 0; i < DECODE_WIDTH; ++i) {
+    if (!in.issue->entries[i].valid && !out.dec2ren->valid[i]) {
+      continue;
+    }
+    std::printf(
+        "[DEADLOCK][IDU][%d] issue_v=%d issue_inst=0x%08x pc=0x%08x "
+        "dec_v=%d type=%u br_id=%u br_mask=0x%llx pf=%d\n",
+        i, (int)in.issue->entries[i].valid, (uint32_t)in.issue->entries[i].inst,
+        (uint32_t)(in.issue->pc[i]), (int)out.dec2ren->valid[i],
+        (unsigned)out.dec2ren->uop[i].type, (unsigned)out.dec2ren->uop[i].br_id,
+        (unsigned long long)out.dec2ren->uop[i].br_mask,
+        (int)in.issue->entries[i].page_fault_inst);
+  }
+}
+
 void Idu::decode(DecRenIO::DecRenInst &uop, uint32_t inst) {
   // 操作数来源以及type
   // uint32_t imm;
