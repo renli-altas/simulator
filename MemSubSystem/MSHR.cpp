@@ -53,6 +53,53 @@ void merge_store_into_entry(MSHREntry &entry, const StoreReq &req) {
     entry.merged_store_dirty = true;
 }
 
+void drive_mshr_axi_req(MshrAxiOut &axi_out, const MSHREntry *entries) {
+    axi_out.req_valid = false;
+    axi_out.req_addr = 0;
+    axi_out.req_total_size = 0;
+    axi_out.req_id = 0;
+
+    for (int i = 0; i < DCACHE_MSHR_ENTRIES; i++) {
+        const MSHREntry &ce = entries[i];
+        if (!ce.valid || ce.issued) {
+            continue;
+        }
+        axi_out.req_valid = true;
+        axi_out.req_addr = get_addr(ce.index, ce.tag, 0);
+        axi_out.req_total_size = kCacheLineReqTotalSize;
+        axi_out.req_id = static_cast<uint8_t>(i);
+        break;
+    }
+}
+
+void update_mshr_resp_ready(MshrAxiOut &axi_out, const DcacheMSHRIO &dcachemshr,
+                            const WBMSHRIO &wbmshr, const MshrAxiIn &axi_in,
+                            const MSHREntry *entries) {
+    axi_out.resp_ready = true;
+    if (!axi_in.resp_valid) {
+        return;
+    }
+
+    const uint8_t resp_id = axi_in.resp_id;
+    if (resp_id >= DCACHE_MSHR_ENTRIES) {
+        return;
+    }
+
+    const MSHREntry &e = entries[resp_id];
+    if (!e.valid || !e.issued || e.fill) {
+        return;
+    }
+
+    const uint32_t lru_idx = choose_lru_victim(e.index);
+    const bool same_cycle_store_hit =
+        victim_has_same_cycle_store_hit(dcachemshr, e.index, lru_idx);
+    const bool need_wb_evict =
+        dirty_array[e.index][lru_idx] || same_cycle_store_hit;
+    if (need_wb_evict && !wbmshr.ready) {
+        axi_out.resp_ready = false;
+    }
+}
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +111,20 @@ void MSHR::init()
     std::memset(&nxt, 0, sizeof(nxt));
     std::memset(mshr_entries_nxt, 0, sizeof(mshr_entries_nxt));
 
-    out = {};
+    in.clear();
+    clear_outputs();
+}
+
+void MSHR::clear_outputs()
+{
+    out.clear();
+}
+
+void MSHR::clear_axi_output()
+{
+    if (out.axi_out != nullptr) {
+        *out.axi_out = {};
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,65 +136,37 @@ void MSHR::init()
 
 void MSHR::comb_outputs()
 {   
+    clear_outputs();
+    auto &mshr2dcache = *out.mshr2dcache;
+    auto &replay_resp = *out.replay_resp;
+    auto &mshrwb = *out.mshrwb;
+    auto &axi_out = *out.axi_out;
+    const auto &dcachemshr = *in.dcachemshr;
+    const auto &wbmshr_in = *in.wbmshr;
+    const auto &axi_in = *in.axi_in;
+
     const uint32_t mshr_count = count_valid_mshr_entries(mshr_entries);
-    out.mshr2dcache.free = DCACHE_MSHR_ENTRIES - mshr_count;
-    out.replay_resp.replay = cur.fill; // MSHR full replay code
-    out.replay_resp.replay_addr = cur.fill_addr;
-    out.replay_resp.free_slots = out.mshr2dcache.free;
+    mshr2dcache.free = DCACHE_MSHR_ENTRIES - mshr_count;
+    replay_resp.replay = cur.fill; // MSHR full replay code
+    replay_resp.replay_addr = cur.fill_addr;
+    replay_resp.free_slots = mshr2dcache.free;
 
     // Registered fill output (from previous cycle comb_inputs()).
-    out.mshr2dcache.fill.valid = cur.fill_valid;
-    out.mshr2dcache.fill.dirty = cur.fill_dirty;
-    out.mshr2dcache.fill.way = cur.fill_way;
-    out.mshr2dcache.fill.addr = cur.fill_addr;
-    std::memcpy(out.mshr2dcache.fill.data, cur.fill_data,
-                sizeof(out.mshr2dcache.fill.data));
+    mshr2dcache.fill.valid = cur.fill_valid;
+    mshr2dcache.fill.dirty = cur.fill_dirty;
+    mshr2dcache.fill.way = cur.fill_way;
+    mshr2dcache.fill.addr = cur.fill_addr;
+    std::memcpy(mshr2dcache.fill.data, cur.fill_data,
+                sizeof(mshr2dcache.fill.data));
 
     // Registered WB-eviction output (from previous cycle comb_inputs()).
-    out.mshrwb.valid = cur.wb_valid;
-    out.mshrwb.addr = cur.wb_addr;
-    std::memcpy(out.mshrwb.data, cur.wb_data, sizeof(out.mshrwb.data));
+    mshrwb.valid = cur.wb_valid;
+    mshrwb.addr = cur.wb_addr;
+    std::memcpy(mshrwb.data, cur.wb_data, sizeof(mshrwb.data));
 
-    // AXI outputs.
-    out.axi_out.req_valid = false;
-    out.axi_out.req_addr = 0;
-    out.axi_out.req_total_size = 0;
-    out.axi_out.req_id = 0;
-    // Default to ready; may be deasserted when WB backpressure prevents
-    // consuming the current-cycle AXI read response.
-    out.axi_out.resp_ready = true;
-
-    if (in.axi_in.resp_valid) {
-        const uint8_t resp_id = in.axi_in.resp_id;
-        if (resp_id < DCACHE_MSHR_ENTRIES) {
-            const MSHREntry &e = mshr_entries[resp_id];
-            if (e.valid && e.issued && !e.fill) {
-                const uint32_t lru_idx = choose_lru_victim(e.index);
-                const bool same_cycle_store_hit =
-                    victim_has_same_cycle_store_hit(in.dcachemshr, e.index,
-                                                    lru_idx);
-                const bool need_wb_evict =
-                    dirty_array[e.index][lru_idx] || same_cycle_store_hit;
-                if (need_wb_evict && !in.wbmshr.ready) {
-                    out.axi_out.resp_ready = false;
-                }
-            }
-        }
-    }
-
-    for(int i=0; i<DCACHE_MSHR_ENTRIES; i++){
-        const MSHREntry &ce = mshr_entries[i];
-        if (!ce.valid || ce.issued)
-            continue;
-
-        out.axi_out.req_valid = true;
-        out.axi_out.req_addr = get_addr(ce.index, ce.tag, 0);
-        out.axi_out.req_total_size = kCacheLineReqTotalSize;
-        out.axi_out.req_id = static_cast<uint8_t>(i);
-        break;
-    }
-
-
+    drive_mshr_axi_req(axi_out, mshr_entries);
+    update_mshr_resp_ready(axi_out, dcachemshr, wbmshr_in, axi_in,
+                           mshr_entries);
 }
 
 int MSHR::entries_add(int set_idx, int tag, uint32_t &mshr_count)
@@ -171,6 +203,12 @@ int MSHR::entries_add(int set_idx, int tag, uint32_t &mshr_count)
 
 void MSHR::comb_inputs()
 {
+    clear_axi_output();
+    auto &axi_out = *out.axi_out;
+    const auto &dcachemshr = *in.dcachemshr;
+    const auto &wbmshr = *in.wbmshr;
+    const auto &axi_in = *in.axi_in;
+
     uint32_t mshr_count = count_valid_mshr_entries(mshr_entries_nxt);
 
     // One-cycle pulse/state outputs are generated into nxt and exposed by
@@ -184,25 +222,14 @@ void MSHR::comb_inputs()
     nxt.wb_addr = 0;
     std::memset(nxt.wb_data, 0, sizeof(nxt.wb_data));
 
-    out.axi_out.resp_ready = true;
-    if (in.axi_in.resp_valid) {
-        const uint8_t rid = in.axi_in.resp_id;
-        if (rid < DCACHE_MSHR_ENTRIES) {
-            const MSHREntry re = mshr_entries[rid];
-            if (re.valid && re.issued && !re.fill) {
-                const uint32_t lru_idx = choose_lru_victim(re.index);
-                const bool need_wb_evict = dirty_array[re.index][lru_idx];
-                if (need_wb_evict && !in.wbmshr.ready) {
-                    out.axi_out.resp_ready = false;
-                }
-            }
-        }
-    }
+    drive_mshr_axi_req(axi_out, mshr_entries);
+    update_mshr_resp_ready(axi_out, dcachemshr, wbmshr, axi_in,
+                           mshr_entries);
 
     // ── Process alloc and secondary requests ─────────────────────────────────
     for (int i = 0; i < LSU_LDU_COUNT; i++)
     {
-        const LoadReq &req = in.dcachemshr.load_reqs[i];
+        const LoadReq &req = dcachemshr.load_reqs[i];
         if (!req.valid)
             continue;
         if(entries_add(decode(req.addr).set_idx, decode(req.addr).tag, mshr_count)==-1)
@@ -213,7 +240,7 @@ void MSHR::comb_inputs()
 
     for (int i = 0; i < LSU_STA_COUNT; i++)
     {
-        const StoreReq &req = in.dcachemshr.store_reqs[i];
+        const StoreReq &req = dcachemshr.store_reqs[i];
         if (!req.valid)
             continue;
         const AddrFields f = decode(req.addr);
@@ -227,9 +254,9 @@ void MSHR::comb_inputs()
     }
 
     // ── Accept R channel response ─────────────────────────────────────────────
-    if (in.axi_in.resp_valid)
+    if (axi_in.resp_valid)
     {
-        uint8_t resp_id = in.axi_in.resp_id;
+        uint8_t resp_id = axi_in.resp_id;
         if (resp_id < DCACHE_MSHR_ENTRIES)
         {
             const MSHREntry &e_cur = mshr_entries[resp_id];
@@ -240,11 +267,11 @@ void MSHR::comb_inputs()
                 const uint32_t lru_idx = choose_lru_victim(fill_set);
                 const uint32_t victim_tag = tag_array[fill_set][lru_idx];
                 const bool same_cycle_store_hit =
-                    victim_has_same_cycle_store_hit(in.dcachemshr, fill_set,
+                    victim_has_same_cycle_store_hit(dcachemshr, fill_set,
                                                     lru_idx);
                 bool need_wb_evict =
                     dirty_array[fill_set][lru_idx] || same_cycle_store_hit;
-                bool can_consume_resp = (!need_wb_evict) || in.wbmshr.ready;
+                bool can_consume_resp = (!need_wb_evict) || wbmshr.ready;
                 if (!can_consume_resp)
                 {
                 }
@@ -264,7 +291,7 @@ void MSHR::comb_inputs()
                         // Apply in store-port order to match seq() semantics.
                         for (int p = 0; p < LSU_STA_COUNT; p++)
                         {
-                            const auto &u = in.dcachemshr.store_hit_updates[p];
+                            const auto &u = dcachemshr.store_hit_updates[p];
                             if (!u.valid)
                             {
                                 continue;
@@ -295,7 +322,7 @@ void MSHR::comb_inputs()
                     nxt.fill_addr = fill_line_addr;
                     for (int w = 0; w < DCACHE_LINE_WORDS; w++)
                     {
-                        nxt.fill_data[w] = in.axi_in.resp_data[w];
+                        nxt.fill_data[w] = axi_in.resp_data[w];
                         if (e_fill.merged_store_strb[w] != 0) {
                             apply_strobe(nxt.fill_data[w],
                                          e_fill.merged_store_data[w],
@@ -331,8 +358,8 @@ void MSHR::comb_inputs()
     // Handshake note:
     // `req_ready` is only a ready-first hint. Use `req_accepted + req_accepted_id`
     // to mark exactly which MSHR slot completed AR handshake.
-    if (in.axi_in.req_accepted) {
-        const uint8_t acc_id = in.axi_in.req_accepted_id;
+    if (axi_in.req_accepted) {
+        const uint8_t acc_id = axi_in.req_accepted_id;
         if (acc_id < DCACHE_MSHR_ENTRIES) {
             const MSHREntry &ce = mshr_entries[acc_id];
             if (ce.valid && !ce.issued) {

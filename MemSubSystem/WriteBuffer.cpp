@@ -51,20 +51,22 @@ static int find_wb_entry_in_view(const WriteBufferEntry *entries, uint32_t head,
 }
 
 static void clear_axi_req(WBOut &out) {
-    out.axi_out.req_valid = false;
-    out.axi_out.req_addr = 0;
-    out.axi_out.req_total_size = 0;
-    out.axi_out.req_id = 0;
-    out.axi_out.req_wstrb = 0;
+    auto &axi_out = *out.axi_out;
+    axi_out.req_valid = false;
+    axi_out.req_addr = 0;
+    axi_out.req_total_size = 0;
+    axi_out.req_id = 0;
+    axi_out.req_wstrb = 0;
     for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-        out.axi_out.req_wdata[w] = 0;
+        axi_out.req_wdata[w] = 0;
     }
 }
 
 static void drive_axi_req_from_head(WBOut &out, uint32_t send, uint32_t head,uint32_t count,
                                     const WriteBufferEntry *entries) {
     clear_axi_req(out);
-    out.axi_out.resp_ready = true;
+    auto &axi_out = *out.axi_out;
+    axi_out.resp_ready = true;
     if (send != 0) {
         return;
     }
@@ -72,13 +74,13 @@ static void drive_axi_req_from_head(WBOut &out, uint32_t send, uint32_t head,uin
     if ( !is_valid(head, count, head) || head_e.send) {
         return;
     }
-    out.axi_out.req_valid = true;
-    out.axi_out.req_addr = head_e.addr;
-    out.axi_out.req_total_size = kCacheLineReqTotalSize;
-    out.axi_out.req_id = 0;
-    out.axi_out.req_wstrb = full_line_wstrb_mask();
+    axi_out.req_valid = true;
+    axi_out.req_addr = head_e.addr;
+    axi_out.req_total_size = kCacheLineReqTotalSize;
+    axi_out.req_id = 0;
+    axi_out.req_wstrb = full_line_wstrb_mask();
     for (int w = 0; w < DCACHE_LINE_WORDS; w++) {
-        out.axi_out.req_wdata[w] = head_e.data[w];
+        axi_out.req_wdata[w] = head_e.data[w];
     }
 }
 
@@ -114,6 +116,10 @@ void WriteBuffer::init() {
     g_wb_head = 0;
     g_wb_count = 0;
     in.clear();
+    clear_outputs();
+}
+
+void WriteBuffer::clear_outputs() {
     out.clear();
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -123,20 +129,24 @@ void WriteBuffer::init() {
 // (within the same cycle) are already reflected.
 // ─────────────────────────────────────────────────────────────────────────────
 void WriteBuffer::comb_outputs() {
+    clear_outputs();
+    auto &wbmshr = *out.wbmshr;
+    auto &wbdcache = *out.wbdcache;
+
     // MemSubsystem::comb() calls wb_.comb_outputs() again after wb_.comb_inputs()
     // and before mshr_.comb_inputs(). The MSHR therefore samples the refreshed
     // nxt-count view, and producing one victim in the next cycle is safe as
     // long as there is one actual slot left in the FIFO.
-    out.wbmshr.ready = (nxt.count < DCACHE_WB_ENTRIES);
+    wbmshr.ready = (nxt.count < DCACHE_WB_ENTRIES);
 
     for(int i=0;i<LSU_LDU_COUNT;i++){
-        out.wbdcache.bypass_resp[i].valid = nxt.bypassvalid[i];
-        out.wbdcache.bypass_resp[i].data = nxt.bypassdata[i];
+        wbdcache.bypass_resp[i].valid = nxt.bypassvalid[i];
+        wbdcache.bypass_resp[i].data = nxt.bypassdata[i];
     }
 
     for(int i=0;i<LSU_STA_COUNT;i++){
-        out.wbdcache.merge_resp[i].valid = nxt.mergevalid[i];
-        out.wbdcache.merge_resp[i].busy = nxt.mergebusy[i];
+        wbdcache.merge_resp[i].valid = nxt.mergevalid[i];
+        wbdcache.merge_resp[i].busy = nxt.mergebusy[i];
     }
     // Drive the request from nxt view so previously accumulated merges are
     // visible to the write beat snapshot.
@@ -152,6 +162,12 @@ void WriteBuffer::comb_outputs() {
 // Writes axi_out (bridged to IC by RealDcache after this call).
 // ─────────────────────────────────────────────────────────────────────────────
 void WriteBuffer::comb_inputs() {
+    clear_outputs();
+    auto &mshrwb = *in.mshrwb;
+    auto &dcachewb = *in.dcachewb;
+    auto &axi_in = *in.axi_in;
+    auto &axi_out = *out.axi_out;
+
     // Default outputs: nothing to send, always ready to accept a write response.
     for(int i=0;i<LSU_LDU_COUNT;i++){
         nxt.bypassvalid[i] = false;
@@ -161,10 +177,10 @@ void WriteBuffer::comb_inputs() {
     for(int i=0;i<LSU_STA_COUNT;i++){
         nxt.mergevalid[i] = false;
         nxt.mergebusy[i] = false;
-         if(in.dcachewb.merge_req[i].valid){
+         if(dcachewb.merge_req[i].valid){
             int wb_idx = find_wb_entry_in_view(write_buffer_nxt, nxt.head,
                                                nxt.count,
-                                               in.dcachewb.merge_req[i].addr);
+                                               dcachewb.merge_req[i].addr);
             if(wb_idx != -1){
                 WriteBufferEntry &e = write_buffer_nxt[wb_idx];
                 const bool head_issue_frozen =
@@ -179,28 +195,30 @@ void WriteBuffer::comb_inputs() {
                     nxt.mergebusy[i] = true;
                 } else {
                     nxt.mergevalid[i] = true;
-                    uint32_t word_off = decode(in.dcachewb.merge_req[i].addr).word_off;
-                    uint32_t strb = in.dcachewb.merge_req[i].strb;
-                    apply_strobe(e.data[word_off], in.dcachewb.merge_req[i].data, strb);
+                    uint32_t word_off = decode(dcachewb.merge_req[i].addr).word_off;
+                    uint32_t strb = dcachewb.merge_req[i].strb;
+                    apply_strobe(e.data[word_off], dcachewb.merge_req[i].data, strb);
                 }
             }
-            else if(cache_line_match(in.dcachewb.merge_req[i].addr,in.mshrwb.addr)&&in.mshrwb.valid){
+            else if(cache_line_match(dcachewb.merge_req[i].addr, mshrwb.addr) &&
+                    mshrwb.valid){
                 nxt.mergevalid[i] = true;
-                uint32_t word_off = decode(in.dcachewb.merge_req[i].addr).word_off;
-                uint32_t strb = in.dcachewb.merge_req[i].strb;
-                apply_strobe(in.mshrwb.data[word_off], in.dcachewb.merge_req[i].data, strb);
+                uint32_t word_off = decode(dcachewb.merge_req[i].addr).word_off;
+                uint32_t strb = dcachewb.merge_req[i].strb;
+                apply_strobe(mshrwb.data[word_off], dcachewb.merge_req[i].data,
+                             strb);
             }
             
         }
     }
     
 
-    if(in.mshrwb.valid){
+    if(mshrwb.valid){
         if(nxt.count < DCACHE_WB_ENTRIES){
             WriteBufferEntry &e = write_buffer_nxt[(nxt.head + nxt.count) % DCACHE_WB_ENTRIES];
             e.send     = false;
-            e.addr     = in.mshrwb.addr;
-            std::memcpy(e.data, in.mshrwb.data, DCACHE_LINE_WORDS * sizeof(uint32_t));
+            e.addr     = mshrwb.addr;
+            std::memcpy(e.data, mshrwb.data, DCACHE_LINE_WORDS * sizeof(uint32_t));
             nxt.count++;
         }
         else{
@@ -208,18 +226,22 @@ void WriteBuffer::comb_inputs() {
     }
 
     for(int i=0;i<LSU_LDU_COUNT;i++){
-        if(in.dcachewb.bypass_req[i].valid){
+        if(dcachewb.bypass_req[i].valid){
             int wb_idx = find_wb_entry_in_view(write_buffer_nxt, nxt.head,
                                                nxt.count,
-                                               in.dcachewb.bypass_req[i].addr);
+                                               dcachewb.bypass_req[i].addr);
             if(wb_idx != -1){
                 nxt.bypassvalid[i] = true;
-                nxt.bypassdata[i] = write_buffer_nxt[wb_idx].data[decode(in.dcachewb.bypass_req[i].addr).word_off];
+                nxt.bypassdata[i] =
+                    write_buffer_nxt[wb_idx]
+                        .data[decode(dcachewb.bypass_req[i].addr).word_off];
             }
-            else if(cache_line_match(in.dcachewb.bypass_req[i].addr,in.mshrwb.addr)&&in.mshrwb.valid){
+            else if(cache_line_match(dcachewb.bypass_req[i].addr, mshrwb.addr) &&
+                    mshrwb.valid){
                 // Bypass from the MSHR fill data if the requested line matches the line being filled by the MSHR.
                 nxt.bypassvalid[i] = true;
-                nxt.bypassdata[i] = in.mshrwb.data[decode(in.dcachewb.bypass_req[i].addr).word_off];
+                nxt.bypassdata[i] =
+                    mshrwb.data[decode(dcachewb.bypass_req[i].addr).word_off];
             }
         }
     }
@@ -233,8 +255,8 @@ void WriteBuffer::comb_inputs() {
         WriteBufferEntry &head_e = write_buffer_nxt[cur.head];
         const bool can_issue_head = is_valid(cur.head, cur.count,cur.head) && !head_e.send;
         const bool req_payload_matches_head =
-            out.axi_out.req_valid && (out.axi_out.req_addr == head_e.addr);
-        const bool req_handshake = can_issue_head && in.axi_in.req_accepted &&
+            axi_out.req_valid && (axi_out.req_addr == head_e.addr);
+        const bool req_handshake = can_issue_head && axi_in.req_accepted &&
                                    req_payload_matches_head;
         if (req_handshake) {
             head_e.send = true;
@@ -243,7 +265,7 @@ void WriteBuffer::comb_inputs() {
         } else if (can_issue_head) {
             nxt.send = 0;
             nxt.issue_pending =
-                (in.axi_in.req_ready && req_payload_matches_head) ? 1u : 0u;
+                (axi_in.req_ready && req_payload_matches_head) ? 1u : 0u;
         } else {
             nxt.issue_pending = 0;
         }
@@ -252,7 +274,7 @@ void WriteBuffer::comb_inputs() {
     }
 
     // ── Accept write response (B channel) ────────────────────────────────────
-    if (in.axi_in.resp_valid) {
+    if (axi_in.resp_valid) {
         WriteBufferEntry &head_e = write_buffer[cur.head];
         if (is_valid(cur.head, cur.count, cur.head) && head_e.send ) {
             write_buffer_nxt[cur.head].send = false;

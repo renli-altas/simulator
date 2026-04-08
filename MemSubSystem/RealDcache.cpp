@@ -69,6 +69,26 @@ bool has_same_cycle_store_hazard(const S1S2Reg &pipe, uint32_t load_addr) {
     return false;
 }
 
+void clear_dcache_outputs(DcacheOUTIO &out) {
+    // `out` stores pointers to external IO bundles, so only clear the payloads.
+    if (out.dcache2lsu != nullptr) {
+        *out.dcache2lsu = {};
+    }
+    if (out.dcache2mshr != nullptr) {
+        *out.dcache2mshr = {};
+    }
+    if (out.dcache2wb != nullptr) {
+        *out.dcache2wb = {};
+    }
+#if CONFIG_BSD
+    for (auto &bsd_port : out.bsd_out) {
+        if (bsd_port != nullptr) {
+            *bsd_port = {};
+        }
+    }
+#endif
+}
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,7 +339,9 @@ void RealDcache::prepare_wb_queries_for_next_stage2() {
 // by mshr_.comb_inputs() / wb_.comb_inputs() called afterwards.
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::stage2_comb() {
+
     
+    clear_dcache_outputs(out);
     out.dcache2lsu->resp_ports.clear();
     for (auto &pending_write : pending_writes_) {
         pending_write = {};

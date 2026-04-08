@@ -549,14 +549,26 @@ void MemSubsystem::init() {
   dcache_.in.lsu2dcache  = &dcache_req_mux_;
   dcache_.out.dcache2lsu = &dcache_resp_raw_;
 
-  // Internal MSHR ↔ DCache wires: RealDcache reads/writes MSHR IO structs
-  // directly via pointers, keeping the connection zero-copy.
-  dcache_.in.mshr2dcache  = &mshr_.out.mshr2dcache; // MSHR output → DCache input
-  dcache_.out.dcache2mshr = &mshr_.in.dcachemshr;   // DCache output → MSHR input
+  // Internal MSHR ↔ DCache wires.
+  mshr_.in.dcachemshr = &dcache2mshr_io_;
+  mshr_.out.mshr2dcache = &mshr2dcache_io_;
+  mshr_.out.mshrwb = &mshrwb_io_;
+  mshr_.out.replay_resp = &mshr_replay_resp_;
+  mshr_.in.wbmshr = &wbmshr_io_;
+  mshr_.in.axi_in = &mshr_axi_in;
+  mshr_.out.axi_out = &mshr_axi_out;
+  dcache_.in.mshr2dcache  = &mshr2dcache_io_;
+  dcache_.out.dcache2mshr = &dcache2mshr_io_;
 
   // Internal WriteBuffer ↔ DCache wires.
-  dcache_.in.wb2dcache   = &wb_.out.wbdcache;    // WB output → DCache input
-  dcache_.out.dcache2wb  = &wb_.in.dcachewb;     // DCache output → WB input
+  wb_.in.mshrwb = &mshrwb_io_;
+  wb_.in.dcachewb = &dcache2wb_io_;
+  wb_.in.axi_in = &wb_axi_in;
+  wb_.out.wbmshr = &wbmshr_io_;
+  wb_.out.wbdcache = &wbdcache_io_;
+  wb_.out.axi_out = &wb_axi_out;
+  dcache_.in.wb2dcache   = &wbdcache_io_;
+  dcache_.out.dcache2wb  = &dcache2wb_io_;
   wb_.bind_context(ctx);
 
   // ── Initialise sub-modules ─────────────────────────────────────────────────
@@ -577,6 +589,13 @@ void MemSubsystem::init() {
 
   dcache_req_mux_ = {};
   dcache_resp_raw_ = {};
+  dcache2mshr_io_ = {};
+  mshr2dcache_io_ = {};
+  dcache2wb_io_ = {};
+  wbdcache_io_ = {};
+  wbmshr_io_ = {};
+  mshrwb_io_ = {};
+  mshr_replay_resp_ = {};
   mshr_axi_in  = {};
   mshr_axi_out = {};
   wb_axi_in    = {};
@@ -758,10 +777,6 @@ void MemSubsystem::comb() {
   dcache_req_mux_ = read_arb_block.comb_result().dcache_req;
   dcache_resp_raw_ = {};
 
-  // Feed current-cycle AXI feedback before any comb phase that consumes it.
-  mshr_.in.axi_in = mshr_axi_in;
-  wb_.in.axi_in   = wb_axi_in;
-
   // RealDcache::stage2_comb() consumes current-cycle MSHR/WB comb outputs.
   // Order:
   // 1. WB comb_outputs exposes ready from the current WB view.
@@ -773,15 +788,12 @@ void MemSubsystem::comb() {
   // 5. WB comb_inputs consumes those queries immediately.
   // 6. WB comb_outputs is refreshed so DCache stage2 sees same-cycle bypass.
   wb_.comb_outputs();
-  mshr_.in.wbmshr = wb_.out.wbmshr;
   mshr_.comb_outputs();
   dcache_.stage1_comb();
   dcache_.prepare_wb_queries_for_next_stage2();
 
-  wb_.in.mshrwb   = mshr_.out.mshrwb;  // eviction push from MSHR current comb
   wb_.comb_inputs();
   wb_.comb_outputs();
-  mshr_.in.wbmshr = wb_.out.wbmshr;
 
   dcache_.stage2_comb();
   if (read_arb_block.comb_result().granted) {
@@ -808,7 +820,7 @@ void MemSubsystem::comb() {
   }
 
   const replay_resp replay_bcast =
-      replay_resp::from_io(mshr_.out.replay_resp);
+      replay_resp::from_io(*mshr_.out.replay_resp);
 
   resp_route_block.eval_comb(&dcache_resp_raw_,
                              read_arb_block.comb_result().issued_tags,
@@ -921,7 +933,7 @@ void MemSubsystem::comb() {
   // Export MSHR replay wakeup to LSU. RealDcache::comb() clears resp ports
   // every cycle, so this must be written after dcache_.comb().
   if (dcache2lsu != nullptr) {
-    dcache2lsu->resp_ports.replay_resp = mshr_.out.replay_resp;
+    dcache2lsu->resp_ports.replay_resp = *mshr_.out.replay_resp;
   }
 
   // Phase 3a: run MSHR comb_inputs (may accept AXI R, allocate entries, and
@@ -933,8 +945,6 @@ void MemSubsystem::comb() {
   peripheral_axi_.comb_outputs();
   peripheral_axi_.comb_inputs();
 
-  mshr_axi_out = mshr_.out.axi_out;
-  wb_axi_out = wb_.out.axi_out;
   peripheral_axi_read_out = peripheral_axi_.out.read;
   peripheral_axi_write_out = peripheral_axi_.out.write;
 

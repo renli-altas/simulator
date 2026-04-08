@@ -52,15 +52,42 @@ struct MshrAxiOut {
 };
 
 struct MSHRINIO{
-    DcacheMSHRIO dcachemshr;
-    WBMSHRIO wbmshr;
-    MshrAxiIn  axi_in;
+    DcacheMSHRIO *dcachemshr = nullptr;
+    WBMSHRIO *wbmshr = nullptr;
+    MshrAxiIn  *axi_in = nullptr;
+
+    void clear() {
+        if (dcachemshr != nullptr) {
+            *dcachemshr = {};
+        }
+        if (wbmshr != nullptr) {
+            *wbmshr = {};
+        }
+        if (axi_in != nullptr) {
+            *axi_in = {};
+        }
+    }
 };
 struct MSHROUTIO{
-    MSHRDcacheIO mshr2dcache;
-    MshrAxiOut axi_out;
-    MSHRWBIO mshrwb;
-    ReplayResp replay_resp;
+    MSHRDcacheIO *mshr2dcache = nullptr;
+    MshrAxiOut *axi_out = nullptr;
+    MSHRWBIO *mshrwb = nullptr;
+    ReplayResp *replay_resp = nullptr;
+
+    void clear() {
+        if (mshr2dcache != nullptr) {
+            *mshr2dcache = {};
+        }
+        if (axi_out != nullptr) {
+            *axi_out = {};
+        }
+        if (mshrwb != nullptr) {
+            *mshrwb = {};
+        }
+        if (replay_resp != nullptr) {
+            *replay_resp = {};
+        }
+    }
 };
 class MSHR {
 public:
@@ -78,6 +105,8 @@ public:
     // Reads axi_in (set by caller before invoking); writes axi_out.
     // Must be called AFTER stage2_comb() and after the IC→axi_in bridge.
     void comb_inputs();
+    void clear_outputs();
+    void clear_axi_output();
 
     // Advance state: auto-consume the delivered fill, then cur = nxt, retire /
     // promote consumed entries, reset nxt.

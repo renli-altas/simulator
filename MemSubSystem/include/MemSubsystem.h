@@ -101,6 +101,13 @@ private:
   MemRespRouteBlock resp_route_block;
   LsuDcacheIO dcache_req_mux_{};
   DcacheLsuIO dcache_resp_raw_{};
+  DcacheMSHRIO dcache2mshr_io_{};
+  MSHRDcacheIO mshr2dcache_io_{};
+  DcacheWBIO dcache2wb_io_{};
+  WBDcacheIO wbdcache_io_{};
+  WBMSHRIO wbmshr_io_{};
+  MSHRWBIO mshrwb_io_{};
+  ReplayResp mshr_replay_resp_{};
 
   std::unique_ptr<AxiKitRuntime> axi_kit_runtime;
   bool internal_axi_runtime_active_ = true;

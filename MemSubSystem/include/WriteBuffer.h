@@ -44,21 +44,37 @@ struct WbAxiOut {
 
 
 struct WBIn {
-    MSHRWBIO mshrwb;
-    DcacheWBIO dcachewb;
-    WbAxiIn axi_in;
+    MSHRWBIO *mshrwb = nullptr;
+    DcacheWBIO *dcachewb = nullptr;
+    WbAxiIn *axi_in = nullptr;
 
     void clear() {
-        *this = {};
+        if (mshrwb != nullptr) {
+            *mshrwb = {};
+        }
+        if (dcachewb != nullptr) {
+            *dcachewb = {};
+        }
+        if (axi_in != nullptr) {
+            *axi_in = {};
+        }
     }
 };
 struct WBOut {
-    WBMSHRIO wbmshr;
-    WBDcacheIO wbdcache;
-    WbAxiOut axi_out;
+    WBMSHRIO *wbmshr = nullptr;
+    WBDcacheIO *wbdcache = nullptr;
+    WbAxiOut *axi_out = nullptr;
 
     void clear() {
-        *this = {};
+        if (wbmshr != nullptr) {
+            *wbmshr = {};
+        }
+        if (wbdcache != nullptr) {
+            *wbdcache = {};
+        }
+        if (axi_out != nullptr) {
+            *axi_out = {};
+        }
     }
 };
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,6 +103,7 @@ public:
     // responses, and fill axi_out with the next AW+W request.
     // Reads axi_in (set by caller before invoking); writes axi_out.
     void comb_inputs();
+    void clear_outputs();
 
     void seq();
 
