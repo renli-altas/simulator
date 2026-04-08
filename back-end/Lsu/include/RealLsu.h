@@ -64,10 +64,19 @@ typedef struct{
 
 class RealLsu {
 private:
+  struct LookupTables {
+    wire<1> commit_lookup_valid[2][ROB_NUM] = {};
+    wire<STQ_IDX_WIDTH> commit_lookup_slot[2][ROB_NUM] = {};
+    wire<1> done_lookup_valid[2][ROB_NUM] = {};
+    wire<STQ_IDX_WIDTH> done_lookup_slot[2][ROB_NUM] = {};
+    wire<1> done_token_lookup_valid[2][STQ_SIZE] = {};
+    wire<STQ_IDX_WIDTH> done_token_lookup_slot[2][STQ_SIZE] = {};
+  };
   // MMU Instance (Composition)
   std::unique_ptr<AbstractMmu> mmu;
   LSUState cur;
   LSUState nxt;
+  LookupTables lookup_;
 
   
 public:
@@ -135,6 +144,11 @@ private:
                                                      uint32_t rob_flag) const;
   void update_load_ready_state(LdqEntry &entry, uint32_t p_addr,
                                int64_t ready_cycle);
+  void clear_commit_lookup();
+  void clear_done_lookup();
+  void rebuild_commit_lookup();
+  std::pair<uint32_t, uint32_t>
+  next_dispatch_stq_token(const LSUState &state) const;
 
   bool has_older_store_pending(const MicroOp &load_uop) const;
   StoreForwardResult check_store_forward(uint32_t p_addr,

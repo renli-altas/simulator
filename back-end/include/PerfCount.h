@@ -71,6 +71,26 @@ public:
   uint64_t mmio_head_block_cycles = 0;
   uint64_t ptw_port0_replay_count = 0;
   uint64_t stq_same_addr_block_count = 0;
+  uint64_t lsu_host_time_comb_lsu2dis_ns = 0;
+  uint64_t lsu_host_time_comb_recv_ns = 0;
+  uint64_t lsu_host_time_comb_load_res_ns = 0;
+  uint64_t lsu_host_time_comb_pipeline_ns = 0;
+  uint64_t lsu_host_time_seq_ns = 0;
+  uint64_t lsu_check_store_forward_calls = 0;
+  uint64_t lsu_check_store_forward_done_entries_scanned = 0;
+  uint64_t lsu_check_store_forward_commit_entries_scanned = 0;
+  uint64_t lsu_find_commit_calls = 0;
+  uint64_t lsu_find_commit_entries_scanned = 0;
+  uint64_t lsu_find_done_token_calls = 0;
+  uint64_t lsu_find_done_token_entries_scanned = 0;
+  uint64_t lsu_get_done_entry_calls = 0;
+  uint64_t lsu_get_done_entry_entries_scanned = 0;
+  uint64_t lsu_store_alloc_token_check_calls = 0;
+  uint64_t lsu_store_alloc_token_check_entries_scanned = 0;
+  uint64_t lsu_store_addr_retry_no_commit_entry_count = 0;
+  uint64_t lsu_store_addr_retry_mmu_count = 0;
+  uint64_t lsu_commit_blocked_head_not_ready_cycles = 0;
+  uint64_t lsu_commit_blocked_done_stq_full_cycles = 0;
 
   uint64_t icache_access_num = 0;
   uint64_t icache_miss_num = 0;
@@ -260,6 +280,26 @@ public:
     mmio_head_block_cycles = 0;
     ptw_port0_replay_count = 0;
     stq_same_addr_block_count = 0;
+    lsu_host_time_comb_lsu2dis_ns = 0;
+    lsu_host_time_comb_recv_ns = 0;
+    lsu_host_time_comb_load_res_ns = 0;
+    lsu_host_time_comb_pipeline_ns = 0;
+    lsu_host_time_seq_ns = 0;
+    lsu_check_store_forward_calls = 0;
+    lsu_check_store_forward_done_entries_scanned = 0;
+    lsu_check_store_forward_commit_entries_scanned = 0;
+    lsu_find_commit_calls = 0;
+    lsu_find_commit_entries_scanned = 0;
+    lsu_find_done_token_calls = 0;
+    lsu_find_done_token_entries_scanned = 0;
+    lsu_get_done_entry_calls = 0;
+    lsu_get_done_entry_entries_scanned = 0;
+    lsu_store_alloc_token_check_calls = 0;
+    lsu_store_alloc_token_check_entries_scanned = 0;
+    lsu_store_addr_retry_no_commit_entry_count = 0;
+    lsu_store_addr_retry_mmu_count = 0;
+    lsu_commit_blocked_head_not_ready_cycles = 0;
+    lsu_commit_blocked_done_stq_full_cycles = 0;
     icache_access_num = 0;
     icache_miss_num = 0;
     icache_miss_penalty_total_cycles = 0;
@@ -420,6 +460,7 @@ public:
     perf_print_frontend_fetch();
     perf_print_resource_stall();
     perf_print_tma();
+    perf_print_lsu_hotspots();
   }
 
   void perf_maybe_capture_simtime_snapshot() {
@@ -691,6 +732,93 @@ public:
            ptw_port0_replay_count);
     printf("\033[38;5;34mSTQ SameAddr Block   : %ld\033[0m\n",
            stq_same_addr_block_count);
+    printf("\n");
+  }
+
+  void perf_print_lsu_hotspots() {
+    printf("\033[38;5;34m*********LSU HOTSPOT**************\033[0m\n");
+    const uint64_t lsu_host_total_ns =
+        lsu_host_time_comb_lsu2dis_ns + lsu_host_time_comb_recv_ns +
+        lsu_host_time_comb_load_res_ns + lsu_host_time_comb_pipeline_ns +
+        lsu_host_time_seq_ns;
+    const double ns_per_cycle =
+        (cycle == 0) ? 0.0
+                     : static_cast<double>(lsu_host_total_ns) /
+                           static_cast<double>(cycle);
+    const double avg_forward_done_scan =
+        (lsu_check_store_forward_calls == 0)
+            ? 0.0
+            : static_cast<double>(lsu_check_store_forward_done_entries_scanned) /
+                  static_cast<double>(lsu_check_store_forward_calls);
+    const double avg_forward_commit_scan =
+        (lsu_check_store_forward_calls == 0)
+            ? 0.0
+            : static_cast<double>(lsu_check_store_forward_commit_entries_scanned) /
+                  static_cast<double>(lsu_check_store_forward_calls);
+    const double avg_find_commit_scan =
+        (lsu_find_commit_calls == 0)
+            ? 0.0
+            : static_cast<double>(lsu_find_commit_entries_scanned) /
+                  static_cast<double>(lsu_find_commit_calls);
+    const double avg_find_done_token_scan =
+        (lsu_find_done_token_calls == 0)
+            ? 0.0
+            : static_cast<double>(lsu_find_done_token_entries_scanned) /
+                  static_cast<double>(lsu_find_done_token_calls);
+    const double avg_get_done_entry_scan =
+        (lsu_get_done_entry_calls == 0)
+            ? 0.0
+            : static_cast<double>(lsu_get_done_entry_entries_scanned) /
+                  static_cast<double>(lsu_get_done_entry_calls);
+    const double avg_alloc_token_check_scan =
+        (lsu_store_alloc_token_check_calls == 0)
+            ? 0.0
+            : static_cast<double>(lsu_store_alloc_token_check_entries_scanned) /
+                  static_cast<double>(lsu_store_alloc_token_check_calls);
+
+    printf("\033[38;5;34mLSU Host Time Total      : %llu ns\033[0m\n",
+           static_cast<unsigned long long>(lsu_host_total_ns));
+    printf("\033[38;5;34mLSU Host Time / Cycle    : %.3f ns\033[0m\n",
+           ns_per_cycle);
+    printf("\033[38;5;34m  - comb_lsu2dis_info    : %llu ns\033[0m\n",
+           static_cast<unsigned long long>(lsu_host_time_comb_lsu2dis_ns));
+    printf("\033[38;5;34m  - comb_recv            : %llu ns\033[0m\n",
+           static_cast<unsigned long long>(lsu_host_time_comb_recv_ns));
+    printf("\033[38;5;34m  - comb_load_res        : %llu ns\033[0m\n",
+           static_cast<unsigned long long>(lsu_host_time_comb_load_res_ns));
+    printf("\033[38;5;34m  - comb_pipeline        : %llu ns\033[0m\n",
+           static_cast<unsigned long long>(lsu_host_time_comb_pipeline_ns));
+    printf("\033[38;5;34m  - seq                  : %llu ns\033[0m\n",
+           static_cast<unsigned long long>(lsu_host_time_seq_ns));
+    printf("\033[38;5;34mSTLF Calls               : %llu\033[0m\n",
+           static_cast<unsigned long long>(lsu_check_store_forward_calls));
+    printf("\033[38;5;34m  - avg done scan        : %.3f\033[0m\n",
+           avg_forward_done_scan);
+    printf("\033[38;5;34m  - avg commit scan      : %.3f\033[0m\n",
+           avg_forward_commit_scan);
+    printf("\033[38;5;34mfind_commit Calls        : %llu avg_scan=%.3f\033[0m\n",
+           static_cast<unsigned long long>(lsu_find_commit_calls),
+           avg_find_commit_scan);
+    printf("\033[38;5;34mfind_done_token Calls    : %llu avg_scan=%.3f\033[0m\n",
+           static_cast<unsigned long long>(lsu_find_done_token_calls),
+           avg_find_done_token_scan);
+    printf("\033[38;5;34mget_done_entry Calls     : %llu avg_scan=%.3f\033[0m\n",
+           static_cast<unsigned long long>(lsu_get_done_entry_calls),
+           avg_get_done_entry_scan);
+    printf("\033[38;5;34malloc token-check Calls  : %llu avg_scan=%.3f\033[0m\n",
+           static_cast<unsigned long long>(lsu_store_alloc_token_check_calls),
+           avg_alloc_token_check_scan);
+    printf("\033[38;5;34mstore-addr retry(no slot): %llu\033[0m\n",
+           static_cast<unsigned long long>(
+               lsu_store_addr_retry_no_commit_entry_count));
+    printf("\033[38;5;34mstore-addr retry(mmu)    : %llu\033[0m\n",
+           static_cast<unsigned long long>(lsu_store_addr_retry_mmu_count));
+    printf("\033[38;5;34mcommit blocked head wait : %llu cycles\033[0m\n",
+           static_cast<unsigned long long>(
+               lsu_commit_blocked_head_not_ready_cycles));
+    printf("\033[38;5;34mcommit blocked done full : %llu cycles\033[0m\n",
+           static_cast<unsigned long long>(
+               lsu_commit_blocked_done_stq_full_cycles));
     printf("\n");
   }
 

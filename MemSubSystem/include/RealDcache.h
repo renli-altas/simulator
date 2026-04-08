@@ -38,7 +38,7 @@ struct S1S2Reg {
         bool     replayed = false; // bank conflict — do not process in S2
         uint32_t addr     = 0;
         MicroOp  uop;
-        size_t   req_id   = 0;
+        wire<32>   req_id   = 0;
 
         // SRAM snapshot captured in S1 (index already decoded)
         uint32_t set_idx  = 0;
@@ -57,7 +57,7 @@ struct S1S2Reg {
         uint32_t addr     = 0;
         uint32_t data     = 0; // word to write
         uint8_t  strb     = 0; // byte-enable
-        size_t   req_id   = 0;
+        wire<32>   req_id   = 0;
 
         uint32_t set_idx  = 0;
         uint32_t tag_snap [DCACHE_WAYS] = {};
@@ -119,7 +119,7 @@ private:
     struct ReqTrack {
         bool valid = false;
         bool is_store = false;
-        size_t req_id = 0;
+        wire<32> req_id = 0;
         uint32_t rob_idx = 0;
         uint32_t rob_flag = 0;
         uint64_t first_cycle = 0;
@@ -153,8 +153,8 @@ private:
 
 
     bool special_load_addr(uint32_t addr,uint32_t& mem_val,MicroOp &uop);
-    bool begin_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
+    bool begin_req_track(bool is_store, wire<32> req_id, uint32_t rob_idx,
                          uint32_t rob_flag);
-    void end_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
+    void end_req_track(bool is_store, wire<32> req_id, uint32_t rob_idx,
                        uint32_t rob_flag);
 };

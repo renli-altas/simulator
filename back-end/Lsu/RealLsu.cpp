@@ -5,6 +5,7 @@
 #include "TlbMmu.h"
 #include "config.h"
 #include "util.h"
+#include <chrono>
 #include <cstdio>
 #include <cstdint>
 #include <memory>
@@ -19,6 +20,25 @@ static inline bool is_amo_lr_uop(const MicroOp &uop) {
          ((uop.func7 >> 2) == AmoOp::LR);
 }
 namespace {
+using LsuClock = std::chrono::steady_clock;
+
+struct ScopedPerfNs {
+  uint64_t *total_ns = nullptr;
+  LsuClock::time_point start = LsuClock::now();
+
+  explicit ScopedPerfNs(uint64_t *dst) : total_ns(dst) {}
+
+  ~ScopedPerfNs() {
+    if (total_ns == nullptr) {
+      return;
+    }
+    *total_ns += static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            LsuClock::now() - start)
+            .count());
+  }
+};
+
 constexpr size_t kStqTokenFlagShift = STQ_IDX_WIDTH;
 constexpr uint32_t kDebugLoadPc = 0xc03679e0;
 constexpr uint32_t kDebugLoadInst = 0x02c12083;
@@ -69,10 +89,17 @@ inline bool commit_store_is_older_than_load(const StqCommitEntry &entry,
 }
 
 template <typename QueueT>
-inline auto *find_done_stq_entry_by_token(QueueT &queue, size_t token) {
+inline auto *find_done_stq_entry_by_token(QueueT &queue, size_t token,
+                                          PerfCount *perf = nullptr) {
+  if (perf != nullptr) {
+    perf->lsu_find_done_token_calls++;
+  }
   const uint32_t stq_idx = decode_stq_token_idx(token);
   const uint32_t stq_flag = decode_stq_token_flag(token);
   for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
+    if (perf != nullptr) {
+      perf->lsu_find_done_token_entries_scanned++;
+    }
     if (!queue.is_valid(slot)) {
       continue;
     }
@@ -86,8 +113,15 @@ inline auto *find_done_stq_entry_by_token(QueueT &queue, size_t token) {
 
 template <typename QueueT>
 inline bool queue_contains_stq_token(const QueueT &queue, uint32_t stq_idx,
-                                     uint32_t stq_flag) {
+                                     uint32_t stq_flag,
+                                     PerfCount *perf = nullptr) {
+  if (perf != nullptr) {
+    perf->lsu_store_alloc_token_check_calls++;
+  }
   for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
+    if (perf != nullptr) {
+      perf->lsu_store_alloc_token_check_entries_scanned++;
+    }
     if (!queue.is_valid(slot)) {
       continue;
     }
@@ -229,9 +263,68 @@ RealLsu::RealLsu(SimContext *ctx) : ctx(ctx) {
 }
 
 void RealLsu::init() {
-  memset(&cur, 0, sizeof(LSUState));
-  memset(&nxt, 0, sizeof(LSUState));
+  cur = LSUState{};
+  nxt = LSUState{};
+  lookup_ = LookupTables{};
+  mmu->flush();
   // memset(&out, 0, sizeof(LsuOut));
+}
+
+void RealLsu::clear_commit_lookup() {
+  for (int flag = 0; flag < 2; ++flag) {
+    for (int idx = 0; idx < ROB_NUM; ++idx) {
+      lookup_.commit_lookup_valid[flag][idx] = false;
+      lookup_.commit_lookup_slot[flag][idx] = 0;
+    }
+  }
+}
+
+void RealLsu::clear_done_lookup() {
+  for (int flag = 0; flag < 2; ++flag) {
+    for (int idx = 0; idx < ROB_NUM; ++idx) {
+      lookup_.done_lookup_valid[flag][idx] = false;
+      lookup_.done_lookup_slot[flag][idx] = 0;
+    }
+    for (int idx = 0; idx < STQ_SIZE; ++idx) {
+      lookup_.done_token_lookup_valid[flag][idx] = false;
+      lookup_.done_token_lookup_slot[flag][idx] = 0;
+    }
+  }
+}
+
+void RealLsu::rebuild_commit_lookup() {
+  clear_commit_lookup();
+  for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
+    if (!nxt.commit_stq.is_valid(slot)) {
+      continue;
+    }
+    const auto &entry = nxt.commit_stq.slot(slot);
+    const int rob_flag = static_cast<int>(entry.rob_flag);
+    const int rob_idx = static_cast<int>(entry.rob_idx);
+    lookup_.commit_lookup_valid[rob_flag][rob_idx] = true;
+    lookup_.commit_lookup_slot[rob_flag][rob_idx] =
+        static_cast<wire<STQ_IDX_WIDTH>>(slot);
+  }
+}
+
+std::pair<uint32_t, uint32_t>
+RealLsu::next_dispatch_stq_token(const LSUState &state) const {
+  const std::size_t done_count = state.done_stq.size();
+  const std::size_t commit_count = state.commit_stq.size();
+  const std::size_t live_count = done_count + commit_count;
+
+  uint32_t base_idx = static_cast<uint32_t>(state.done_stq.get_tail());
+  uint32_t base_flag = static_cast<uint32_t>(state.done_stq.get_tail_flag());
+  if (!state.done_stq.empty()) {
+    const auto &head = state.done_stq.front();
+    base_idx = head.stq_idx;
+    base_flag = head.stq_flag;
+  } else if (!state.commit_stq.empty()) {
+    const auto &head = state.commit_stq.front();
+    base_idx = head.stq_idx;
+    base_flag = head.stq_flag;
+  }
+  return advance_stq_slot(base_idx, base_flag, live_count);
 }
 
 // =========================================================
@@ -249,6 +342,7 @@ wire<LDQ_IDX_WIDTH> RealLsu::LDQ_Count() {
 }
 
 void RealLsu::comb_lsu2dis_info() {
+  ScopedPerfNs scoped(ctx ? &ctx->perf.lsu_host_time_comb_lsu2dis_ns : nullptr);
   Assert(out.lsu2dis != nullptr && "RealLsu::comb_lsu2dis_info: lsu2dis is null");
   *out.lsu2dis = {};
 
@@ -263,19 +357,7 @@ void RealLsu::comb_lsu2dis_info() {
   Assert(live_count <= STQ_SIZE &&
          "RealLsu: combined STQ occupancy overflow / token reuse detected");
 
-  uint32_t base_idx = static_cast<uint32_t>(cur.done_stq.get_tail());
-  uint32_t base_flag = static_cast<uint32_t>(cur.done_stq.get_tail_flag());
-  if (!cur.done_stq.empty()) {
-    const auto &head = cur.done_stq.front();
-    base_idx = head.stq_idx;
-    base_flag = head.stq_flag;
-  } else if (!cur.commit_stq.empty()) {
-    const auto &head = cur.commit_stq.front();
-    base_idx = head.stq_idx;
-    base_flag = head.stq_flag;
-  }
-  const auto [tail_idx, tail_flag] =
-      advance_stq_slot(base_idx, base_flag, live_count);
+  const auto [tail_idx, tail_flag] = next_dispatch_stq_token(cur);
   out.lsu2dis->stq_tail = tail_idx;
   out.lsu2dis->stq_tail_flag = tail_flag;
 
@@ -318,10 +400,20 @@ void RealLsu::comb_lsu2dis_info() {
 }
 StqDoneEntry RealLsu::get_done_stq_entry(int idx, uint32_t rob_idx,
                                          uint32_t rob_flag) const {
-  for (int i = 0; i < nxt.done_stq.size(); i++) {
-    if (nxt.done_stq[i].stq_idx == idx && nxt.done_stq[i].rob_idx == rob_idx &&
-        nxt.done_stq[i].rob_flag == rob_flag) {
-      return nxt.done_stq[i];
+  if (ctx != nullptr) {
+    ctx->perf.lsu_get_done_entry_calls++;
+  }
+  if (lookup_.done_lookup_valid[rob_flag][rob_idx]) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_get_done_entry_entries_scanned++;
+    }
+    const std::size_t slot = lookup_.done_lookup_slot[rob_flag][rob_idx];
+    if (nxt.done_stq.is_valid(slot)) {
+      const auto &entry = nxt.done_stq.slot(slot);
+      if (entry.stq_idx == idx && entry.rob_idx == rob_idx &&
+          entry.rob_flag == rob_flag) {
+        return entry;
+      }
     }
   }
 
@@ -352,6 +444,7 @@ StqDoneEntry RealLsu::get_done_stq_entry(int idx, uint32_t rob_idx,
 // 2. Execute 阶段: 接收 AGU/SDU 请求 (多端口轮询)
 // =========================================================
 void RealLsu::comb_recv() {
+  ScopedPerfNs scoped(ctx ? &ctx->perf.lsu_host_time_comb_recv_ns : nullptr);
   // 顶层当前采用直接变量赋值连线；这里每拍将端口硬连到 MMU。
   Assert(out.lsu2dcache != nullptr && "RealLsu::comb_recv: lsu2dcache is null");
   Assert(out.peripheral_req != nullptr &&
@@ -735,6 +828,7 @@ void RealLsu::comb_recv() {
 // 3. Writeback 阶段: 输出 Load 结果 (多端口写回)
 // =========================================================
 void RealLsu::comb_load_res() {
+  ScopedPerfNs scoped(ctx ? &ctx->perf.lsu_host_time_comb_load_res_ns : nullptr);
   // 1. 先清空所有写回端口
   Assert(out.lsu2exe != nullptr && "RealLsu::comb_load_res: lsu2exe is null");
   *out.lsu2exe = {};
@@ -829,30 +923,40 @@ void RealLsu::comb_load_res() {
   for (int i = 0; i < LSU_STA_COUNT; i++) {
     if (in.dcache2lsu->resp_ports.store_resps[i].valid) {
       const size_t token = in.dcache2lsu->resp_ports.store_resps[i].req_id;
-      if (auto *entry = find_done_stq_entry_by_token(nxt.done_stq, token)) {
-        if (is_debug_store_addr(entry->p_addr) || is_debug_store_data(entry->data)) {
+      const uint32_t stq_idx = decode_stq_token_idx(token);
+      const uint32_t stq_flag = decode_stq_token_flag(token);
+      if (ctx != nullptr) {
+        ctx->perf.lsu_find_done_token_calls++;
+      }
+      if (lookup_.done_token_lookup_valid[stq_flag][stq_idx]) {
+        if (ctx != nullptr) {
+          ctx->perf.lsu_find_done_token_entries_scanned++;
+        }
+        auto &entry =
+            nxt.done_stq.slot(lookup_.done_token_lookup_slot[stq_flag][stq_idx]);
+        if (is_debug_store_addr(entry.p_addr) || is_debug_store_data(entry.data)) {
           TEMP_BUG_TRACE_PRINTF(
               "[LSU STORE DBG][resp] rob=%u/%u stq=%u/%u replay=%u done=%d inflight=%d paddr=0x%08x data=0x%08x cyc=%lld\n",
-              (unsigned)entry->rob_idx, (unsigned)entry->rob_flag,
-              (unsigned)entry->stq_idx, (unsigned)entry->stq_flag,
+              (unsigned)entry.rob_idx, (unsigned)entry.rob_flag,
+              (unsigned)entry.stq_idx, (unsigned)entry.stq_flag,
               (unsigned)in.dcache2lsu->resp_ports.store_resps[i].replay,
-              (int)entry->done, (int)entry->inflight,
-              (uint32_t)entry->p_addr, (uint32_t)entry->data,
+              (int)entry.done, (int)entry.inflight,
+              (uint32_t)entry.p_addr, (uint32_t)entry.data,
               (long long)sim_time);
         }
-        if (!entry->done && entry->inflight) {
+        if (!entry.done && entry.inflight) {
           if (in.dcache2lsu->resp_ports.store_resps[i].replay == 0) {
-            entry->done = true;
-            entry->replay_priority = 0;
-            entry->inflight = false;
+            entry.done = true;
+            entry.replay_priority = 0;
+            entry.inflight = false;
           } else {
             // replay=3 is bank-conflict: it should be retried directly
             // on the next cycle and must not freeze the STQ head.
-            entry->replay_priority =
+            entry.replay_priority =
                 (in.dcache2lsu->resp_ports.store_resps[i].replay == 3)
                     ? 0
                     : in.dcache2lsu->resp_ports.store_resps[i].replay;
-            entry->inflight = false; // 等待下次重新发送
+            entry.inflight = false; // 等待下次重新发送
           }
         }
       } else {
@@ -866,19 +970,13 @@ void RealLsu::comb_load_res() {
   if (peripheral_resp.is_mmio && peripheral_resp.uop.op == UOP_STA) {
     const uint32_t stq_idx = peripheral_resp.uop.stq_idx;
     const uint32_t stq_flag = peripheral_resp.uop.stq_flag;
-    bool matched = false;
-    for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
-      if (!nxt.done_stq.is_valid(slot)) {
-        continue;
-      }
-      auto &entry = nxt.done_stq.slot(slot);
-      if (entry.stq_idx == stq_idx && entry.stq_flag == stq_flag) {
-        matched = true;
-        if (!entry.done && entry.inflight) {
-          entry.done = true;
-          entry.inflight = false;
-        }
-        break;
+    const bool matched = lookup_.done_token_lookup_valid[stq_flag][stq_idx];
+    if (matched) {
+      auto &entry =
+          nxt.done_stq.slot(lookup_.done_token_lookup_slot[stq_flag][stq_idx]);
+      if (!entry.done && entry.inflight) {
+        entry.done = true;
+        entry.inflight = false;
       }
     }
     if (!matched) {
@@ -1006,9 +1104,13 @@ void RealLsu::handle_store_data(const MicroOp &inst) {
 bool RealLsu::reserve_stq_entry(mask_t br_mask, uint32_t rob_idx,
                                 uint32_t rob_flag, uint32_t stq_idx,
                                 uint32_t stq_flag, uint32_t func3) {
-  Assert(!queue_contains_stq_token(nxt.done_stq, stq_idx, stq_flag) &&
-             !queue_contains_stq_token(nxt.commit_stq, stq_idx, stq_flag) &&
-         "RealLsu: STQ token reused before retirement");
+  if (ctx != nullptr) {
+    ctx->perf.lsu_store_alloc_token_check_calls++;
+    ctx->perf.lsu_store_alloc_token_check_entries_scanned++;
+  }
+  const auto [expect_idx, expect_flag] = next_dispatch_stq_token(nxt);
+  Assert(expect_idx == stq_idx && expect_flag == stq_flag &&
+         "RealLsu: unexpected STQ token / token reuse detected");
   const std::size_t alloc_slot = nxt.commit_stq.get_tail();
   const bool alloc_flag = nxt.commit_stq.get_tail_flag();
   StqCommitEntry entry = StqCommitEntry{};
@@ -1019,6 +1121,9 @@ bool RealLsu::reserve_stq_entry(mask_t br_mask, uint32_t rob_idx,
   entry.stq_flag = stq_flag;
   entry.func3 = func3;
   nxt.commit_stq.push(entry);
+  lookup_.commit_lookup_valid[rob_flag][rob_idx] = true;
+  lookup_.commit_lookup_slot[rob_flag][rob_idx] =
+      static_cast<wire<STQ_IDX_WIDTH>>(alloc_slot);
   if (rob_idx == 133 && rob_flag == 0) {
     TEMP_BUG_TRACE_PRINTF(
         "[LSU TRACE] alloc stq rob=%u/%u phys=%zu/%d token=%u/%u cyc=%lld\n",
@@ -1123,18 +1228,14 @@ void RealLsu::handle_global_flush() {
   if (nxt.pending_mmio_valid && nxt.pending_mmio_req.uop.op == UOP_STA) {
     const uint32_t stq_idx = nxt.pending_mmio_req.uop.stq_idx;
     const uint32_t stq_flag = nxt.pending_mmio_req.uop.stq_flag;
-    for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
-      if (!nxt.done_stq.is_valid(slot)) {
-        continue;
-      }
-      auto &entry = nxt.done_stq.slot(slot);
-      if (entry.stq_idx == stq_idx && entry.stq_flag == stq_flag) {
-        entry.inflight = false;
-        break;
-      }
+    if (lookup_.done_token_lookup_valid[stq_flag][stq_idx]) {
+      auto &entry =
+          nxt.done_stq.slot(lookup_.done_token_lookup_slot[stq_flag][stq_idx]);
+      entry.inflight = false;
     }
   }
   nxt.commit_stq.clear();
+  clear_commit_lookup();
   nxt.pending_sta_addr_reqs.clear();
   nxt.pending_mmio_valid = false;
   nxt.pending_mmio_req = {};
@@ -1173,6 +1274,7 @@ void RealLsu::handle_mispred(mask_t mask) {
       nxt.commit_stq,
       [&](const StqCommitEntry &entry) { return (entry.br_mask & mask) != 0; },
       "commit_stq");
+  rebuild_commit_lookup();
 }
 
 
@@ -1183,6 +1285,8 @@ void RealLsu::retire_stq_head_if_ready() {
   StqDoneEntry head = nxt.done_stq[0];
   while (head.done || head.suppress_write) {
     // Process the head entry
+    lookup_.done_lookup_valid[head.rob_flag][head.rob_idx] = false;
+    lookup_.done_token_lookup_valid[head.stq_flag][head.stq_idx] = false;
     nxt.done_stq.pop();
     if(nxt.done_stq.empty()) {
       break;
@@ -1193,6 +1297,8 @@ void RealLsu::retire_stq_head_if_ready() {
 }
 
 void RealLsu::commit_stores_from_rob() {
+  bool head_not_ready_blocked = false;
+  bool done_stq_full_blocked = false;
   for (int i = 0; i < COMMIT_WIDTH; i++) {
     if (!in.rob_commit->commit_entry[i].valid) {
       continue;
@@ -1205,12 +1311,14 @@ void RealLsu::commit_stores_from_rob() {
     const StqCommitEntry src = nxt.commit_stq.front();
     if(!src.addr_valid || !src.data_valid) {
       // 地址或数据未准备好，等待下一周期继续检查
+      head_not_ready_blocked = true;
       continue;
     }
     if (nxt.done_stq.full()) {
       // Keep the older committed store at the head of commit_stq and stop
       // consuming younger stores this cycle. This preserves store age order
       // and avoids overflowing done_stq.
+      done_stq_full_blocked = true;
       break;
     }
     StqDoneEntry dst{};
@@ -1234,13 +1342,30 @@ void RealLsu::commit_stores_from_rob() {
           (uint32_t)dst.p_addr, (uint32_t)dst.data, (long long)sim_time);
     }
     nxt.commit_stq.pop();
+    lookup_.commit_lookup_valid[src.rob_flag][src.rob_idx] = false;
+    const std::size_t done_slot = nxt.done_stq.get_tail();
     const bool ok = nxt.done_stq.push(std::move(dst));
     Assert(ok && "done_stq push failed unexpectedly");
+    lookup_.done_lookup_valid[src.rob_flag][src.rob_idx] = true;
+    lookup_.done_lookup_slot[src.rob_flag][src.rob_idx] =
+        static_cast<wire<STQ_IDX_WIDTH>>(done_slot);
+    lookup_.done_token_lookup_valid[src.stq_flag][src.stq_idx] = true;
+    lookup_.done_token_lookup_slot[src.stq_flag][src.stq_idx] =
+        static_cast<wire<STQ_IDX_WIDTH>>(done_slot);
 
+  }
+  if (ctx != nullptr) {
+    if (head_not_ready_blocked) {
+      ctx->perf.lsu_commit_blocked_head_not_ready_cycles++;
+    }
+    if (done_stq_full_blocked) {
+      ctx->perf.lsu_commit_blocked_done_stq_full_cycles++;
+    }
   }
 }
 
 void RealLsu::comb_pipeline(){
+  ScopedPerfNs scoped(ctx ? &ctx->perf.lsu_host_time_comb_pipeline_ns : nullptr);
   bool is_flush = in.rob_bcast->flush;
   bool is_mispred = in.dec_bcast->mispred;
 
@@ -1394,6 +1519,9 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
       find_commit_stq_entry_by_rob(inst.rob_idx, inst.rob_flag);
 
   if (commit_entry == nullptr) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_store_addr_retry_no_commit_entry_count++;
+    }
     if (inst.rob_idx == 133 && inst.rob_flag == 0) {
       TEMP_BUG_TRACE_PRINTF(
           "[LSU TRACE] store addr rob=%u/%u stq=%u/%u commit_entry=null cyc=%lld\n",
@@ -1418,6 +1546,9 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
         (uint32_t)pa, (long long)sim_time);
   }
   if (mmu_ret == AbstractMmu::Result::RETRY) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_store_addr_retry_mmu_count++;
+    }
     return false;
   }
 
@@ -1484,12 +1615,34 @@ bool RealLsu::finish_store_addr_once(const MicroOp &inst) {
 
 StqCommitEntry *RealLsu::find_commit_stq_entry_by_rob(uint32_t rob_idx,
                                                       uint32_t rob_flag) {
+  if (ctx != nullptr) {
+    ctx->perf.lsu_find_commit_calls++;
+  }
+  if (lookup_.commit_lookup_valid[rob_flag][rob_idx]) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_find_commit_entries_scanned++;
+    }
+    const std::size_t slot = lookup_.commit_lookup_slot[rob_flag][rob_idx];
+    if (nxt.commit_stq.is_valid(slot)) {
+      auto &entry = nxt.commit_stq.slot(slot);
+      if (entry.rob_idx == rob_idx && entry.rob_flag == rob_flag) {
+        return &entry;
+      }
+    }
+    lookup_.commit_lookup_valid[rob_flag][rob_idx] = false;
+  }
   for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_find_commit_entries_scanned++;
+    }
     if (!nxt.commit_stq.is_valid(slot)) {
       continue;
     }
     auto &entry = nxt.commit_stq.slot(slot);
     if (entry.rob_idx == rob_idx && entry.rob_flag == rob_flag) {
+      lookup_.commit_lookup_valid[rob_flag][rob_idx] = true;
+      lookup_.commit_lookup_slot[rob_flag][rob_idx] =
+          static_cast<wire<STQ_IDX_WIDTH>>(slot);
       return &entry;
     }
   }
@@ -1498,7 +1651,25 @@ StqCommitEntry *RealLsu::find_commit_stq_entry_by_rob(uint32_t rob_idx,
 
 const StqCommitEntry *RealLsu::find_commit_stq_entry_by_rob(
     uint32_t rob_idx, uint32_t rob_flag) const {
+  if (ctx != nullptr) {
+    ctx->perf.lsu_find_commit_calls++;
+  }
+  if (lookup_.commit_lookup_valid[rob_flag][rob_idx]) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_find_commit_entries_scanned++;
+    }
+    const std::size_t slot = lookup_.commit_lookup_slot[rob_flag][rob_idx];
+    if (nxt.commit_stq.is_valid(slot)) {
+      const auto &entry = nxt.commit_stq.slot(slot);
+      if (entry.rob_idx == rob_idx && entry.rob_flag == rob_flag) {
+        return &entry;
+      }
+    }
+  }
   for (std::size_t slot = 0; slot < STQ_SIZE; ++slot) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_find_commit_entries_scanned++;
+    }
     if (!nxt.commit_stq.is_valid(slot)) {
       continue;
     }
@@ -1557,6 +1728,7 @@ void RealLsu::free_ldq_entry(int idx) {
 // 6. Sequential Logic: 状态更新与时序模拟
 // =========================================================
 void RealLsu::seq() {
+  ScopedPerfNs scoped(ctx ? &ctx->perf.lsu_host_time_seq_ns : nullptr);
   cur = nxt;
 }
 
@@ -1654,6 +1826,9 @@ bool RealLsu::has_older_store_pending(const MicroOp &load_uop) const {
 
 StoreForwardResult RealLsu::check_store_forward(uint32_t p_addr,
                                                 const MicroOp &load_uop) {
+  if (ctx != nullptr) {
+    ctx->perf.lsu_check_store_forward_calls++;
+  }
   uint32_t current_word = 0;
   bool hit_any = false;
   const bool debug_target =
@@ -1663,6 +1838,9 @@ StoreForwardResult RealLsu::check_store_forward(uint32_t p_addr,
   // before commit_stq (younger not-yet-committed stores). Forwarding merges
   // from older to younger so that younger stores overwrite older bytes.
   for (std::size_t i = 0; i < nxt.done_stq.size(); ++i) {
+    if (ctx != nullptr) {
+      ctx->perf.lsu_check_store_forward_done_entries_scanned++;
+    }
     const StqDoneEntry entry = nxt.done_stq[i];
     if (entry.suppress_write) {
       continue;
@@ -1701,6 +1879,9 @@ StoreForwardResult RealLsu::check_store_forward(uint32_t p_addr,
   // while a long-lived load is still waiting to execute.
   if (!nxt.commit_stq.empty()) {
     for (std::size_t i = 0; i < nxt.commit_stq.size(); ++i) {
+      if (ctx != nullptr) {
+        ctx->perf.lsu_check_store_forward_commit_entries_scanned++;
+      }
       const StqCommitEntry entry = nxt.commit_stq[i];
       if (!commit_store_is_older_than_load(entry, load_uop)) {
         break;
