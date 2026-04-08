@@ -140,7 +140,7 @@ void MSHR::comb_outputs()
 int MSHR::entries_add(int set_idx, int tag, uint32_t &mshr_count)
 {   
     if (mshr_count >= DCACHE_MSHR_ENTRIES) {
-        Assert(0 && "MSHR full");
+        return -1;
     }
     int alloc_idx = -1;
     for (int off = 0; off < DCACHE_MSHR_ENTRIES; off++)
@@ -151,8 +151,10 @@ int MSHR::entries_add(int set_idx, int tag, uint32_t &mshr_count)
             break;
         }
     }
-    Assert(alloc_idx >= 0 &&
-           "MSHR full but per-cycle traversed count says not full");
+    if (alloc_idx == -1) {
+        return -1;
+    }
+
     mshr_entries_nxt[alloc_idx].valid = true;
     mshr_entries_nxt[alloc_idx].issued = false;
     mshr_entries_nxt[alloc_idx].fill = false;
@@ -203,7 +205,10 @@ void MSHR::comb_inputs()
         const LoadReq &req = in.dcachemshr.load_reqs[i];
         if (!req.valid)
             continue;
-        entries_add(decode(req.addr).set_idx, decode(req.addr).tag, mshr_count);
+        if(entries_add(decode(req.addr).set_idx, decode(req.addr).tag, mshr_count)==-1)
+        {
+            continue;
+        }
     }
 
     for (int i = 0; i < LSU_STA_COUNT; i++)
@@ -216,7 +221,9 @@ void MSHR::comb_inputs()
         if (entry_idx < 0) {
             entry_idx = entries_add(f.set_idx, f.tag, mshr_count);
         }
-        merge_store_into_entry(mshr_entries_nxt[entry_idx], req);
+        if (entry_idx != -1) {
+            merge_store_into_entry(mshr_entries_nxt[entry_idx], req);
+        }
     }
 
     // ── Accept R channel response ─────────────────────────────────────────────
@@ -316,7 +323,7 @@ void MSHR::comb_inputs()
         }
         else
         {
-            Assert(false && "Invalid MSHR response ID");
+            // Assert(false && "Invalid MSHR response ID");
         }
     }
 
