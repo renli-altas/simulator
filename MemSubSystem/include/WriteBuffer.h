@@ -47,6 +47,9 @@ struct WBIn {
     MSHRWBIO *mshrwb = nullptr;
     DcacheWBIO *dcachewb = nullptr;
     WbAxiIn *axi_in = nullptr;
+#if CONFIG_BSD
+    wire<32> addr;
+#endif
 
     void clear() {
         if (mshrwb != nullptr) {
@@ -64,6 +67,10 @@ struct WBOut {
     WBMSHRIO *wbmshr = nullptr;
     WBDcacheIO *wbdcache = nullptr;
     WbAxiOut *axi_out = nullptr;
+#if CONFIG_BSD
+    wire<1> find_valid;
+    wire<32> find_data;
+#endif
 
     void clear() {
         if (wbmshr != nullptr) {
@@ -81,10 +88,10 @@ struct WBOut {
 // WriteBuffer — queues dirty evictions and drains them over the AXI write port.
 //
 // Correct usage per cycle:
-//   1. wb_.comb_outputs()   ← sets out.full / out.free_count (from nxt.count)
-//   2. stage2_comb()        ← reads out.full/free_count, sets in.push_ports[]
-//   3. Bridge IC outputs → wb_.axi_in
-//   4. wb_.comb_inputs()    ← processes pushes + B channel + fills axi_out
+//   1. stage1/prepare_wb_queries() produce DCache → WB requests for this cycle
+//   2. Bridge IC outputs → wb_.axi_in
+//   3. wb_.comb_inputs()    ← processes merges/pushes/B channel into nxt
+//   4. wb_.comb_outputs1()  ← publishes final ready/bypass/merge/axi_out view
 //   5. Bridge wb_.axi_out → IC inputs; interconnect.comb_inputs()
 //   6. wb_.seq()            ← cur = nxt, reset nxt
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,9 +103,10 @@ public:
 
     void init();
 
-    // Phase 1: compute out.full and out.free_count from current nxt.count.
+    // Publish the current WB outputs derived from nxt, including MSHR ready,
+    // DCache bypass/merge responses, and the AXI write payload for the head.
     void comb_outputs();
-
+    void comb_fun();
     // Phase 2: process push requests from in.push_ports[], accept B channel
     // responses, and fill axi_out with the next AW+W request.
     // Reads axi_in (set by caller before invoking); writes axi_out.

@@ -141,9 +141,6 @@ void MSHR::comb_outputs()
     auto &replay_resp = *out.replay_resp;
     auto &mshrwb = *out.mshrwb;
     auto &axi_out = *out.axi_out;
-    const auto &dcachemshr = *in.dcachemshr;
-    const auto &wbmshr_in = *in.wbmshr;
-    const auto &axi_in = *in.axi_in;
 
     const uint32_t mshr_count = count_valid_mshr_entries(mshr_entries);
     mshr2dcache.free = DCACHE_MSHR_ENTRIES - mshr_count;
@@ -165,8 +162,9 @@ void MSHR::comb_outputs()
     std::memcpy(mshrwb.data, cur.wb_data, sizeof(mshrwb.data));
 
     drive_mshr_axi_req(axi_out, mshr_entries);
-    update_mshr_resp_ready(axi_out, dcachemshr, wbmshr_in, axi_in,
-                           mshr_entries);
+    // Final AXI resp_ready gating is recomputed in comb_inputs() after the
+    // WriteBuffer has published the refreshed same-cycle ready state.
+    axi_out.resp_ready = true;
 }
 
 int MSHR::entries_add(int set_idx, int tag, uint32_t &mshr_count)

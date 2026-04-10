@@ -85,13 +85,16 @@ struct AxiLlcTableRuntime {
     }
     const uint32_t base =
         unit_bytes == 0 ? 0 : static_cast<uint32_t>(req.way) * unit_bytes;
-    const uint32_t copy_bytes =
-        std::min(req.payload.size(), row_bytes > base ? row_bytes - base : 0u);
+    const size_t max_copy_bytes =
+        static_cast<size_t>(row_bytes > base ? row_bytes - base : 0u);
+    const size_t copy_bytes = std::min(req.payload.size(), max_copy_bytes);
     if (copy_bytes == 0) {
       return write_req;
     }
     std::memcpy(write_req.payload.data() + base, req.payload.data(), copy_bytes);
-    const uint32_t en_bytes = std::min((uint32_t)req.byte_enable.size(), copy_bytes);
+    const uint32_t en_bytes =
+        std::min<uint32_t>(static_cast<uint32_t>(req.byte_enable.size()),
+                           static_cast<uint32_t>(copy_bytes));
     for (uint32_t i = 0; i < en_bytes; ++i) {
       write_req.chunk_enable[base + i] = req.byte_enable[i];
     }
@@ -779,15 +782,12 @@ void MemSubsystem::comb() {
 
   // RealDcache::stage2_comb() consumes current-cycle MSHR/WB comb outputs.
   // Order:
-  // 1. WB comb_outputs exposes ready from the current WB view.
-  // 2. MSHR comb_outputs uses that ready to decide whether an AXI read response
-  //    may retire this cycle.
-  // 3. DCache stage1 snapshots the new requests into s1s2_nxt.
-  // 4. DCache emits WB bypass/merge queries for s1s2_nxt so WB responses are
-  //    ready when those requests reach stage2 in the following cycle.
-  // 5. WB comb_inputs consumes those queries immediately.
-  // 6. WB comb_outputs is refreshed so DCache stage2 sees same-cycle bypass.
-  wb_.comb_outputs();
+  // 1. MSHR comb_outputs publishes free/fill state from the current MSHR view.
+  // 2. DCache stage1 snapshots the new requests into s1s2_nxt.
+  // 3. DCache emits WB bypass/merge queries for s1s2_nxt.
+  // 4. WB comb_inputs consumes those queries immediately and updates nxt.
+  // 5. WB comb_outputs1 publishes the final same-cycle ready/bypass/merge/AXI
+  //    view consumed by DCache stage2 and the later MSHR comb_inputs().
   mshr_.comb_outputs();
   dcache_.stage1_comb();
   dcache_.prepare_wb_queries_for_next_stage2();

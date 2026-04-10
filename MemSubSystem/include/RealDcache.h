@@ -10,20 +10,11 @@
 #include "IO.h"
 #include <cstddef>
 #include <cstdint>
-
-#define DCACHE_WAY_BITS_PLUS (DCACHE_WAY_BITS + 1) // Extra bit for encoding "no way matched" in LRU updates
+// Extra bit for encoding "no way matched" in LRU updates
 // ─────────────────────────────────────────────────────────────────────────────
 // Pending store write (hit path) — records a store hit so that seq() can apply
 // the byte-merge to the data SRAM.
 // ─────────────────────────────────────────────────────────────────────────────
-struct PendingWrite {
-    wire<1>     valid    = false;
-    wire<DCACHE_SET_BITS> set_idx  = 0;
-    wire<DCACHE_WAY_BITS> way_idx  = 0;
-    wire<DCACHE_OFFSET_BITS> word_off = 0;
-    wire<32> data     = 0;
-    wire<4>  strb     = 0;   // byte-enable (4 bits used for a 32-bit word)
-};
 
 struct FillWrite{
     wire<1>     valid    = false;
@@ -114,6 +105,8 @@ public:
 
     // Stage 2: evaluate S1S2 pipeline register, generate responses.
     void stage2_comb();
+
+    void bsd_comb();
 private:
     // // Sub-modules
     // MSHR        mshr_;
@@ -131,11 +124,7 @@ private:
     PendingWrite pending_writes_[LSU_STA_COUNT];
 
     // ── LRU update log (recorded by comb(), applied by seq()) ─────────────────
-    struct LruUpdate {
-        wire<1>     valid   = false;
-        wire<DCACHE_SET_BITS> set_idx = 0;
-        wire<DCACHE_WAY_BITS_PLUS>  way     = 0;
-    } lru_updates_[LSU_LDU_COUNT + LSU_STA_COUNT];
+    LruUpdate lru_updates_[LSU_LDU_COUNT + LSU_STA_COUNT];
 
 
     bool special_load_addr(uint32_t addr,uint32_t& mem_val,MicroOp &uop);

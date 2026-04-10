@@ -704,3 +704,41 @@ void RealDcache::seq() {
     }
 
 }
+
+void RealDcache::bsd_comb(){
+#if CONFIG_BSD
+    for (int i = 0; i < LSU_STA_COUNT; i++) {
+        if (out.pendingwrite[i] != nullptr) {
+            *out.pendingwrite[i] = pending_writes_[i];
+        }
+    }
+    for (int i = LSU_STA_COUNT; i < LSU_LDU_COUNT + LSU_STA_COUNT; i++) {
+        if (out.pendingwrite[i] != nullptr) {
+            *out.pendingwrite[i] = {};
+        }
+    }
+
+    for (int i = 0; i < LSU_LDU_COUNT + LSU_STA_COUNT; i++) {
+        if (out.lru_updates[i] != nullptr) {
+            *out.lru_updates[i] = lru_updates_[i];
+        }
+    }
+
+    if (out.mshr_write != nullptr) {
+        out.mshr_write->valid = in.mshr2dcache->fill.valid;
+        out.mshr_write->set_idx = decode(in.mshr2dcache->fill.addr).set_idx;
+        out.mshr_write->way = in.mshr2dcache->fill.way;
+        out.mshr_write->tag = decode(in.mshr2dcache->fill.addr).tag;
+        for (int d = 0; d < DCACHE_LINE_WORDS; d++) {
+            out.mshr_write->data[d] = in.mshr2dcache->fill.data[d];
+        }
+        out.mshr_write->dirty = in.mshr2dcache->fill.dirty;
+    }
+
+    if (in.coherence_in != nullptr && out.coherence_out != nullptr) {
+        const auto result =
+            query_coherent_word(in.coherence_in->addr, out.coherence_out->data);
+        out.coherence_out->result = static_cast<wire<2>>(result);
+    }
+#endif
+}

@@ -128,15 +128,20 @@ void WriteBuffer::clear_outputs() {
 // Uses nxt.count so that pushes committed in previous comb_inputs() calls
 // (within the same cycle) are already reflected.
 // ─────────────────────────────────────────────────────────────────────────────
+void WriteBuffer::comb_fun(){
+#if CONFIG_BSD
+    out.find_valid = write_buffer_lookup_word(in.addr, out.find_data);
+#endif
+}
+
 void WriteBuffer::comb_outputs() {
     clear_outputs();
     auto &wbmshr = *out.wbmshr;
     auto &wbdcache = *out.wbdcache;
 
-    // MemSubsystem::comb() calls wb_.comb_outputs() again after wb_.comb_inputs()
-    // and before mshr_.comb_inputs(). The MSHR therefore samples the refreshed
-    // nxt-count view, and producing one victim in the next cycle is safe as
-    // long as there is one actual slot left in the FIFO.
+    // Publish the final same-cycle WB view after comb_inputs() has updated
+    // nxt/head/merge state. Both DCache stage2 and the later MSHR comb_inputs()
+    // consume this refreshed snapshot.
     wbmshr.ready = (nxt.count < DCACHE_WB_ENTRIES);
 
     for(int i=0;i<LSU_LDU_COUNT;i++){
@@ -163,6 +168,12 @@ void WriteBuffer::comb_outputs() {
 // ─────────────────────────────────────────────────────────────────────────────
 void WriteBuffer::comb_inputs() {
     clear_outputs();
+#if CONFIG_BSD
+    if(cur.count > DCACHE_WB_ENTRIES){
+        cur.count = DCACHE_WB_ENTRIES; 
+    }
+#endif
+
     auto &mshrwb = *in.mshrwb;
     auto &dcachewb = *in.dcachewb;
     auto &axi_in = *in.axi_in;

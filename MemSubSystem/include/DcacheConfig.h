@@ -3,14 +3,23 @@
 #include <cstdint>
 #include <config.h>
 #include "IO.h"
-#define DCACHE_BANKS       4
-#define DCACHE_SET_BITS      (__builtin_ctz(DCACHE_SETS))
-#define DCACHE_TAG_BITS      (32 - DCACHE_SET_BITS - DCACHE_OFFSET_BITS)
-#define DCACHE_WAY_BITS      (__builtin_ctz(DCACHE_WAYS))
-#define DCACHE_WB_BITS       (__builtin_ctz(DCACHE_WB_ENTRIES))
-#define DCACHE_MSHR_BITS     (__builtin_ctz(DCACHE_MSHR_ENTRIES))
+#define DCACHE_BANKS              4
+#define DCACHE_SET_BITS           (__builtin_ctz(DCACHE_SETS))
+#define DCACHE_TAG_BITS           (32 - DCACHE_SET_BITS - DCACHE_OFFSET_BITS)
+#define DCACHE_WAY_BITS           (__builtin_ctz(DCACHE_WAYS))
+#define DCACHE_PLRU_BITS          (DCACHE_WAYS - 1)
+#define DCACHE_WB_BITS            (__builtin_ctz(DCACHE_WB_ENTRIES))
+#define DCACHE_WB_BITS_PLUS       (__builtin_ctz(DCACHE_WB_ENTRIES + 1))
+#define DCACHE_MSHR_BITS          (__builtin_ctz(DCACHE_MSHR_ENTRIES))
+#define DCACHE_MSHR_BITS_PLUS     (__builtin_ctz(DCACHE_MSHR_ENTRIES + 1))
 
-#define CONFIG_BSD 0
+#define CONFIG_BSD 1
+
+
+#define DCACHE_WAY_BITS_PLUS (DCACHE_WAY_BITS + 1) 
+
+static_assert(is_power_of_two_u64(DCACHE_WAYS),
+              "Tree-PLRU requires DCACHE_WAYS to be a power of two");
 
 extern uint32_t tag_array  [DCACHE_SETS][DCACHE_WAYS];
 extern uint32_t data_array [DCACHE_SETS][DCACHE_WAYS][DCACHE_LINE_WORDS];
@@ -18,9 +27,32 @@ extern bool     valid_array[DCACHE_SETS][DCACHE_WAYS];
 extern bool     dirty_array[DCACHE_SETS][DCACHE_WAYS];
 
 
-// LRU counter per set (value = most-recently-used way; simple counter scheme)
-// lru_state[set][way] = age; higher value = more recently used.
-extern uint8_t  lru_state[DCACHE_SETS][DCACHE_WAYS];
+// Tree-PLRU bits per set. Each internal node records which subtree should be
+// chosen next as the replacement candidate.
+extern uint8_t  plru_state[DCACHE_SETS][DCACHE_PLRU_BITS];
+
+struct PendingWrite {
+    wire<1>     valid    = false;
+    wire<DCACHE_SET_BITS> set_idx  = 0;
+    wire<DCACHE_WAY_BITS> way_idx  = 0;
+    wire<DCACHE_OFFSET_BITS> word_off = 0;
+    wire<32> data     = 0;
+    wire<4>  strb     = 0;   // byte-enable (4 bits used for a 32-bit word)
+};
+
+struct MSHRWrite{
+    wire<1> valid = false;
+    wire<DCACHE_SET_BITS> set_idx = 0;
+    wire<DCACHE_WAY_BITS> way = 0;
+    wire<DCACHE_TAG_BITS> tag = 0;
+    wire<32> data[DCACHE_LINE_WORDS] = {};
+    wire<1> dirty = false;
+};
+struct LruUpdate {
+    wire<1>     valid   = false;
+    wire<DCACHE_SET_BITS> set_idx = 0;
+    wire<DCACHE_WAY_BITS_PLUS>  way     = 0;
+};
 
 struct BSDOUT{
     wire<1> valid;
@@ -46,7 +78,7 @@ struct MSHR_FILL{
 };
 struct MSHRDcacheIO {
     MSHR_FILL fill;
-    wire<DCACHE_MSHR_BITS> free;
+    wire<DCACHE_MSHR_BITS_PLUS> free;
 };
 
 struct DcacheMSHRIO {
@@ -113,12 +145,22 @@ struct WBDcacheIO{
     MergeResp merge_resp[LSU_STA_COUNT];
 };
 
+struct DcacheCoherenInIO {
+    wire<32>addr;
+};
+struct DcacheCoherenOutIO {
+    wire<32> data;
+    wire<2> result; // 0: miss, 1: retry, 2: hit
+};
+
 struct DcacheINIO {
     LsuDcacheIO  *lsu2dcache  = nullptr;  // LSU → DCache requests
     MSHRDcacheIO *mshr2dcache = nullptr;  // MSHR fill/free → DCache
     WBDcacheIO   *wb2dcache   = nullptr;  // WB bypass/merge resp → DCache
     #if CONFIG_BSD
     BSDIN *bsd_in[LSU_LDU_COUNT + LSU_STA_COUNT]; // For BSD: output the chosen victim for debugging
+    DcacheCoherenInIO *coherence_in; // For coherence queries from DCache to coherence module
+     // For tracking pending misses for the store queue and load queue
     #endif
 };
 
@@ -128,6 +170,10 @@ struct DcacheOUTIO {
     DcacheWBIO   *dcache2wb   = nullptr;  // DCache bypass/merge req → WB
     #if CONFIG_BSD
     BSDOUT *bsd_out[LSU_LDU_COUNT + LSU_STA_COUNT] ; // For BSD: output the chosen victim for debugging
+    PendingWrite *pendingwrite[LSU_LDU_COUNT + LSU_STA_COUNT]; // For tracking pending misses for the store queue and load queue
+    LruUpdate *lru_updates[LSU_LDU_COUNT + LSU_STA_COUNT]; // For tracking PLRU updates for the store queue and load queue
+    MSHRWrite *mshr_write; // For tracking MSHR fill responses for the store queue and load queue
+    DcacheCoherenOutIO *coherence_out; // For coherence query responses
     #endif
 };
 
@@ -135,20 +181,20 @@ struct DcacheOUTIO {
 // Address field decomposition helper
 // ─────────────────────────────────────────────────────────────────────────────
 struct AddrFields {
-    uint32_t tag;
-    uint32_t set_idx;
-    uint32_t word_off; // which 32-bit word within the cacheline [4:2]
+    wire<DCACHE_TAG_BITS> tag;
+    wire<DCACHE_SET_BITS> set_idx;
+    wire<DCACHE_OFFSET_BITS> word_off; // which 32-bit word within the cacheline [4:2]
     uint32_t bank;     // set_idx & (DCACHE_BANKS - 1)
 };
 
 struct MSHREntry {
-    bool valid;
-    bool issued;
-    bool fill;
-    uint32_t index;
-    uint32_t tag;
-    bool merged_store_dirty;
-    uint32_t merged_store_data[DCACHE_LINE_WORDS];
+    wire<1> valid;
+    wire<1> issued;
+    wire<1> fill;
+    wire<DCACHE_SET_BITS> index;
+    wire<DCACHE_TAG_BITS> tag;
+    wire<1> merged_store_dirty;
+    wire<32> merged_store_data[DCACHE_LINE_WORDS];
     uint8_t merged_store_strb[DCACHE_LINE_WORDS];
 };
 
