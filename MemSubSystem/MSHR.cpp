@@ -73,8 +73,7 @@ void drive_mshr_axi_req(MshrAxiOut &axi_out, const MSHREntry *entries) {
 }
 
 void update_mshr_resp_ready(MshrAxiOut &axi_out, const DcacheMSHRIO &dcachemshr,
-                            const WBMSHRIO &wbmshr, const MshrAxiIn &axi_in,
-                            const MSHREntry *entries) {
+                            const WBMSHRIO &wbmshr, const MshrAxiIn &axi_in, const MSHREntry *entries) {
     axi_out.resp_ready = true;
     if (!axi_in.resp_valid) {
         return;
@@ -95,6 +94,37 @@ void update_mshr_resp_ready(MshrAxiOut &axi_out, const DcacheMSHRIO &dcachemshr,
         victim_has_same_cycle_store_hit(dcachemshr, e.index, lru_idx);
     const bool need_wb_evict =
         dirty_array[e.index][lru_idx] || same_cycle_store_hit;
+    if (need_wb_evict && !wbmshr.ready) {
+        axi_out.resp_ready = false;
+    }
+}
+
+void update_mshr_resp_ready(MshrAxiOut &axi_out, const DcacheMSHRIO &dcachemshr,
+                            const WBMSHRIO &wbmshr, const MshrAxiIn &axi_in,MSHRBSDOUT &bsd_out ,
+                            const MSHRBSDIN &bsd_in, const MSHREntry *entries) {
+    axi_out.resp_ready = true;
+    if (!axi_in.resp_valid) {
+        return;
+    }
+
+    const uint8_t resp_id = axi_in.resp_id;
+    if (resp_id >= DCACHE_MSHR_ENTRIES) {
+        return;
+    }
+
+    const MSHREntry &e = entries[resp_id];
+    if (!e.valid || !e.issued || e.fill) {
+        return;
+    }
+
+    const uint32_t lru_idx = choose_lru_victim(e.index);
+    const bool same_cycle_store_hit =
+        victim_has_same_cycle_store_hit(dcachemshr, e.index, lru_idx);
+    bsd_out.dirty_read_valid_1 = true;
+    bsd_out.dirty_read_addr_1 = e.index << DCACHE_WAY_BITS | lru_idx;
+    const bool dirty_read = bsd_in.dirty_valid_1 ? bsd_in.dirty_read_1 : 0;
+    const bool need_wb_evict =
+        dirty_read || same_cycle_store_hit;
     if (need_wb_evict && !wbmshr.ready) {
         axi_out.resp_ready = false;
     }
@@ -206,6 +236,10 @@ void MSHR::comb_inputs()
     const auto &dcachemshr = *in.dcachemshr;
     const auto &wbmshr = *in.wbmshr;
     const auto &axi_in = *in.axi_in;
+    #if CONFIG_BSD
+    const auto &bsd_in = *in.bsd_in;
+    auto &bsd_out = *out.bsd_out;
+    #endif
 
     uint32_t mshr_count = count_valid_mshr_entries(mshr_entries_nxt);
 
@@ -221,9 +255,12 @@ void MSHR::comb_inputs()
     std::memset(nxt.wb_data, 0, sizeof(nxt.wb_data));
 
     drive_mshr_axi_req(axi_out, mshr_entries);
+    #if !CONFIG_BSD
     update_mshr_resp_ready(axi_out, dcachemshr, wbmshr, axi_in,
                            mshr_entries);
-
+    #else
+    update_mshr_resp_ready(axi_out, dcachemshr, wbmshr, axi_in, bsd_out,bsd_in, mshr_entries);
+    #endif
     // ── Process alloc and secondary requests ─────────────────────────────────
     for (int i = 0; i < LSU_LDU_COUNT; i++)
     {
@@ -263,12 +300,25 @@ void MSHR::comb_inputs()
                 const uint32_t fill_set = mshr_entries[resp_id].index;
                 const uint32_t fill_tag = mshr_entries[resp_id].tag;
                 const uint32_t lru_idx = choose_lru_victim(fill_set);
+                #if !CONFIG_BSD
                 const uint32_t victim_tag = tag_array[fill_set][lru_idx];
+                #else 
+                out.bsd_out->tag_read_addr_valid = true;
+                out.bsd_out->tag_read_addr = (fill_set << DCACHE_WAY_BITS) | lru_idx;
+                const uint32_t victim_tag = in.bsd_in->tag_valid ? in.bsd_in->tag_read : 0;
+                #endif
                 const bool same_cycle_store_hit =
                     victim_has_same_cycle_store_hit(dcachemshr, fill_set,
                                                     lru_idx);
+                #if !CONFIG_BSD
                 bool need_wb_evict =
                     dirty_array[fill_set][lru_idx] || same_cycle_store_hit;
+                #else
+                out.bsd_out->dirty_read_valid_2 = true;
+                out.bsd_out->dirty_read_addr_2 = (fill_set << DCACHE_WAY_BITS) | lru_idx;
+                const bool victim_dirty = in.bsd_in->dirty_valid_2 && in.bsd_in->dirty_read_2 ? true : false;
+                bool need_wb_evict = victim_dirty || same_cycle_store_hit;
+                #endif
                 bool can_consume_resp = (!need_wb_evict) || wbmshr.ready;
                 if (!can_consume_resp)
                 {
@@ -280,10 +330,19 @@ void MSHR::comb_inputs()
                     {
                         nxt.wb_valid = true;
                         nxt.wb_addr = get_addr(fill_set, victim_tag, 0);
+                        #if !CONFIG_BSD
                         for (int w = 0; w < DCACHE_LINE_WORDS; w++)
                         {
                             nxt.wb_data[w] = data_array[fill_set][lru_idx][w];
                         }
+                        #else
+                        out.bsd_out->data_read_valid = true;
+                        out.bsd_out->data_read_addr = (fill_set << DCACHE_WAY_BITS) | lru_idx;
+                        for (int w = 0; w < DCACHE_LINE_WORDS; w++)
+                        {
+                            nxt.wb_data[w] = in.bsd_in->data_valid ? in.bsd_in->data_read[w] : 0;
+                        }
+                        #endif
                         // Preserve same-cycle store-hit updates that have not
                         // reached data_array yet (committed in RealDcache::seq()).
                         // Apply in store-port order to match seq() semantics.

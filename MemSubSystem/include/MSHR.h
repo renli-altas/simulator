@@ -51,10 +51,41 @@ struct MshrAxiOut {
     wire<1>     resp_ready     = false;  // ready to accept R data
 };
 
+struct MSHRBSDIN{
+    wire<1> tag_valid;
+    wire<DCACHE_TAG_BITS> tag_read;
+
+    wire<1> dirty_valid_1;
+    wire<1> dirty_read_1;
+
+    wire<1> dirty_valid_2;
+    wire<1> dirty_read_2;
+
+    wire<1> data_valid;
+    wire<32> data_read[DCACHE_LINE_WORDS];
+};
+
+struct MSHRBSDOUT{
+    wire<1> tag_read_addr_valid;
+    wire<DCACHE_SET_BITS + DCACHE_WAY_BITS> tag_read_addr;
+
+    wire<1> dirty_read_valid_1;
+    wire<DCACHE_SET_BITS + DCACHE_WAY_BITS> dirty_read_addr_1;
+
+    wire<1> dirty_read_valid_2;
+    wire<DCACHE_SET_BITS + DCACHE_WAY_BITS> dirty_read_addr_2;
+
+    wire<1> data_read_valid;
+    wire<DCACHE_SET_BITS + DCACHE_WAY_BITS> data_read_addr;
+};
+
 struct MSHRINIO{
     DcacheMSHRIO *dcachemshr = nullptr;
     WBMSHRIO *wbmshr = nullptr;
     MshrAxiIn  *axi_in = nullptr;
+    #if CONFIG_BSD
+    MSHRBSDIN *bsd_in = nullptr;
+    #endif
 
     void clear() {
         if (dcachemshr != nullptr) {
@@ -66,6 +97,11 @@ struct MSHRINIO{
         if (axi_in != nullptr) {
             *axi_in = {};
         }
+        #if CONFIG_BSD
+        if (bsd_in != nullptr) {
+            *bsd_in = {};
+        }
+        #endif
     }
 };
 struct MSHROUTIO{
@@ -73,6 +109,9 @@ struct MSHROUTIO{
     MshrAxiOut *axi_out = nullptr;
     MSHRWBIO *mshrwb = nullptr;
     ReplayResp *replay_resp = nullptr;
+    #if CONFIG_BSD
+    MSHRBSDOUT *bsd_out = nullptr;
+    #endif
 
     void clear() {
         if (mshr2dcache != nullptr) {
@@ -87,6 +126,11 @@ struct MSHROUTIO{
         if (replay_resp != nullptr) {
             *replay_resp = {};
         }
+        #if CONFIG_BSD
+        if (bsd_out != nullptr) {
+            *bsd_out = {};
+        }
+        #endif
     }
 };
 class MSHR {
