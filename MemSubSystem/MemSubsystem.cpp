@@ -810,16 +810,18 @@ void MemSubsystem::comb() {
   mshr_.in.axi_in = mshr_axi_in;
   wb_.in.axi_in   = wb_axi_in;
 
-  // RealDcache::stage2_comb() consumes current-cycle MSHR/WB comb outputs.
+  // RealDcache now uses a 1-cycle hit path: stage1 builds the current snapshot,
+  // WB answers same-cycle bypass/merge queries, then stage2 evaluates that same
+  // snapshot immediately.
   // Order:
   // 1. WB comb_outputs exposes ready from the current WB view.
   // 2. MSHR comb_outputs uses that ready to decide whether an AXI read response
   //    may retire this cycle.
   // 3. DCache stage1 snapshots the new requests into s1s2_nxt.
-  // 4. DCache emits WB bypass/merge queries for s1s2_cur, the requests that
-  //    stage2 will actually evaluate in this cycle.
+  // 4. DCache emits WB bypass/merge queries for that same current snapshot.
   // 5. WB comb_inputs consumes those queries immediately.
   // 6. WB comb_outputs is refreshed so DCache stage2 sees same-cycle bypass.
+  // 7. DCache stage2 resolves the current snapshot, so hits return in 1 cycle.
   wb_.comb_outputs();
   mshr_.in.wbmshr = wb_.out.wbmshr;
   mshr_.comb_outputs();

@@ -30,7 +30,8 @@ struct FillWrite{
     uint32_t data[DCACHE_LINE_WORDS] = {};
 };
 // ─────────────────────────────────────────────────────────────────────────────
-// S1S2Reg — pipeline register between Stage 1 (SRAM read) and Stage 2 (hit check)
+// S1S2Reg — current-cycle Stage-1 snapshot consumed by the Stage-2 hit/miss
+// evaluator later in the same comb pass.
 // ─────────────────────────────────────────────────────────────────────────────
 struct S1S2Reg {
     // Load slots
@@ -76,14 +77,20 @@ struct S1S2Reg {
 // Geometry (configurable via config.h):
 //   DCACHE_SETS sets × DCACHE_WAYS ways × 32-byte cachelines.
 //
-// Pipeline: 2 stages.
-//   Stage 1 (S1): index decode + SRAM array read → feeds S1S2 pipeline register.
-//   Stage 2 (S2): tag compare, hit/miss decision, MSHR/WB interaction → outputs.
+// Hit path: 1 cycle.
+//   Stage 1 (S1): index decode + SRAM array read → fills current-cycle snapshot.
+//   Stage 2 (S2): same-cycle tag compare, hit/miss decision, MSHR/WB interaction.
 //
 // All SRAM state is updated in seq() only; comb() is pure-read + output logic.
 // ─────────────────────────────────────────────────────────────────────────────
 class RealDcache : public AbstractDcache {
 public:
+    enum class ReqTrackFinishKind : uint8_t {
+        Generic = 0,
+        LoadHit = 1,
+        StoreHit = 2,
+    };
+
     enum class CoherentQueryResult : uint8_t {
         Miss = 0,
         Retry = 1,
@@ -108,9 +115,8 @@ public:
     // Stage 1: decode incoming requests, detect bank conflicts, snapshot SRAMs.
     void stage1_comb();
 
-    // Drive WB bypass/merge queries for the S2 pipeline register currently
-    // being evaluated. This must stay aligned with s1s2_cur rather than the
-    // new requests seen by stage1 in the same cycle.
+    // Drive WB bypass/merge queries for the current-cycle Stage-1 snapshot that
+    // stage2_comb() will evaluate later in the same comb pass.
     void prepare_wb_queries_for_stage2();
 
     // Stage 2: evaluate S1S2 pipeline register, generate responses.
@@ -138,9 +144,8 @@ private:
     // ── SRAM arrays (updated only in seq()) ──────────────────────────────────
     
 
-    // ── Pipeline registers ────────────────────────────────────────────────────
-    S1S2Reg s1s2_cur; // latched at start of cycle
-    S1S2Reg s1s2_nxt; // computed by comb(); committed by seq()
+    // ── Current-cycle snapshot ────────────────────────────────────────────────
+    S1S2Reg s1s2_nxt; // current-cycle Stage-1 snapshot consumed by stage2_comb()
 
     // ── Pending store hits (recorded by comb(), applied by seq()) ─────────────
     // One pending write per store port.
@@ -158,5 +163,7 @@ private:
     bool begin_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
                          uint32_t rob_flag);
     void end_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
-                       uint32_t rob_flag);
+                       uint32_t rob_flag,
+                       ReqTrackFinishKind finish_kind =
+                           ReqTrackFinishKind::Generic);
 };

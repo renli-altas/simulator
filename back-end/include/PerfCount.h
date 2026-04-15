@@ -63,6 +63,10 @@ public:
   uint64_t l1d_axi_write_samples = 0;
   uint64_t l1d_mem_inst_total_cycles = 0;
   uint64_t l1d_mem_inst_samples = 0;
+  uint64_t l1d_load_hit_return_total_cycles = 0;
+  uint64_t l1d_load_hit_return_samples = 0;
+  uint64_t l1d_store_hit_return_total_cycles = 0;
+  uint64_t l1d_store_hit_return_samples = 0;
   uint64_t mmio_inst_count = 0;
   uint64_t mmio_load_count = 0;
   uint64_t mmio_store_count = 0;
@@ -254,6 +258,10 @@ public:
     l1d_axi_write_samples = 0;
     l1d_mem_inst_total_cycles = 0;
     l1d_mem_inst_samples = 0;
+    l1d_load_hit_return_total_cycles = 0;
+    l1d_load_hit_return_samples = 0;
+    l1d_store_hit_return_total_cycles = 0;
+    l1d_store_hit_return_samples = 0;
     mmio_inst_count = 0;
     mmio_load_count = 0;
     mmio_store_count = 0;
@@ -605,6 +613,16 @@ public:
             ? 0.0
             : static_cast<double>(l1d_mem_inst_total_cycles) /
                   static_cast<double>(l1d_mem_inst_samples);
+    const double avg_load_hit_return_latency =
+        (l1d_load_hit_return_samples == 0)
+            ? 0.0
+            : static_cast<double>(l1d_load_hit_return_total_cycles) /
+                  static_cast<double>(l1d_load_hit_return_samples);
+    const double avg_store_hit_return_latency =
+        (l1d_store_hit_return_samples == 0)
+            ? 0.0
+            : static_cast<double>(l1d_store_hit_return_total_cycles) /
+                  static_cast<double>(l1d_store_hit_return_samples);
     const uint64_t l1d_replay_reason_total =
         l1d_replay_bank_conflict + l1d_replay_mshr_full + l1d_replay_wait_mshr;
     const double l1d_replay_bank_conflict_ratio =
@@ -672,6 +690,10 @@ public:
            avg_axi_write, l1d_axi_write_samples);
     printf("\033[38;5;34mAvg Mem-Inst Latency : %.6f cycles (samples=%ld)\033[0m\n",
            avg_mem_inst_latency, l1d_mem_inst_samples);
+    printf("\033[38;5;34mAvg Load-Hit Return  : %.6f cycles (samples=%ld)\033[0m\n",
+           avg_load_hit_return_latency, l1d_load_hit_return_samples);
+    printf("\033[38;5;34mAvg Store-Hit Return : %.6f cycles (samples=%ld)\033[0m\n",
+           avg_store_hit_return_latency, l1d_store_hit_return_samples);
     printf("\033[38;5;34mMMIO Inst Count      : %ld\033[0m\n", mmio_inst_count);
     printf("\033[38;5;34mMMIO Load Count      : %ld\033[0m\n", mmio_load_count);
     printf("\033[38;5;34mMMIO Store Count     : %ld\033[0m\n", mmio_store_count);

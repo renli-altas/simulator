@@ -57,7 +57,6 @@ void pending_miss_add(PendingMissLine *pending_miss_lines,
 
 void RealDcache::init() {
     init_dcache();
-    s1s2_cur = {};
     s1s2_nxt = {};
     for (auto &pending_write : pending_writes_) {
         pending_write = {};
@@ -104,7 +103,8 @@ bool RealDcache::begin_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
 }
 
 void RealDcache::end_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
-                               uint32_t rob_flag) {
+                               uint32_t rob_flag,
+                               ReqTrackFinishKind finish_kind) {
     for (int i = 0; i < kReqTrackSize; i++) {
         auto &e = req_track_[i];
         if (!e.valid) {
@@ -115,8 +115,22 @@ void RealDcache::end_req_track(bool is_store, size_t req_id, uint32_t rob_idx,
             if (ctx != nullptr && sim_time >= 0) {
                 const uint64_t now = static_cast<uint64_t>(sim_time);
                 if (now >= e.first_cycle) {
-                    ctx->perf.l1d_mem_inst_total_cycles += (now - e.first_cycle);
+                    const uint64_t latency = now - e.first_cycle;
+                    ctx->perf.l1d_mem_inst_total_cycles += latency;
                     ctx->perf.l1d_mem_inst_samples++;
+                    switch (finish_kind) {
+                    case ReqTrackFinishKind::LoadHit:
+                        ctx->perf.l1d_load_hit_return_total_cycles += latency;
+                        ctx->perf.l1d_load_hit_return_samples++;
+                        break;
+                    case ReqTrackFinishKind::StoreHit:
+                        ctx->perf.l1d_store_hit_return_total_cycles += latency;
+                        ctx->perf.l1d_store_hit_return_samples++;
+                        break;
+                    case ReqTrackFinishKind::Generic:
+                    default:
+                        break;
+                    }
                 }
             }
             e = {};
@@ -195,7 +209,7 @@ RealDcache::query_coherent_word(uint32_t addr, uint32_t &data) const {
 // Stage 1 — called from comb().
 //
 // Reads incoming requests from lsu2dcache, detects bank conflicts, and
-// snapshots the SRAM arrays into s1s2_nxt.
+// snapshots the SRAM arrays into s1s2_nxt for same-cycle stage2 evaluation.
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::stage1_comb() {
     s1s2_nxt = {};
@@ -310,7 +324,7 @@ void RealDcache::prepare_wb_queries_for_stage2() {
 
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
         dcache2wb->bypass_req[i] = {};
-        const S1S2Reg::LoadSlot &slot = s1s2_cur.loads[i];
+        const S1S2Reg::LoadSlot &slot = s1s2_nxt.loads[i];
         if (!slot.valid || slot.replayed) {
             continue;
         }
@@ -320,7 +334,7 @@ void RealDcache::prepare_wb_queries_for_stage2() {
 
     for (int i = 0; i < LSU_STA_COUNT; i++) {
         dcache2wb->merge_req[i] = {};
-        const S1S2Reg::StoreSlot &slot = s1s2_cur.stores[i];
+        const S1S2Reg::StoreSlot &slot = s1s2_nxt.stores[i];
         if (!slot.valid || slot.replayed) {
             continue;
         }
@@ -334,7 +348,7 @@ void RealDcache::prepare_wb_queries_for_stage2() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Stage 2 — called from comb().
 //
-// Processes s1s2_cur (the pipeline register from the previous cycle):
+// Processes s1s2_nxt (the current-cycle Stage-1 snapshot):
 //   - Tag comparison → hit or miss.
 //   - Hit: extract data, form response.
 //   - Miss: set mshr_.in / wb_.in signals; replay if resources are full.
@@ -363,7 +377,7 @@ void RealDcache::stage2_comb() {
     {
         uint32_t store_probe_free_entries = mshr_free_entries;
         for (int i = 0; i < LSU_STA_COUNT; i++) {
-            const S1S2Reg::StoreSlot &slot = s1s2_cur.stores[i];
+            const S1S2Reg::StoreSlot &slot = s1s2_nxt.stores[i];
             if (!slot.valid || slot.replayed) {
                 continue;
             }
@@ -405,7 +419,7 @@ void RealDcache::stage2_comb() {
     // ── Load ports ────────────────────────────────────────────────────────────
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
         dcache2mshr->load_reqs[i].valid = false; // Default to no load request; set to true on load miss
-        const S1S2Reg::LoadSlot &slot = s1s2_cur.loads[i];
+        const S1S2Reg::LoadSlot &slot = s1s2_nxt.loads[i];
         LoadResp &resp = dcache2lsu->resp_ports.load_resps[i];
 
         if (!slot.valid) continue;
@@ -486,7 +500,7 @@ void RealDcache::stage2_comb() {
         }
         else if (mshr_pending_line) {
             // Once a line has an active MSHR/fill in flight, the cache snapshot
-            // seen in s1s2_cur can be stale relative to the eventual refill or
+            // seen in s1s2_nxt can be stale relative to the eventual refill or
             // same-line store merges. Returning a plain hit here lets PTW/LSU
             // observe transient old PTE/data values and commit false faults.
             resp.valid = true;
@@ -521,7 +535,8 @@ void RealDcache::stage2_comb() {
             resp.data   = slot.data_snap[hit_way][f.word_off];
             resp.uop    = slot.uop;
             resp.req_id = slot.req_id;
-            end_req_track(false, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
+            end_req_track(false, slot.req_id, slot.uop.rob_idx,
+                          slot.uop.rob_flag, ReqTrackFinishKind::LoadHit);
             lru_updates_[i] = {true, slot.set_idx, hit_way};
         } else {
             if(mshr_fill_match){
@@ -598,7 +613,7 @@ void RealDcache::stage2_comb() {
     for (int i = 0; i < LSU_STA_COUNT; i++) {
         dcache2mshr->store_reqs[i].valid = false; // Default to no store request; set to true on store miss
         dcache2mshr->store_hit_updates[i].valid = false;
-        const S1S2Reg::StoreSlot &slot = s1s2_cur.stores[i];
+        const S1S2Reg::StoreSlot &slot = s1s2_nxt.stores[i];
         StoreResp &resp = dcache2lsu->resp_ports.store_resps[i];
 
         if (!slot.valid) continue;
@@ -692,7 +707,8 @@ void RealDcache::stage2_comb() {
                 resp.valid  = true;
                 resp.replay = 0;
                 resp.req_id = slot.req_id;
-                end_req_track(true, slot.req_id, slot.uop.rob_idx, slot.uop.rob_flag);
+                end_req_track(true, slot.req_id, slot.uop.rob_idx,
+                              slot.uop.rob_flag, ReqTrackFinishKind::StoreHit);
 
                 pending_writes_[i] = {
                     true,
@@ -805,18 +821,17 @@ void RealDcache::stage2_comb() {
 // comb — top-level combinational evaluation for one cycle.
 //
 // Ordering:
-//   1. Set mshr_.in lookups — provide s1s2_cur line addresses (stable from seq)
-//   2. mshr_.comb_outputs() — compute lookup results, fill delivery, full flag
+//   1. mshr_.comb_outputs() — compute lookup results, fill delivery, full flag
 //      MUST precede stage1_comb() so fill_set_idx is known for bank-conflict
 //      detection against the current cycle's new requests.
-//   3. wb_.comb_outputs()   — compute full / free_count
-//   4. stage1_comb()        — snapshot SRAMs, detect bank conflicts
+//   2. stage1_comb()        — snapshot SRAMs, detect bank conflicts
 //      (inter-request + fill-bank conflicts both handled here)
-//   5. stage2_comb()        — tag compare, responses, set alloc/secondary/push
-//   6. Bridge IC outputs → mshr_.axi_in, wb_.axi_in
-//   7. mshr_.comb_inputs()  — process alloc/secondary, fill axi_out
-//   8. wb_.comb_inputs()    — process pushes, fill axi_out
-//   9. Bridge mshr_.axi_out, wb_.axi_out → IC inputs
+//   3. prepare_wb_queries_for_stage2() — query WB for the current snapshot
+//   4. stage2_comb()        — same-cycle tag compare, responses, set alloc/secondary/push
+//   5. Bridge IC outputs → mshr_.axi_in, wb_.axi_in
+//   6. mshr_.comb_inputs()  — process alloc/secondary, fill axi_out
+//   7. wb_.comb_inputs()    — process pushes, fill axi_out
+//   8. Bridge mshr_.axi_out, wb_.axi_out → IC inputs
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::comb() {
     assert(lsu2dcache  != nullptr && "lsu2dcache pointer not set");
@@ -835,9 +850,6 @@ void RealDcache::comb() {
 // seq — advance all state on the simulated clock edge.
 // ─────────────────────────────────────────────────────────────────────────────
 void RealDcache::seq() {
-    // 1. Advance pipeline register.
-    s1s2_cur = s1s2_nxt;
-
     for (int i = 0; i < LSU_STA_COUNT; i++) {
         const PendingWrite &pw = pending_writes_[i];
         if (!pw.valid) continue;
@@ -847,7 +859,6 @@ void RealDcache::seq() {
     }
 
 
-    // 2. Apply store hits.
     if (mshr2dcache->fill.valid) {
         write_dcache_line(decode(mshr2dcache->fill.addr).set_idx,
                           mshr2dcache->fill.way,
@@ -859,7 +870,7 @@ void RealDcache::seq() {
         }
     }
 
-    // 4. Apply LRU updates from hit accesses this cycle.
+    // Apply LRU updates from hit accesses this cycle.
     for (int i = 0; i < LSU_LDU_COUNT + LSU_STA_COUNT; i++) {
         const LruUpdate &u = lru_updates_[i];
         if (!u.valid || u.way < 0) continue;
