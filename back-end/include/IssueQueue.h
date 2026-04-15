@@ -126,28 +126,52 @@ struct IqStoredEntry {
   IqStoredUop uop;
 };
 
+struct IssueQueueIn {
+  std::vector<IqStoredEntry> enq_reqs;
+  uint32_t wake_pregs[MAX_WAKEUP_PORTS] = {};
+  wire<1> wake_valid[MAX_WAKEUP_PORTS] = {};
+  wire<1> issue_block = 0;
+  wire<1> flush_all = 0;
+  wire<1> flush_br = 0;
+  wire<BR_MASK_WIDTH> flush_br_mask = 0;
+  wire<BR_MASK_WIDTH> clear_mask = 0;
+  wire<1> port_ready[ISSUE_WIDTH] = {};
+  wire<MAX_UOP_TYPE> port_fu_ready_mask[ISSUE_WIDTH] = {};
+};
+
+struct IssueQueueOut {
+  wire<IQ_READY_NUM_WIDTH> free_slots = 0;
+  IqStoredEntry issue_grants[ISSUE_WIDTH];
+};
+
 // ==========================================
 // 2. IssueQueue (纯逻辑，不含IO)
 // ==========================================
 class IssueQueue {
 public:
-  int id;
+  IssueQueueIn in;
+  IssueQueueOut out;
+
+private:
   int size;
   int dispatch_width;
   std::vector<PortBinding> ports;
+  int wake_words_per_row;
 
   std::vector<IqStoredEntry> entry;
   std::vector<IqStoredEntry> entry_1;
   int count, count_1;
-  int wake_words_per_row;
 
   // Wakeup Matrix: [Physical Register] -> Bitmask of IQ slots
   std::vector<uint64_t> wake_matrix_src1;
   std::vector<uint64_t> wake_matrix_src2;
+  std::vector<uint64_t> wake_matrix_src1_1;
+  std::vector<uint64_t> wake_matrix_src2_1;
 
+
+public:
   IssueQueue(const IssueQueueConfig &cfg)
-      : id(cfg.id), size(cfg.size),
-        dispatch_width(cfg.dispatch_width), // <--- 初始化
+      : size(cfg.size), dispatch_width(cfg.dispatch_width), // <--- 初始化
         ports(cfg.ports) {
     entry.resize(size);
     entry_1.resize(size);
@@ -159,8 +183,126 @@ public:
     // [preg][word_idx], where each word tracks 64 IQ slots.
     wake_matrix_src1.resize(PRF_NUM * wake_words_per_row, 0);
     wake_matrix_src2.resize(PRF_NUM * wake_words_per_row, 0);
+    wake_matrix_src1_1.resize(PRF_NUM * wake_words_per_row, 0);
+    wake_matrix_src2_1.resize(PRF_NUM * wake_words_per_row, 0);
+
+    in.enq_reqs.resize(dispatch_width);
   }
 
+  void comb_begin() {
+    entry_1 = entry;
+    count_1 = count;
+    wake_matrix_src1_1 = wake_matrix_src1;
+    wake_matrix_src2_1 = wake_matrix_src2;
+    out.free_slots = size - count;
+    for (auto &grant : out.issue_grants) {
+      grant = {};
+    }
+    for (int i = 0; i < MAX_WAKEUP_PORTS; i++) {
+      in.wake_pregs[i] = 0;
+      in.wake_valid[i] = 0;
+    }
+    in.issue_block = 0;
+    in.flush_all = 0;
+    in.flush_br = 0;
+    in.flush_br_mask = 0;
+    in.clear_mask = 0;
+    for (auto &req : in.enq_reqs) {
+      req = {};
+    }
+    for (int i = 0; i < ISSUE_WIDTH; i++) {
+      in.port_ready[i] = 0;
+      in.port_fu_ready_mask[i] = 0;
+    }
+  }
+
+  void comb_enq() {
+    for (const auto &req : in.enq_reqs) {
+      if (!req.valid) {
+        continue;
+      }
+      int success = enqueue(req);
+      Assert(success && "发射队列溢出！Dispatch 逻辑故障！");
+    }
+    out.free_slots = size - count_1;
+  }
+
+  void comb_wakeup() {
+    for (int i = 0; i < MAX_WAKEUP_PORTS; i++) {
+      if (!in.wake_valid[i]) {
+        continue;
+      }
+      uint32_t preg = in.wake_pregs[i];
+      if (preg >= PRF_NUM) {
+        continue;
+      }
+      size_t row_base = matrix_row_base(preg);
+
+      for (int w = 0; w < wake_words_per_row; w++) {
+        uint64_t mask1 = wake_matrix_src1_1[row_base + w];
+        while (mask1) {
+          int bit = __builtin_ctzll(mask1);
+          int idx = (w << 6) + bit;
+          if (idx < size && entry_1[idx].valid && entry_1[idx].uop.src1_en &&
+              entry_1[idx].uop.src1_busy && entry_1[idx].uop.src1_preg == preg) {
+            entry_1[idx].uop.src1_busy = false;
+          }
+          mask1 &= (mask1 - 1);
+        }
+        wake_matrix_src1_1[row_base + w] = 0;
+
+        uint64_t mask2 = wake_matrix_src2_1[row_base + w];
+        while (mask2) {
+          int bit = __builtin_ctzll(mask2);
+          int idx = (w << 6) + bit;
+          if (idx < size && entry_1[idx].valid && entry_1[idx].uop.src2_en &&
+              entry_1[idx].uop.src2_busy && entry_1[idx].uop.src2_preg == preg) {
+            entry_1[idx].uop.src2_busy = false;
+          }
+          mask2 &= (mask2 - 1);
+        }
+        wake_matrix_src2_1[row_base + w] = 0;
+      }
+    }
+  }
+
+  void comb_issue() {
+    for (auto &grant : out.issue_grants) {
+      grant = {};
+    }
+    std::vector<std::pair<int, int>> scheduled_pairs = schedule();
+    std::vector<int> committed_indices;
+    committed_indices.reserve(scheduled_pairs.size());
+
+    for (const auto &pair : scheduled_pairs) {
+      int entry_idx = pair.first;
+      int phys_port = pair.second;
+      uint64_t req_bit = (1ULL << static_cast<uint32_t>(entry[entry_idx].uop.op));
+      if (in.port_ready[phys_port] && (in.port_fu_ready_mask[phys_port] & req_bit) &&
+          !in.issue_block) {
+        out.issue_grants[phys_port].valid = true;
+        out.issue_grants[phys_port].uop = entry[entry_idx].uop;
+        committed_indices.push_back(entry_idx);
+      }
+    }
+
+    commit_issue(committed_indices);
+    out.free_slots = size - count_1;
+  }
+
+  void comb_flush() {
+    if (in.flush_all) {
+      flush_all();
+    } else if (in.flush_br) {
+      flush_br(in.flush_br_mask);
+    }
+    if (in.clear_mask) {
+      clear_br(in.clear_mask);
+    }
+    out.free_slots = size - count_1;
+  }
+
+private:
   // 入队 (返回成功入队的个数)
   int enqueue(const IqStoredEntry &inst) {
     if (count_1 >= size)
@@ -177,44 +319,6 @@ public:
     }
     return 0;
   }
-
-  // 唤醒逻辑 (Matrix-Based)
-  void wakeup(const std::vector<uint32_t> &pregs) {
-    for (uint32_t preg : pregs) {
-      if (preg >= PRF_NUM) {
-        continue;
-      }
-      size_t row_base = matrix_row_base(preg);
-
-      for (int w = 0; w < wake_words_per_row; w++) {
-        uint64_t mask1 = wake_matrix_src1[row_base + w];
-        while (mask1) {
-          int bit = __builtin_ctzll(mask1);
-          int idx = (w << 6) + bit;
-          if (idx < size && entry_1[idx].valid && entry_1[idx].uop.src1_en &&
-              entry_1[idx].uop.src1_busy && entry_1[idx].uop.src1_preg == preg) {
-            entry_1[idx].uop.src1_busy = false;
-          }
-          mask1 &= (mask1 - 1);
-        }
-        wake_matrix_src1[row_base + w] = 0;
-
-        uint64_t mask2 = wake_matrix_src2[row_base + w];
-        while (mask2) {
-          int bit = __builtin_ctzll(mask2);
-          int idx = (w << 6) + bit;
-          if (idx < size && entry_1[idx].valid && entry_1[idx].uop.src2_en &&
-              entry_1[idx].uop.src2_busy && entry_1[idx].uop.src2_preg == preg) {
-            entry_1[idx].uop.src2_busy = false;
-          }
-          mask2 &= (mask2 - 1);
-        }
-        wake_matrix_src2[row_base + w] = 0;
-      }
-    }
-  }
-
-
 
   // Flush
   void flush_br(wire<BR_MASK_WIDTH> br_mask) {
@@ -247,8 +351,8 @@ public:
     count_1 = 0;
     
     // Clear Wakeup Matrices
-    std::fill(wake_matrix_src1.begin(), wake_matrix_src1.end(), 0);
-    std::fill(wake_matrix_src2.begin(), wake_matrix_src2.end(), 0);
+    std::fill(wake_matrix_src1_1.begin(), wake_matrix_src1_1.end(), 0);
+    std::fill(wake_matrix_src2_1.begin(), wake_matrix_src2_1.end(), 0);
   }
 
   // 提交调度结果 (将选中的指令移出队列)
@@ -262,11 +366,15 @@ public:
     }
   }
 
-  void tick() {
+public:
+  void seq() {
     entry = entry_1;
     count = count_1;
+    wake_matrix_src1 = wake_matrix_src1_1;
+    wake_matrix_src2 = wake_matrix_src2_1;
   }
 
+private:
   std::vector<std::pair<int, int>> schedule() {
     std::vector<std::pair<int, int>> result;
 
@@ -360,11 +468,6 @@ public:
 
     return result;
   }
-
-  // 用于 Store Mask 扫描的只读访问
-  const std::vector<IqStoredEntry> &get_entries_1() const { return entry_1; }
-
-private:
   size_t matrix_row_base(uint32_t preg) const {
     return static_cast<size_t>(preg) * static_cast<size_t>(wake_words_per_row);
   }
@@ -384,13 +487,13 @@ private:
     if (ent.uop.src1_en && ent.uop.src1_busy) {
       uint32_t preg = ent.uop.src1_preg;
       if (preg < PRF_NUM) {
-        wake_matrix_src1[matrix_row_base(preg) + word] |= bit;
+        wake_matrix_src1_1[matrix_row_base(preg) + word] |= bit;
       }
     }
     if (ent.uop.src2_en && ent.uop.src2_busy) {
       uint32_t preg = ent.uop.src2_preg;
       if (preg < PRF_NUM) {
-        wake_matrix_src2[matrix_row_base(preg) + word] |= bit;
+        wake_matrix_src2_1[matrix_row_base(preg) + word] |= bit;
       }
     }
   }
@@ -403,13 +506,13 @@ private:
     if (ent.uop.src1_en) {
       uint32_t preg = ent.uop.src1_preg;
       if (preg < PRF_NUM) {
-        wake_matrix_src1[matrix_row_base(preg) + word] &= clear_mask;
+        wake_matrix_src1_1[matrix_row_base(preg) + word] &= clear_mask;
       }
     }
     if (ent.uop.src2_en) {
       uint32_t preg = ent.uop.src2_preg;
       if (preg < PRF_NUM) {
-        wake_matrix_src2[matrix_row_base(preg) + word] &= clear_mask;
+        wake_matrix_src2_1[matrix_row_base(preg) + word] &= clear_mask;
       }
     }
   }
