@@ -45,7 +45,9 @@
 ### 3.2 唤醒来源
 
 1. 慢速唤醒：`prf_awake`（Load/回写）。
-2. 延迟唤醒：`latency_pipe` 倒计时归零。
+2. 延迟唤醒：
+   - `MUL`：固定延迟移位寄存器 `mul_wake_pipe` 末级命中。
+   - `DIV/FP`：迭代槽位 `div_wake_slots/fp_wake_slots` 的 `countdown==0`。
 3. 快速唤醒：本拍发射且单周期完成的目的寄存器。
 
 ---
@@ -53,55 +55,55 @@
 ## 4. 组合逻辑功能描述 (Combinational Logic)
 
 ### 4.1 `comb_begin`
-- **功能描述**：复制 IQ 与延迟管线状态到 `_1` 工作副本。
-- **输入依赖**：`iqs[].entry/count`, `latency_pipe`。
-- **输出更新**：`iqs[].entry_1/count_1`, `latency_pipe_1`。
+- **功能描述**：调用各 IQ 的 `comb_begin()` 建立本拍工作副本并清零 IQ 瞬时输入，再复制延迟管线到 `_1`。
+- **输入依赖**：`iqs[]`, `mul_wake_pipe/div_wake_slots/fp_wake_slots`。
+- **输出更新**：IQ 内部 `_1` 状态与 `iq.out.free_slots`，`*_wake_*_1`。
 - **约束/优先级**：仅镜像，不改变调度决策。
 
 ### 4.2 `comb_ready`
 - **功能描述**：计算各 IQ 可接收条目数。
-- **输入依赖**：`iqs[i].size/count`。
+- **输入依赖**：`iqs[i].out.free_slots`。
 - **输出更新**：`out.iss2dis->ready_num[i]`。
 - **约束/优先级**：纯容量通告。
 
 ### 4.3 `comb_enq`
-- **功能描述**：将 `dis2iss` 请求入队对应 IQ。
-- **输入依赖**：`in.dis2iss->req`, `configs[i].dispatch_width`, 当前 IQ 状态, `out.iss_awake`（入队前唤醒叠加）。
-- **输出更新**：IQ 内部条目（通过 `enqueue` 写 `entry_1/count_1`）。
+- **功能描述**：将 `dis2iss` 请求写入 `iq.in.enq_reqs` 并调用 `iq.comb_enq()`。
+- **输入依赖**：`in.dis2iss->req`, `configs[i].dispatch_width`, `out.iss_awake`（入队前唤醒叠加）。
+- **输出更新**：IQ 内部条目（经 `iq.in` 驱动写入 `_1`）。
 - **约束/优先级**：入队失败触发 Assert；仅 valid 请求入队。
 
 ### 4.4 `comb_issue`
-- **功能描述**：从各 IQ 选择可发射条目并驱动 `iss2prf`。
-- **输入依赖**：`q.schedule()` 结果, `in.exe2iss->ready`, `in.exe2iss->fu_ready_mask`, `in.rob_bcast->flush`, `in.dec_bcast->mispred`。
-- **输出更新**：`out.iss2prf->iss_entry[]`, IQ `commit_issue` 状态。
+- **功能描述**：通过 `iq.in.{issue_block,port_ready,port_fu_ready_mask}` 驱动各 IQ 发射，并消费 `iq.out.issue_grants` 生成 `iss2prf`。
+- **输入依赖**：`in.exe2iss->ready`, `in.exe2iss->fu_ready_mask`, `in.rob_bcast->flush`, `in.dec_bcast->mispred`, `iq.out.issue_grants`。
+- **输出更新**：`out.iss2prf->iss_entry[]`，IQ 内部提交状态（由 `iq.comb_issue()` 完成）。
 - **约束/优先级**：需同时满足端口 ready 与 FU mask；flush/mispred 时不发射。
 
 ### 4.5 `comb_calc_latency_next`
 - **功能描述**：构建下一拍延迟唤醒列表。
-- **输入依赖**：`latency_pipe`, `out.iss2prf->iss_entry`, `get_latency(op)`。
-- **输出更新**：`latency_pipe_1`。
+- **输入依赖**：`mul_wake_pipe/div_wake_slots/fp_wake_slots`, `out.iss2prf->iss_entry`, `get_latency(op)`。
+- **输出更新**：`mul_wake_pipe_1/div_wake_slots_1/fp_wake_slots_1`。
 - **约束/优先级**：仅 `latency>1 && dest_en` 进入延迟管线。
 
 ### 4.6 `comb_awake`
-- **功能描述**：汇总三类唤醒源并执行 IQ 唤醒与外部广播。
-- **输入依赖**：`in.prf_awake`, `latency_pipe`, `out.iss2prf->iss_entry`, `get_latency(op)`, `iqs[]`。
-- **输出更新**：`iqs[].wakeup(...)`, `out.iss_awake->wake[]`。
+- **功能描述**：汇总三类唤醒源后写入 `iq.in.wake_valid[] + iq.in.wake_pregs[]` 并调用 `iq.comb_wakeup()`，同时对外广播。
+- **输入依赖**：`in.prf_awake`, `mul_wake_pipe/div_wake_slots/fp_wake_slots`, `out.iss2prf->iss_entry`, `get_latency(op)`, `iqs[]`。
+- **输出更新**：IQ 等待项就绪位、`out.iss_awake->wake[]`。
 - **约束/优先级**：唤醒端口数不超过 `MAX_WAKEUP_PORTS`。
 
 ### 4.7 `comb_flush`
-- **功能描述**：处理 flush/mispred 清空，并清除已解析分支 bit。
-- **输入依赖**：`in.rob_bcast->flush`, `in.dec_bcast->{mispred,br_mask,clear_mask}`, `latency_pipe_1`, `iqs[]`。
-- **输出更新**：IQ 内容与 `latency_pipe(_1)`。
+- **功能描述**：通过 `iq.in.{flush_all,flush_br,flush_br_mask,clear_mask}` 驱动 `iq.comb_flush()`，并同步清理延迟管线。
+- **输入依赖**：`in.rob_bcast->flush`, `in.dec_bcast->{mispred,br_mask,clear_mask}`, `*_wake_*_1`, `iqs[]`。
+- **输出更新**：IQ 内容与 `mul/div/fp wake` 状态（含 `_1`）。
 - **约束/优先级**：flush 高于 mispred；clear_mask 作用于存活条目。
 
 ---
 
 ## 5. IQ 建模说明（特殊）
-当前 `IssueQueue` 子模块在代码上更偏“软件容器 + 调度算法”风格，而不是严格 RTL 级 SRAM/CAM 分解：
+当前 `IssueQueue` 子模块采用“内部状态 + 对外 IO”建模，`Isu` 仅通过 `iq.in/iq.out` 交互：
 
-1. 以 `entry/count` 与 `schedule()/commit_issue()` 抽象行为。
+1. 组合路径以 `comb_begin/comb_enq/comb_wakeup/comb_issue/comb_flush` 组织，时序由 `seq()` 提交。
 2. 端口与能力通过配置动态绑定，而非固定硬编码网表。
-3. 文档中建议将其视作“周期准确行为模型”，而非门级实现描述。
+3. 仍是周期准确行为模型，不等价于门级网表分解。
 
 ---
 
@@ -114,10 +116,44 @@
 
 ---
 
-## 7. 资源占用 (Resource Usage)
+## 7. 存储器类型与端口
 
-| 名称 | 规格 | 描述 |
+
+### 7.1 IQ 条目阵列（`iqs[i].entry`）
+类型：多组寄存器堆（每个 IQ 一组）
+
+| 深度 | 读端口 | 写端口 |
 | :--- | :--- | :--- |
-| IQ 条目数组 | `sum(GLOBAL_IQ_CONFIG[i].size)` | 各 IQ 存储待发射条目 |
-| 延迟唤醒管线 | 动态向量 | 跟踪多周期目的寄存器倒计时 |
-| 唤醒广播口 | `MAX_WAKEUP_PORTS` | 对外发布本拍唤醒结果 |
+| `sum_i GLOBAL_IQ_CONFIG[i].size` | `sum_i GLOBAL_IQ_CONFIG[i].size`（调度全表读） | `sum_i (GLOBAL_IQ_CONFIG[i].dispatch_width + GLOBAL_IQ_CONFIG[i].port_num)`（入队+出队） |
+
+端口分配说明：
+- 写口 A：`comb_enq` 每个 IQ 每拍最多写 `dispatch_width` 个新条目。
+- 写口 B：`comb_issue` 每个 IQ 每拍最多提交 `port_num` 个已发射条目（置 invalid）。
+- 读口：`schedule()` 读取条目做 ready/年龄/端口匹配。
+
+### 7.2 IQ Wakeup Matrix（`wake_matrix_src1/src2`）
+类型：位图寄存器堆（依赖反向索引）
+
+| 深度 | 读端口 | 写端口 |
+| :--- | :--- | :--- |
+| `2 * PRF_NUM * ceil(GLOBAL_IQ_CONFIG[i].size/64)`（每个 IQ） | `MAX_WAKEUP_PORTS`（每个 IQ） | `GLOBAL_IQ_CONFIG[i].dispatch_width + GLOBAL_IQ_CONFIG[i].port_num + MAX_WAKEUP_PORTS`（每个 IQ） |
+
+端口分配说明：
+- 写口 A：入队时 `set_dep_bits_for_slot` 设置源依赖位。
+- 写口 B：发射出队时 `clear_dep_bits_for_slot` 清除依赖位。
+- 读/写口 C：`comb_wakeup()` 按 preg 读取对应 bitmask，并在处理后清零该行词位。
+
+实现风格说明：
+- Wakeup Matrix 采用双态寄存器建模：`wake_matrix_src{1,2}` / `wake_matrix_src{1,2}_1`。
+- `comb_begin` 先执行 `*_1 <- *`，组合阶段统一读写 `_1`，`seq()` 再提交到当前态。
+
+### 7.3 延迟唤醒结构（`mul/div/fp`）
+类型：`MUL` 为移位寄存器，`DIV/FP` 为迭代计数槽位
+
+| 深度 | 读端口 | 写端口 |
+| :--- | :--- | :--- |
+| `MUL`: `ISU_MUL_WAKE_DEPTH * ISU_MUL_WAKE_SLOT_NUM`；`DIV/FP`: 各自槽位数 | 全表遍历读 | 全表重建写 |
+
+端口分配说明：
+- `comb_calc_latency_next` 读取旧状态并重建 `*_1`（`DIV/FP` 倒计时递减 + `MUL` 移位 + 新发射多周期条目入队）。
+- `comb_flush` 在 `flush/mispred` 下执行清空或按 `br_mask` 删除。
