@@ -183,7 +183,7 @@ constexpr int CONFIG_SIM_DDR_LATENCY_CALC = static_cast<int>(
     div_round_u64(CONFIG_DDR_READ_LATENCY_FS, CONFIG_CPU_CYCLE_FS));
 
 #ifndef CONFIG_SIM_DDR_LATENCY
-#define CONFIG_SIM_DDR_LATENCY CONFIG_SIM_DDR_LATENCY_CALC
+#define CONFIG_SIM_DDR_LATENCY 30
 #endif
 #ifndef CONFIG_AXI_KIT_SIM_DDR_WRITE_RESP_LATENCY
 // Extra full cycles to wait after the final W beat before B can become visible.
