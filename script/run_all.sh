@@ -1,11 +1,14 @@
 #!/bin/bash
 
 # ================= 配置区域 =================
-SIMULATOR="${SIMULATOR:-./build/simulator}"
-CKPT_ROOT="${CKPT_ROOT:-/share/personal/S/houruyao/simpoint/rv32imab_ckpt_1gb_ram}"
-RESULT_DIR="${RESULT_DIR:-./results_restore}"
-MAX_COMMIT_INST="${MAX_COMMIT_INST:-10000000}"
-CORE_START="${CORE_START:-0}"
+SIMULATOR="./build/simulator"
+CKPT_ROOT="/share/personal/S/houruyao/simpoint/rv32imab_ckpt_1gb_ram"
+RESULT_DIR="./results_restore"
+# 留空="" 时不传 -w，simulator 默认使用 checkpoint_interval 作为 warmup。
+CKPT_WARMUP="10000000"
+# 留空="" 时不传 -c，simulator 默认使用 checkpoint_interval 作为 measure 长度。
+CKPT_MAX_COMMIT="10000000"
+CORE_START=0
 
 # 内存够的话建议等于可用的核心数 不用超线程
 # 一个进程需要8GB 开完美分支预测需要12GB
@@ -28,6 +31,8 @@ echo "=================================================="
 echo "Start Time:     $(date)"
 echo "Mode:           Strict Physical Core Binding (FIFO Queue)"
 echo "Parallel Jobs:  $MAX_JOBS"
+echo "CKPT Warmup:    ${CKPT_WARMUP:-<simulator default>}"
+echo "CKPT MaxCommit: ${CKPT_MAX_COMMIT:-<simulator default>}"
 echo "=================================================="
 
 echo "Scanning for all checkpoint files..."
@@ -100,8 +105,17 @@ for ((worker=0; worker<MAX_JOBS; worker++)); do
             ckpt_basename=$(basename "$ckpt_file" .gz)
             log_file="$RESULT_DIR/$bench_name/${ckpt_basename}.log"
 
+            # 按配置选择性透传 -w / -c；留空时沿用 simulator 默认行为。
+            sim_args=("$SIMULATOR" --mode ckpt)
+            if [ -n "$CKPT_WARMUP" ]; then
+                sim_args+=(-w "$CKPT_WARMUP")
+            fi
+            if [ -n "$CKPT_MAX_COMMIT" ]; then
+                sim_args+=(-c "$CKPT_MAX_COMMIT")
+            fi
+
             # 强行绑定物理核，开跑！
-            taskset -c "$core" $SIMULATOR --mode ckpt -w "$MAX_COMMIT_INST" "$ckpt_file" > "$log_file" 2>&1
+            taskset -c "$core" "${sim_args[@]}" "$ckpt_file" > "$log_file" 2>&1
 
             if [ $? -eq 0 ]; then
                 echo "[Done] Core $(printf "%03d" $core) | $bench_name/$ckpt_basename"
