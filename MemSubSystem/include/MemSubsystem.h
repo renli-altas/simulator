@@ -72,10 +72,7 @@ public:
   void dump_debug_state(FILE *out) const;
   axi_interconnect::ReadMasterPort_t *icache_read_port();
   void set_internal_axi_runtime_active(bool active);
-  void set_ptw_coherent_source(AbstractLsu *lsu) {
-    ptw_coherent_source_ = lsu;
-    ptw_block.bind_coherent_source(lsu);
-  }
+  void set_ptw_coherent_source(AbstractLsu *lsu) { ptw_coherent_source_ = lsu; }
   void set_llc_config(const axi_interconnect::AXI_LLCConfig &cfg);
   void llc_comb_outputs();
   const axi_interconnect::AXI_LLC_LookupIn_t &llc_lookup_in() const;
@@ -106,31 +103,15 @@ private:
   std::unique_ptr<AxiKitRuntime> axi_kit_runtime;
   bool internal_axi_runtime_active_ = true;
 
-  static constexpr size_t kPtwClientCount =
-      static_cast<size_t>(PtwClient::NUM_CLIENTS);
-  static size_t ptw_client_idx(PtwClient c) { return static_cast<size_t>(c); }
-  static MemPtwBlock::Client to_block_client(PtwClient c);
-  void refresh_ptw_client_outputs();
-  bool ptw_mem_send_read_req(PtwClient client, uint32_t paddr);
-  bool ptw_mem_resp_valid(PtwClient client) const;
-  uint32_t ptw_mem_resp_data(PtwClient client) const;
-  void ptw_mem_consume_resp(PtwClient client);
-  bool ptw_walk_send_req(PtwClient client, const PtwWalkReq &req);
-  bool ptw_walk_resp_valid(PtwClient client) const;
-  PtwWalkResp ptw_walk_resp(PtwClient client) const;
-  void ptw_walk_consume_resp(PtwClient client);
-  void ptw_walk_flush(PtwClient client);
-
-  std::array<PtwMemRespIO, kPtwClientCount>  ptw_mem_resp_ios{};
-  std::array<PtwWalkRespIO, kPtwClientCount> ptw_walk_resp_ios{};
+  void sync_ptw_port_outputs();
 
   friend class MemSubsystemPtwMemPortAdapter;
   friend class MemSubsystemPtwWalkPortAdapter;
 
-  std::unique_ptr<PtwMemPort>  dtlb_ptw_port_inst;
-  std::unique_ptr<PtwMemPort>  itlb_ptw_port_inst;
-  std::unique_ptr<PtwWalkPort> dtlb_walk_port_inst;
-  std::unique_ptr<PtwWalkPort> itlb_walk_port_inst;
+  std::unique_ptr<MemSubsystemPtwMemPortAdapter>  dtlb_ptw_port_inst;
+  std::unique_ptr<MemSubsystemPtwMemPortAdapter>  itlb_ptw_port_inst;
+  std::unique_ptr<MemSubsystemPtwWalkPortAdapter> dtlb_walk_port_inst;
+  std::unique_ptr<MemSubsystemPtwWalkPortAdapter> itlb_walk_port_inst;
 
   struct LlcPerfShadow {
     uint64_t read_access = 0;

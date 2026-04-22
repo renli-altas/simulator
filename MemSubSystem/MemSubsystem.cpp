@@ -1,4 +1,5 @@
 #include "MemSubsystem.h"
+#include "AbstractLsu.h"
 #include "config.h"
 #include "icache/GenericTable.h"
 #include <cinttypes>
@@ -239,100 +240,122 @@ struct AxiKitRuntime {};
 
 class MemSubsystemPtwMemPortAdapter : public PtwMemPort {
 public:
-  MemSubsystemPtwMemPortAdapter(MemSubsystem *owner, MemSubsystem::PtwClient c)
-      : owner(owner), client(c) {}
-
   bool send_read_req(uint32_t paddr) override {
-    return owner->ptw_mem_send_read_req(client, paddr);
+    if (!comb_out_.req_ready || comb_in_.req_valid) {
+      return false;
+    }
+    comb_in_.req_valid = true;
+    comb_in_.req_addr = paddr;
+    comb_out_.req_ready = false;
+    comb_out_.resp_valid = false;
+    comb_out_.resp_data = 0;
+    return true;
   }
-  bool resp_valid() const override { return owner->ptw_mem_resp_valid(client); }
-  uint32_t resp_data() const override { return owner->ptw_mem_resp_data(client); }
-  void consume_resp() override { owner->ptw_mem_consume_resp(client); }
+
+  bool resp_valid() const override { return comb_out_.resp_valid; }
+
+  uint32_t resp_data() const override { return comb_out_.resp_data; }
+
+  void consume_resp() override {
+    comb_in_.resp_consumed = true;
+    comb_out_.resp_valid = false;
+    comb_out_.resp_data = 0;
+  }
+
+  const PtwMemPortCombIn &comb_input() const { return comb_in_; }
+
+  void set_comb_output(const PtwMemPortCombOut &out) { comb_out_ = out; }
+
+  void reset_cycle_input() { comb_in_ = {}; }
 
 private:
-  MemSubsystem *owner = nullptr;
-  MemSubsystem::PtwClient client = MemSubsystem::PtwClient::DTLB;
+  PtwMemPortCombIn comb_in_{};
+  PtwMemPortCombOut comb_out_{};
 };
 
 class MemSubsystemPtwWalkPortAdapter : public PtwWalkPort {
 public:
-  MemSubsystemPtwWalkPortAdapter(MemSubsystem *owner, MemSubsystem::PtwClient c)
-      : owner(owner), client(c) {}
-
   bool send_walk_req(const PtwWalkReq &req) override {
-    return owner->ptw_walk_send_req(client, req);
+    if (!comb_out_.req_ready || comb_in_.req_valid) {
+      return false;
+    }
+    comb_in_.req_valid = true;
+    comb_in_.req = req;
+    comb_out_.req_ready = false;
+    comb_out_.resp_valid = false;
+    comb_out_.resp = {};
+    return true;
   }
-  bool resp_valid() const override { return owner->ptw_walk_resp_valid(client); }
-  PtwWalkResp resp() const override { return owner->ptw_walk_resp(client); }
-  void consume_resp() override { owner->ptw_walk_consume_resp(client); }
-  void flush_client() override { owner->ptw_walk_flush(client); }
+
+  bool resp_valid() const override { return comb_out_.resp_valid; }
+
+  PtwWalkResp resp() const override { return comb_out_.resp; }
+
+  void consume_resp() override {
+    comb_in_.resp_consumed = true;
+    comb_out_.resp_valid = false;
+    comb_out_.resp = {};
+  }
+
+  void flush_client() override {
+    seq_in_.flush = true;
+    comb_out_.req_ready = true;
+    comb_out_.resp_valid = false;
+    comb_out_.resp = {};
+  }
+
+  const PtwWalkPortCombIn &comb_input() const { return comb_in_; }
+
+  const PtwWalkPortSeqIn &seq_input() const { return seq_in_; }
+
+  void set_comb_output(const PtwWalkPortCombOut &out) { comb_out_ = out; }
+
+  void reset_cycle_input() { comb_in_ = {}; }
+
+  void reset_seq_input() { seq_in_ = {}; }
 
 private:
-  MemSubsystem *owner = nullptr;
-  MemSubsystem::PtwClient client = MemSubsystem::PtwClient::DTLB;
+  PtwWalkPortCombIn comb_in_{};
+  PtwWalkPortSeqIn seq_in_{};
+  PtwWalkPortCombOut comb_out_{};
 };
 
-MemPtwBlock::Client MemSubsystem::to_block_client(PtwClient c) {
-  return (c == MemSubsystem::PtwClient::DTLB) ? MemPtwBlock::Client::DTLB
-                                               : MemPtwBlock::Client::ITLB;
-}
-
-void MemSubsystem::refresh_ptw_client_outputs() {
-  for (size_t i = 0; i < kPtwClientCount; i++) {
-    PtwClient client = static_cast<PtwClient>(i);
-    ptw_mem_resp_ios[i].valid =
-        ptw_block.client_resp_valid(to_block_client(client));
-    ptw_mem_resp_ios[i].data =
-        ptw_block.client_resp_data(to_block_client(client));
-    ptw_walk_resp_ios[i].valid =
-        ptw_block.walk_client_resp_valid(to_block_client(client));
-    ptw_walk_resp_ios[i].resp = ptw_block.walk_client_resp(to_block_client(client));
+void MemSubsystem::sync_ptw_port_outputs() {
+  const auto &ptw_out = ptw_block.comb_outputs();
+  if (dtlb_ptw_port_inst != nullptr) {
+    PtwMemPortCombOut out{};
+    const auto &src = ptw_out.mem_clients[static_cast<size_t>(PtwClient::DTLB)];
+    out.req_ready = src.req_ready;
+    out.resp_valid = src.resp_valid;
+    out.resp_data = src.resp_data;
+    dtlb_ptw_port_inst->set_comb_output(out);
   }
-}
-
-bool MemSubsystem::ptw_mem_send_read_req(PtwClient client, uint32_t paddr) {
-  auto block_client = to_block_client(client);
-  bool fire = ptw_block.client_send_read_req(block_client, paddr);
-  refresh_ptw_client_outputs();
-  return fire;
-}
-
-bool MemSubsystem::ptw_mem_resp_valid(PtwClient client) const {
-  return ptw_mem_resp_ios[ptw_client_idx(client)].valid;
-}
-
-uint32_t MemSubsystem::ptw_mem_resp_data(PtwClient client) const {
-  return ptw_mem_resp_ios[ptw_client_idx(client)].data;
-}
-
-void MemSubsystem::ptw_mem_consume_resp(PtwClient client) {
-  ptw_block.client_consume_resp(to_block_client(client));
-  refresh_ptw_client_outputs();
-}
-
-bool MemSubsystem::ptw_walk_send_req(PtwClient client, const PtwWalkReq &req) {
-  auto block_client = to_block_client(client);
-  bool fire = ptw_block.walk_client_send_req(block_client, req);
-  refresh_ptw_client_outputs();
-  return fire;
-}
-
-bool MemSubsystem::ptw_walk_resp_valid(PtwClient client) const {
-  return ptw_walk_resp_ios[ptw_client_idx(client)].valid;
-}
-
-PtwWalkResp MemSubsystem::ptw_walk_resp(PtwClient client) const {
-  return ptw_walk_resp_ios[ptw_client_idx(client)].resp;
-}
-
-void MemSubsystem::ptw_walk_consume_resp(PtwClient client) {
-  ptw_block.walk_client_consume_resp(to_block_client(client));
-  refresh_ptw_client_outputs();
-}
-
-void MemSubsystem::ptw_walk_flush(PtwClient client) {
-  ptw_block.walk_client_flush(to_block_client(client));
-  refresh_ptw_client_outputs();
+  if (itlb_ptw_port_inst != nullptr) {
+    PtwMemPortCombOut out{};
+    const auto &src = ptw_out.mem_clients[static_cast<size_t>(PtwClient::ITLB)];
+    out.req_ready = src.req_ready;
+    out.resp_valid = src.resp_valid;
+    out.resp_data = src.resp_data;
+    itlb_ptw_port_inst->set_comb_output(out);
+  }
+  if (dtlb_walk_port_inst != nullptr) {
+    PtwWalkPortCombOut out{};
+    const auto &src =
+        ptw_out.walk_clients[static_cast<size_t>(PtwClient::DTLB)];
+    out.req_ready = src.req_ready;
+    out.resp_valid = src.resp_valid;
+    out.resp = src.resp;
+    dtlb_walk_port_inst->set_comb_output(out);
+  }
+  if (itlb_walk_port_inst != nullptr) {
+    PtwWalkPortCombOut out{};
+    const auto &src =
+        ptw_out.walk_clients[static_cast<size_t>(PtwClient::ITLB)];
+    out.req_ready = src.req_ready;
+    out.resp_valid = src.resp_valid;
+    out.resp = src.resp;
+    itlb_walk_port_inst->set_comb_output(out);
+  }
 }
 
 void MemSubsystem::sync_llc_perf() {
@@ -521,14 +544,10 @@ MemSubsystem::MemSubsystem(SimContext *ctx) : ctx(ctx) {
   internal_axi_runtime_active_ = false;
 #endif
   ptw_block.bind_context(ctx);
-  dtlb_ptw_port_inst =
-      std::make_unique<MemSubsystemPtwMemPortAdapter>(this, PtwClient::DTLB);
-  itlb_ptw_port_inst =
-      std::make_unique<MemSubsystemPtwMemPortAdapter>(this, PtwClient::ITLB);
-  dtlb_walk_port_inst =
-      std::make_unique<MemSubsystemPtwWalkPortAdapter>(this, PtwClient::DTLB);
-  itlb_walk_port_inst =
-      std::make_unique<MemSubsystemPtwWalkPortAdapter>(this, PtwClient::ITLB);
+  dtlb_ptw_port_inst = std::make_unique<MemSubsystemPtwMemPortAdapter>();
+  itlb_ptw_port_inst = std::make_unique<MemSubsystemPtwMemPortAdapter>();
+  dtlb_walk_port_inst = std::make_unique<MemSubsystemPtwWalkPortAdapter>();
+  itlb_walk_port_inst = std::make_unique<MemSubsystemPtwWalkPortAdapter>();
   dtlb_ptw_port = dtlb_ptw_port_inst.get();
   itlb_ptw_port = itlb_ptw_port_inst.get();
   dtlb_walk_port = dtlb_walk_port_inst.get();
@@ -575,9 +594,13 @@ void MemSubsystem::init() {
   ptw_block.init();
   read_arb_block.init();
   resp_route_block.init();
-  ptw_mem_resp_ios  = {};
-  ptw_walk_resp_ios = {};
-  refresh_ptw_client_outputs();
+  sync_ptw_port_outputs();
+  dtlb_ptw_port_inst->reset_cycle_input();
+  itlb_ptw_port_inst->reset_cycle_input();
+  dtlb_walk_port_inst->reset_cycle_input();
+  itlb_walk_port_inst->reset_cycle_input();
+  dtlb_walk_port_inst->reset_seq_input();
+  itlb_walk_port_inst->reset_seq_input();
 
   dcache_req_mux_ = {};
   dcache_resp_raw_ = {};
@@ -749,20 +772,51 @@ void MemSubsystem::comb() {
   }
 #endif
 
+  MemPtwBlock::PortIn ptw_port_in{};
+  {
+    const auto &dtlb_mem_in = dtlb_ptw_port_inst->comb_input();
+    ptw_port_in.mem_clients[static_cast<size_t>(PtwClient::DTLB)].req_valid =
+        dtlb_mem_in.req_valid;
+    ptw_port_in.mem_clients[static_cast<size_t>(PtwClient::DTLB)].req_addr =
+        dtlb_mem_in.req_addr;
+    ptw_port_in.mem_clients[static_cast<size_t>(PtwClient::DTLB)]
+        .resp_consumed = dtlb_mem_in.resp_consumed;
 
-  ptw_block.comb_select_walk_owner();
-  ptw_block.count_wait_cycles();
+    const auto &itlb_mem_in = itlb_ptw_port_inst->comb_input();
+    ptw_port_in.mem_clients[static_cast<size_t>(PtwClient::ITLB)].req_valid =
+        itlb_mem_in.req_valid;
+    ptw_port_in.mem_clients[static_cast<size_t>(PtwClient::ITLB)].req_addr =
+        itlb_mem_in.req_addr;
+    ptw_port_in.mem_clients[static_cast<size_t>(PtwClient::ITLB)]
+        .resp_consumed = itlb_mem_in.resp_consumed;
 
-  uint32_t ptw_walk_read_addr = 0;
-  const bool issue_ptw_walk_read = ptw_block.walk_read_req(ptw_walk_read_addr);
-  const bool has_ptw_dtlb =
-      ptw_block.has_pending_mem_req(MemPtwBlock::Client::DTLB);
-  const bool has_ptw_itlb =
-      ptw_block.has_pending_mem_req(MemPtwBlock::Client::ITLB);
+    const auto &dtlb_walk_in = dtlb_walk_port_inst->comb_input();
+    ptw_port_in.walk_clients[static_cast<size_t>(PtwClient::DTLB)].req_valid =
+        dtlb_walk_in.req_valid;
+    ptw_port_in.walk_clients[static_cast<size_t>(PtwClient::DTLB)].req =
+        dtlb_walk_in.req;
+    ptw_port_in.walk_clients[static_cast<size_t>(PtwClient::DTLB)]
+        .resp_consumed = dtlb_walk_in.resp_consumed;
+
+    const auto &itlb_walk_in = itlb_walk_port_inst->comb_input();
+    ptw_port_in.walk_clients[static_cast<size_t>(PtwClient::ITLB)].req_valid =
+        itlb_walk_in.req_valid;
+    ptw_port_in.walk_clients[static_cast<size_t>(PtwClient::ITLB)].req =
+        itlb_walk_in.req;
+    ptw_port_in.walk_clients[static_cast<size_t>(PtwClient::ITLB)]
+        .resp_consumed = itlb_walk_in.resp_consumed;
+  }
+  ptw_block.comb_begin(ptw_port_in);
+  const auto &ptw_out = ptw_block.comb_outputs();
+
+  const uint32_t ptw_walk_read_addr = ptw_out.walk_read_addr;
+  const bool issue_ptw_walk_read = ptw_out.issue_walk_read;
+  const bool has_ptw_dtlb = ptw_out.mem_req_pending[static_cast<size_t>(PtwClient::DTLB)];
+  const bool has_ptw_itlb = ptw_out.mem_req_pending[static_cast<size_t>(PtwClient::ITLB)];
   const uint32_t ptw_dtlb_addr =
-      has_ptw_dtlb ? ptw_block.pending_mem_addr(MemPtwBlock::Client::DTLB) : 0;
+      ptw_out.mem_req_addr[static_cast<size_t>(PtwClient::DTLB)];
   const uint32_t ptw_itlb_addr =
-      has_ptw_itlb ? ptw_block.pending_mem_addr(MemPtwBlock::Client::ITLB) : 0;
+      ptw_out.mem_req_addr[static_cast<size_t>(PtwClient::ITLB)];
 
   auto same_cycle_store_conflicts_ptw = [&](uint32_t paddr) {
     if (lsu2dcache == nullptr) {
@@ -832,28 +886,6 @@ void MemSubsystem::comb() {
   mshr_.in.wbmshr = wb_.out.wbmshr;
 
   dcache_.stage2_comb();
-  if (read_arb_block.comb_result().granted) {
-    switch (read_arb_block.comb_result().granted_owner) {
-    case MemReadArbBlock::Owner::PTW_DTLB:
-      ptw_block.on_mem_read_granted(MemPtwBlock::Client::DTLB);
-      break;
-    case MemReadArbBlock::Owner::PTW_ITLB:
-      ptw_block.on_mem_read_granted(MemPtwBlock::Client::ITLB);
-      break;
-    case MemReadArbBlock::Owner::PTW_WALK:
-      if (read_arb_block.comb_result().injected_port >= 0) {
-        const auto &tag = read_arb_block.comb_result()
-                              .issued_tags[read_arb_block.comb_result()
-                                               .injected_port];
-        ptw_block.on_walk_read_granted(tag.req_id);
-      } else {
-        ptw_block.on_walk_read_granted(0);
-      }
-      break;
-    default:
-      break;
-    }
-  }
 
   const replay_resp replay_bcast =
       replay_resp::from_io(mshr_.out.replay_resp);
@@ -862,10 +894,31 @@ void MemSubsystem::comb() {
                              read_arb_block.comb_result().issued_tags,
                              replay_bcast);
   const auto &route_out = resp_route_block.comb_outputs();
-  for (uint8_t i = 0; i < route_out.ptw_event_count; i++) {
-    const auto &ptw_evt = route_out.ptw_events[i];
-    if (!ptw_evt.valid) {
-      continue;
+  MemPtwBlock::FeedbackIn ptw_feedback{};
+  ptw_feedback.wakeup_dtlb = route_out.wakeup.dtlb;
+  ptw_feedback.wakeup_itlb = route_out.wakeup.itlb;
+  ptw_feedback.wakeup_walk = route_out.wakeup.walk;
+  if (read_arb_block.comb_result().granted) {
+    ptw_feedback.grant_valid = true;
+    switch (read_arb_block.comb_result().granted_owner) {
+    case MemReadArbBlock::Owner::PTW_DTLB:
+      ptw_feedback.grant_owner = MemPtwBlock::GrantOwner::MEM_DTLB;
+      break;
+    case MemReadArbBlock::Owner::PTW_ITLB:
+      ptw_feedback.grant_owner = MemPtwBlock::GrantOwner::MEM_ITLB;
+      break;
+    case MemReadArbBlock::Owner::PTW_WALK:
+      ptw_feedback.grant_owner = MemPtwBlock::GrantOwner::WALK;
+      if (read_arb_block.comb_result().injected_port >= 0) {
+        const auto &tag =
+            read_arb_block.comb_result()
+                .issued_tags[read_arb_block.comb_result().injected_port];
+        ptw_feedback.grant_req_id = tag.req_id;
+      }
+      break;
+    default:
+      ptw_feedback.grant_valid = false;
+      break;
     }
   }
   for (uint8_t i = 0; i < route_out.ptw_event_count; i++) {
@@ -874,64 +927,76 @@ void MemSubsystem::comb() {
       continue;
     }
 
-    uint32_t coherent_data = evt.data;
-    MemDcacheImpl::CoherentQueryResult coherent_q =
-        MemDcacheImpl::CoherentQueryResult::Miss;
-    if (evt.replay == 0) {
-      uint32_t observed = 0;
-      coherent_q = dcache_.query_coherent_word(evt.req_addr, observed);
-      if (coherent_q == MemDcacheImpl::CoherentQueryResult::Hit) {
-        coherent_data = observed;
-      }
-    }
-
+    MemPtwBlock::RoutedEvent mapped{};
+    mapped.valid = true;
+    mapped.data = evt.data;
+    mapped.replay = evt.replay;
+    mapped.req_addr = evt.req_addr;
+    mapped.req_id = evt.req_id;
     switch (evt.owner) {
     case MemReadArbBlock::Owner::PTW_DTLB:
-      if (evt.replay == 0) {
-        if (coherent_q == MemDcacheImpl::CoherentQueryResult::Retry) {
-          ptw_block.retry_mem_req(MemPtwBlock::Client::DTLB);
-        } else {
-          ptw_block.on_mem_resp_client(MemPtwBlock::Client::DTLB,
-                                       coherent_data);
-        }
-      }
+      mapped.owner = MemPtwBlock::RoutedEventOwner::MEM_DTLB;
       break;
     case MemReadArbBlock::Owner::PTW_ITLB:
-      if (evt.replay == 0) {
-        if (coherent_q == MemDcacheImpl::CoherentQueryResult::Retry) {
-          ptw_block.retry_mem_req(MemPtwBlock::Client::ITLB);
-        } else {
-          ptw_block.on_mem_resp_client(MemPtwBlock::Client::ITLB,
-                                       coherent_data);
-        }
-      }
+      mapped.owner = MemPtwBlock::RoutedEventOwner::MEM_ITLB;
       break;
     case MemReadArbBlock::Owner::PTW_WALK:
-      if (evt.replay == 0) {
-        if (coherent_q == MemDcacheImpl::CoherentQueryResult::Retry) {
-          (void)ptw_block.on_walk_mem_replay(evt.req_id, 2);
-        } else {
-          (void)ptw_block.on_walk_mem_resp(evt.req_id, evt.req_addr,
-                                           coherent_data);
-        }
-      } else {
-        (void)ptw_block.on_walk_mem_replay(evt.req_id, evt.replay);
-      }
+      mapped.owner = MemPtwBlock::RoutedEventOwner::WALK;
       break;
     default:
+      mapped.valid = false;
       break;
     }
-  }
+    if (!mapped.valid) {
+      continue;
+    }
 
-  if (route_out.wakeup.dtlb) {
-    ptw_block.retry_mem_req(MemPtwBlock::Client::DTLB);
+    if (mapped.replay == 0 && ptw_coherent_source_ != nullptr) {
+      // Resolve the PTW-visible event payload entirely on the MemSubsystem
+      // side, then feed the resolved result into ptw_feedback as an explicit
+      // PTW input. No PTW state is mutated here.
+      auto request_ptw_retry = [&]() {
+        switch (mapped.owner) {
+        case MemPtwBlock::RoutedEventOwner::MEM_DTLB:
+          ptw_feedback.wakeup_dtlb = true;
+          break;
+        case MemPtwBlock::RoutedEventOwner::MEM_ITLB:
+          ptw_feedback.wakeup_itlb = true;
+          break;
+        case MemPtwBlock::RoutedEventOwner::WALK:
+          ptw_feedback.wakeup_walk = true;
+          break;
+        default:
+          break;
+        }
+      };
+
+      uint32_t resolved_word = mapped.data;
+      uint32_t dcache_word = 0;
+      const auto dcache_coherence =
+          get_dcache().query_coherent_word(mapped.req_addr, dcache_word);
+      if (dcache_coherence == RealDcache::CoherentQueryResult::Retry) {
+        request_ptw_retry();
+        continue;
+      }
+      if (dcache_coherence == RealDcache::CoherentQueryResult::Hit) {
+        resolved_word = dcache_word;
+      }
+      ptw_coherent_source_->overlay_committed_store_word(mapped.req_addr,
+                                                         resolved_word);
+      if (ptw_coherent_source_->has_translation_store_conflict(mapped.req_addr)) {
+        request_ptw_retry();
+        continue;
+      }
+      mapped.data = resolved_word;
+    }
+
+    if (ptw_feedback.event_count < ptw_feedback.events.size()) {
+      ptw_feedback.events[ptw_feedback.event_count++] = mapped;
+    }
   }
-  if (route_out.wakeup.itlb) {
-    ptw_block.retry_mem_req(MemPtwBlock::Client::ITLB);
-  }
-  if (route_out.wakeup.walk) {
-    ptw_block.retry_active_walk();
-  }
+  ptw_block.comb_finish(ptw_feedback);
+  sync_ptw_port_outputs();
 
   if (dcache2lsu != nullptr) {
     *dcache2lsu = resp_route_block.comb_outputs().lsu_resp;
@@ -963,8 +1028,6 @@ void MemSubsystem::comb() {
       dst.replay = 3;
     }
   }
-
-  refresh_ptw_client_outputs();
 
   // Export MSHR replay wakeup to LSU. RealDcache::comb() clears resp ports
   // every cycle, so this must be written after dcache_.comb().
@@ -1024,10 +1087,20 @@ void MemSubsystem::comb() {
   }
 #endif
 
-  refresh_ptw_client_outputs();
+  sync_ptw_port_outputs();
+  dtlb_ptw_port_inst->reset_cycle_input();
+  itlb_ptw_port_inst->reset_cycle_input();
+  dtlb_walk_port_inst->reset_cycle_input();
+  itlb_walk_port_inst->reset_cycle_input();
 }
 
 void MemSubsystem::seq() {
+  MemPtwBlock::SeqIn ptw_seq_in{};
+  ptw_seq_in.walk_client_flush[static_cast<size_t>(PtwClient::DTLB)] =
+      dtlb_walk_port_inst->seq_input().flush;
+  ptw_seq_in.walk_client_flush[static_cast<size_t>(PtwClient::ITLB)] =
+      itlb_walk_port_inst->seq_input().flush;
+  ptw_block.seq(ptw_seq_in);
   dcache_.seq();
   mshr_.seq();
   wb_.seq();
@@ -1046,4 +1119,7 @@ void MemSubsystem::seq() {
     axi_kit_runtime->interconnect.seq();
   }
 #endif
+  dtlb_walk_port_inst->reset_seq_input();
+  itlb_walk_port_inst->reset_seq_input();
+  sync_ptw_port_outputs();
 }

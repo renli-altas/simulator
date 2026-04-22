@@ -67,6 +67,7 @@ void TlbMmu::flush() {
     record_trace(TraceSource::FLUSH, Result::RETRY, walk.v_addr, 0, walk.satp,
                  sv32_asid(walk.satp), walk.type, 0xff, 0);
   }
+  cancel_pending_walk();
   flush_pending_ = true;
 }
 
@@ -134,7 +135,6 @@ void TlbMmu::seq() {
     clear_tlb_entries();
     repl_ptr_ = 0;
     refill_comb_ = {};
-    cancel_pending_walk();
     flush_pending_ = false;
     return;
   }
@@ -441,6 +441,13 @@ TlbMmu::walk_and_refill_shared(uint32_t &p_addr, uint32_t v_addr, uint32_t type,
   }
 
   PtwWalkResp wr = walk_port->resp();
+  if ((static_cast<uint32_t>(wr.vaddr) >> 12) != (walk.v_addr >> 12)) {
+    walk_port->consume_resp();
+    last_retry_reason_ = RetryReason::WAIT_WALK_RESP;
+    record_trace(TraceSource::WALK_SHARED, Result::RETRY, v_addr, 0,
+                 ctx_view.satp, sv32_asid(ctx_view.satp), type, 0xff, 0);
+    return Result::RETRY;
+  }
   walk_port->consume_resp();
   walk = {};
 

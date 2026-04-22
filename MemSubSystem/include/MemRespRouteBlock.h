@@ -192,36 +192,7 @@ public:
   }
 
   void apply_ptw_events(MemPtwBlock *ptw_block) const {
-    if (ptw_block == nullptr) {
-      return;
-    }
-    for (uint8_t i = 0; i < comb_.ptw_event_count; i++) {
-      const auto &evt = comb_.ptw_events[i];
-      if (!evt.valid) {
-        continue;
-      }
-      switch (evt.owner) {
-      case Owner::PTW_DTLB:
-        if (evt.replay == 0) {
-          ptw_block->on_mem_resp_client(MemPtwBlock::Client::DTLB, evt.data);
-        }
-        break;
-      case Owner::PTW_ITLB:
-        if (evt.replay == 0) {
-          ptw_block->on_mem_resp_client(MemPtwBlock::Client::ITLB, evt.data);
-        }
-        break;
-      case Owner::PTW_WALK:
-        if (evt.replay == 0) {
-          (void)ptw_block->on_walk_mem_resp(evt.req_id, evt.req_addr, evt.data);
-        } else {
-          (void)ptw_block->on_walk_mem_replay(evt.req_id, evt.replay);
-        }
-        break;
-      default:
-        break;
-      }
-    }
+    (void)ptw_block;
   }
 
   void apply_ptw_event(MemPtwBlock *ptw_block) const {

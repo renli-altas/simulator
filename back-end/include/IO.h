@@ -1034,11 +1034,13 @@ struct PtwWalkReq {
 
 struct PtwWalkResp {
   wire<1> fault;
+  wire<32> vaddr;
   wire<32> leaf_pte;
   wire<8> leaf_level; // 1: L1 leaf, 0: L0 leaf
 
   PtwWalkResp() {
     fault = {};
+    vaddr = {};
     leaf_pte = {};
     leaf_level = {};
   }
