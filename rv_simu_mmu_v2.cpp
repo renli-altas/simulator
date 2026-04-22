@@ -1,7 +1,7 @@
-#include "AbstractLsu.h"
 #include "BackTop.h"
 #include "Csr.h"
 #include "PhysMemory.h"
+#include "RealLsu.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "diff.h"

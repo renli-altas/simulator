@@ -1,10 +1,12 @@
 #pragma once
 
-#include "AbstractLsu.h"
 #include "PtwWalkPort.h"
 #include "ref.h"
 #include "types.h"
 #include <array>
+#include <cstddef>
+
+class SimContext;
 
 // PTW 子模块（合并 client 状态 + shared walk FSM）。
 class MemPtwBlock {
@@ -22,6 +24,7 @@ public:
   };
 
   explicit MemPtwBlock(SimContext *ctx = nullptr) : ctx(ctx) {}
+  using StoreConflictFn = bool (*)(const void *source, uint32_t paddr);
 
   struct DebugState {
     bool walk_active = false;
@@ -37,7 +40,10 @@ public:
   };
 
   void bind_context(SimContext *c) { ctx = c; }
-  void bind_coherent_source(AbstractLsu *lsu) { coherent_source_ = lsu; }
+  void bind_coherent_source(const void *source, StoreConflictFn fn) {
+    coherent_source_ = source;
+    coherent_conflict_fn_ = fn;
+  }
   void init() {
     ptw_clients = {};
     walk_clients = {};
@@ -459,12 +465,13 @@ private:
   static size_t client_idx(Client c) { return static_cast<size_t>(c); }
 
   bool has_resp_conflict(uint32_t req_addr) const {
-    return coherent_source_ != nullptr &&
-           coherent_source_->has_translation_store_conflict(req_addr);
+    return coherent_source_ != nullptr && coherent_conflict_fn_ != nullptr &&
+           coherent_conflict_fn_(coherent_source_, req_addr);
   }
 
   SimContext *ctx = nullptr;
-  AbstractLsu *coherent_source_ = nullptr;
+  const void *coherent_source_ = nullptr;
+  StoreConflictFn coherent_conflict_fn_ = nullptr;
   std::array<PtwClientState, kClientCount> ptw_clients{};
   std::array<WalkClientState, kClientCount> walk_clients{};
   WalkState walk_state = WalkState::IDLE;

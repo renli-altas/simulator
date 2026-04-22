@@ -1,4 +1,5 @@
 #include "MemSubsystem.h"
+#include "RealLsu.h"
 #include "config.h"
 #include "icache/GenericTable.h"
 #include <cinttypes>
@@ -536,6 +537,15 @@ MemSubsystem::MemSubsystem(SimContext *ctx) : ctx(ctx) {
 }
 
 MemSubsystem::~MemSubsystem() = default;
+
+void MemSubsystem::set_ptw_coherent_source(RealLsu *lsu) {
+  ptw_coherent_source_ = lsu;
+  ptw_block.bind_coherent_source(
+      lsu, [](const void *source, uint32_t paddr) {
+        return static_cast<const RealLsu *>(source)
+            ->has_translation_store_conflict(paddr);
+      });
+}
 
 void MemSubsystem::init() {
   Assert(lsu2dcache != nullptr && "MemSubsystem: lsu2dcache is not connected");

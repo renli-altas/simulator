@@ -24,13 +24,13 @@ inline uint16_t sv32_asid(uint32_t satp) {
   return static_cast<uint16_t>((satp >> kSv32AsidShift) & kSv32AsidMask);
 }
 
-inline const char *mmu_result_name(AbstractMmu::Result ret) {
+inline const char *mmu_result_name(TlbMmu::Result ret) {
   switch (ret) {
-  case AbstractMmu::Result::OK:
+  case TlbMmu::Result::OK:
     return "OK";
-  case AbstractMmu::Result::RETRY:
+  case TlbMmu::Result::RETRY:
     return "RETRY";
-  case AbstractMmu::Result::FAULT:
+  case TlbMmu::Result::FAULT:
     return "FAULT";
   default:
     return "UNKNOWN";
@@ -324,9 +324,8 @@ void TlbMmu::schedule_refill(uint32_t v_addr, uint16_t asid, uint8_t level,
   refill_comb_ = refill;
 }
 
-AbstractMmu::Result TlbMmu::walk_and_refill(uint32_t &p_addr, uint32_t v_addr,
-                                            uint32_t type,
-                                            CsrStatusIO *status) {
+TlbMmu::Result TlbMmu::walk_and_refill(uint32_t &p_addr, uint32_t v_addr,
+                                       uint32_t type, CsrStatusIO *status) {
   const TranslateContext ctx_view = build_translate_context(type, status);
   WalkRegs &walk = ensure_walk_comb();
 
@@ -394,7 +393,7 @@ AbstractMmu::Result TlbMmu::walk_and_refill(uint32_t &p_addr, uint32_t v_addr,
   return Result::OK;
 }
 
-AbstractMmu::Result
+TlbMmu::Result
 TlbMmu::walk_and_refill_shared(uint32_t &p_addr, uint32_t v_addr, uint32_t type,
                                CsrStatusIO *status) {
   const TranslateContext ctx_view = build_translate_context(type, status);
@@ -474,8 +473,8 @@ TlbMmu::walk_and_refill_shared(uint32_t &p_addr, uint32_t v_addr, uint32_t type,
   return Result::OK;
 }
 
-AbstractMmu::Result TlbMmu::translate(uint32_t &p_addr, uint32_t v_addr,
-                                      uint32_t type, CsrStatusIO *status) {
+TlbMmu::Result TlbMmu::translate(uint32_t &p_addr, uint32_t v_addr,
+                                 uint32_t type, CsrStatusIO *status) {
   last_retry_reason_ = RetryReason::NONE;
   const TranslateContext ctx_view = build_translate_context(type, status);
   const uint32_t satp = ctx_view.satp;

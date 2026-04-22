@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AbstractDcache.h"
-#include "AbstractLsu.h"
 #include "MSHR.h"
 #include "WriteBuffer.h"
 #include "config.h"

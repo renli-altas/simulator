@@ -42,7 +42,7 @@ class Prf;
 class Exu;
 class Rob;
 class Csr;
-class AbstractLsu;
+class RealLsu;
 class AbstractMMU;
 class MemSubsystem;
 
@@ -112,7 +112,7 @@ public:
   Exu *exu;
   Csr *csr;
   Rob *rob;
-  AbstractLsu *lsu;
+  RealLsu *lsu;
 
   Back_in in;
   Back_out out;

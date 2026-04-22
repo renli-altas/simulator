@@ -1,6 +1,7 @@
 #include "Rob.h"
 #include "IO.h"
 
+#include "RealLsu.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "util.h"

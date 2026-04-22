@@ -37,7 +37,6 @@
 | `CONFIG_DIFFTEST` | ✅ 启用 | 差分测试功能 |
 | `CONFIG_PERF_COUNTER` | ✅ 启用 | 性能计数器 |
 | `CONFIG_BPU` | ⚠️ 当前 stock profile 中 `default/small/medium` 启用，`large` 关闭 | 分支预测单元 |
-| `CONFIG_TLB_MMU` | ✅ 启用 | 统一 I/D 侧 MMU 模型开关（`TlbMmu` / `SimpleMmu`） |
 
 > ICache 模型选择约定：
 > - 默认使用真实 ICache 路径（未定义额外宏）

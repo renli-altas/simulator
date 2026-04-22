@@ -1,21 +1,22 @@
 #pragma once
 
-#include "AbstractLsu.h"
-#include "SimpleMmu.h"
+#include "LsuCommon.h"
+#include "TlbMmu.h"
 #include "config.h"
+#include <cstdio>
 #include <cstdint>
 #include <memory>
 
 class Csr;
+class SimContext;
 class PtwMemPort;
 class PtwWalkPort;
 
-class RealLsu : public AbstractLsu {
+class RealLsu {
 private:
   static constexpr int FINISHED_LOADS_QUEUE_SIZE = ROB_NUM;
   static constexpr int FINISHED_STA_QUEUE_SIZE = ROB_NUM;
   static constexpr int PENDING_STA_ADDR_QUEUE_SIZE = STQ_SIZE;
-  static constexpr int LOAD_STATE_COUNT = 5;
   static constexpr int LOAD_RESP_WAIT_CYCLES_LIMIT = 150;
   static constexpr int STQ_COUNT_WIDTH = bit_width_for_count(STQ_SIZE + 1);
   static constexpr int LDQ_COUNT_WIDTH = bit_width_for_count(LDQ_SIZE + 1);
@@ -43,6 +44,76 @@ private:
     Ready = 4,
   };
 
+  struct LsuUop {
+    wire<32> diag_val;
+    wire<32> result;
+    wire<PRF_IDX_WIDTH> dest_preg;
+    wire<3> func3;
+    wire<7> func7;
+    wire<BR_MASK_WIDTH> br_mask;
+    wire<ROB_IDX_WIDTH> rob_idx;
+    wire<STQ_IDX_WIDTH> stq_idx;
+    wire<1> stq_flag;
+    wire<LDQ_IDX_WIDTH> ldq_idx;
+    wire<1> rob_flag;
+    wire<1> dest_en;
+    wire<1> page_fault_inst;
+    wire<1> page_fault_load;
+    wire<1> page_fault_store;
+    UopType op;
+    DebugMeta dbg;
+    wire<1> flush_pipe;
+    bool is_cache_miss;
+
+    static LsuUop from_micro_op(const MicroOp &src) {
+      LsuUop dst{};
+      dst.diag_val = src.diag_val;
+      dst.result = src.result;
+      dst.dest_preg = src.dest_preg;
+      dst.func3 = src.func3;
+      dst.func7 = src.func7;
+      dst.br_mask = src.br_mask;
+      dst.rob_idx = src.rob_idx;
+      dst.stq_idx = src.stq_idx;
+      dst.stq_flag = src.stq_flag;
+      dst.ldq_idx = src.ldq_idx;
+      dst.rob_flag = src.rob_flag;
+      dst.dest_en = src.dest_en;
+      dst.page_fault_inst = src.page_fault_inst;
+      dst.page_fault_load = src.page_fault_load;
+      dst.page_fault_store = src.page_fault_store;
+      dst.op = src.op;
+      dst.dbg = src.dbg;
+      dst.flush_pipe = src.flush_pipe;
+      dst.is_cache_miss = src.tma.is_cache_miss;
+      return dst;
+    }
+
+    MicroOp to_micro_op() const {
+      MicroOp dst;
+      dst.diag_val = diag_val;
+      dst.result = result;
+      dst.dest_preg = dest_preg;
+      dst.func3 = func3;
+      dst.func7 = func7;
+      dst.br_mask = br_mask;
+      dst.rob_idx = rob_idx;
+      dst.stq_idx = stq_idx;
+      dst.stq_flag = stq_flag;
+      dst.ldq_idx = ldq_idx;
+      dst.rob_flag = rob_flag;
+      dst.dest_en = dest_en;
+      dst.page_fault_inst = page_fault_inst;
+      dst.page_fault_load = page_fault_load;
+      dst.page_fault_store = page_fault_store;
+      dst.op = op;
+      dst.dbg = dbg;
+      dst.flush_pipe = flush_pipe;
+      dst.tma.is_cache_miss = is_cache_miss;
+      return dst;
+    }
+  };
+
   struct LdqEntry {
     reg<1> valid;
     reg<1> killed;
@@ -54,7 +125,7 @@ private:
     reg<1> tlb_retry;
     reg<1> is_mmio_wait;
     reg<LOAD_REPLAY_PRIORITY_WIDTH> replay_priority;
-    MicroOp uop;
+    LsuUop uop;
   };
 
   enum class StoreForwardState : uint8_t {
@@ -94,51 +165,69 @@ private:
 
     reg<1> replay_type = false;
 
-    MicroOp finished_loads[FINISHED_LOADS_QUEUE_SIZE];
+    LsuUop finished_loads[FINISHED_LOADS_QUEUE_SIZE];
     reg<FINISHED_LOADS_QUEUE_IDX_WIDTH> finished_loads_head = 0;
     reg<FINISHED_LOADS_QUEUE_COUNT_WIDTH> finished_loads_count = 0;
-    MicroOp finished_sta_reqs[FINISHED_STA_QUEUE_SIZE];
+    LsuUop finished_sta_reqs[FINISHED_STA_QUEUE_SIZE];
     reg<FINISHED_STA_QUEUE_IDX_WIDTH> finished_sta_reqs_head = 0;
     reg<FINISHED_STA_QUEUE_COUNT_WIDTH> finished_sta_reqs_count = 0;
-    MicroOp pending_sta_addr_reqs[PENDING_STA_ADDR_QUEUE_SIZE];
+    LsuUop pending_sta_addr_reqs[PENDING_STA_ADDR_QUEUE_SIZE];
     reg<PENDING_STA_ADDR_QUEUE_IDX_WIDTH> pending_sta_addr_reqs_head = 0;
     reg<PENDING_STA_ADDR_QUEUE_COUNT_WIDTH> pending_sta_addr_reqs_count = 0;
     reg<1> pending_mmio_valid = false;
     PeripheralReqIO pending_mmio_req{};
   };
 
-  std::unique_ptr<AbstractMmu> mmu;
+  std::unique_ptr<TlbMmu> mmu;
   LsuState cur;
   LsuState nxt;
 
 public:
+  LsuIn in;
+  LsuOut out;
+  SimContext *ctx;
+
   RealLsu(SimContext *ctx);
 
-  void init() override;
-  void comb_cal() override;
-  void comb_lsu2dis_info() override;
-  void comb_recv() override;
-  void comb_load_res() override;
-  void comb_flush() override;
-  void comb_fun();
-  void seq() override;
+  void init();
+  void comb_cal();
+  void comb_lsu2dis_info();
+  void comb_recv();
+  void comb_load_res();
+  void comb_flush();
+  void seq();
 
-  StqEntry get_stq_entry(int stq_idx, bool stq_flag) override;
+  StqEntry get_stq_entry(int stq_idx, bool stq_flag);
+  void dump_debug_state() const {}
+  void dump_mmu_debug(FILE *out) const { (void)out; }
+  void set_csr(Csr *csr) { (void)csr; }
+  void restore_reservation(bool valid, uint32_t addr) {
+    (void)valid;
+    (void)addr;
+  }
 
-  void set_ptw_mem_port(PtwMemPort *port)override {
+  void set_ptw_mem_port(PtwMemPort *port) {
     mmu->set_ptw_mem_port(port);
   }
-  void set_ptw_walk_port(PtwWalkPort *port) override {
+  void set_ptw_walk_port(PtwWalkPort *port) {
     mmu->set_ptw_walk_port(port);
   }
 
-  uint32_t coherent_read(uint32_t p_addr) override;
+  uint32_t coherent_read(uint32_t p_addr);
   void overlay_committed_store_word(uint32_t p_addr,
-                                    uint32_t &data) override;
-  bool has_translation_store_conflict(uint32_t p_addr) const override;
-  bool has_committed_store_pending() const override;
+                                    uint32_t &data);
+  bool has_translation_store_conflict(uint32_t p_addr) const;
+  bool has_committed_store_pending() const;
 
 private:
+  int get_mem_width(int func3) const { return lsu_get_mem_width(func3); }
+  uint32_t extract_data(uint32_t raw_mem_val, uint32_t addr, int func3) const {
+    return lsu_extract_data(raw_mem_val, addr, func3);
+  }
+  uint32_t merge_data_to_word(uint32_t old_word, uint32_t new_data,
+                              uint32_t addr, int func3) const {
+    return lsu_merge_data_to_word(old_word, new_data, addr, func3);
+  }
 
   void handle_load_req(const MicroOp &uop);
   void handle_store_addr(const MicroOp &uop);
@@ -186,17 +275,16 @@ private:
   void commit_stores_from_rob(LsuState &state);
   void progress_ldq_entries(LsuState &state);
   void progress_pending_sta_addr(LsuState &state);
-  bool finish_store_addr_once(LsuState &state, const MicroOp &inst);
+  bool finish_store_addr_once(LsuState &state, const LsuUop &inst);
   bool committed_store_conflicts_word(const LsuState &state,
                                       uint32_t word_addr) const;
   void set_load_state(LdqEntry &entry, LoadState state);
   void set_load_ready(LdqEntry &entry, uint8_t delay);
   void begin_load_response_wait(LdqEntry &entry);
-  void sanitize_state_for_random_test(LsuState &state);
   void prepare_runtime_state(LsuState &state);
 
   bool has_older_store_pending(const LsuState &state,
-                               const MicroOp &load_uop) const;
+                               const LsuUop &load_uop) const;
   StoreForwardResult check_store_forward(const LsuState &state, uint32_t p_addr,
-                                         const MicroOp &load_uop);
+                                         const LsuUop &load_uop);
 };
