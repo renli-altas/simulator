@@ -1179,10 +1179,7 @@ struct StqEntry {
 struct LoadReq {
   wire<1> valid;
   wire<32> addr;
-  MicroOp uop;
-  size_t req_id;
-
-  LoadReq() : valid(false), addr(0), uop(), req_id(0) {}
+  wire<32> req_id;
 };
 
 struct StoreReq {
@@ -1190,30 +1187,29 @@ struct StoreReq {
   wire<32> addr;
   wire<32> data;
   wire<8> strb;
-  StqEntry uop;
-  size_t req_id;
+  wire<32> req_id;
+};
 
-  StoreReq() : valid(false), addr(0), data(0), strb(0xF), uop(), req_id(0) {}
+enum class ReplayType : wire<2> {
+  HIT = 0,
+  CONFILT = 1,//mshr conflict, fill confilct
+  MSHR_HIT = 2,
+  MSHR_FULL = 3,
 };
 
 // Load响应结构
 struct LoadResp {
   wire<1> valid;
   wire<32> data;
-  MicroOp uop;
-  size_t req_id;
-  wire<2> replay;
-  LoadResp() : valid(false), data(0), uop(), req_id(0), replay(0) {}
+  wire<32> req_id;
+  ReplayType replay;
 };
 
 // Store响应结构
 struct StoreResp {
   wire<1> valid;
-  wire<2> replay;
-  size_t req_id;
-  wire<1> is_cache_miss;
-
-  StoreResp() : valid(false), replay(0), req_id(0), is_cache_miss(false) {}
+  ReplayType replay;
+  wire<32>  req_id;
 };
 
 // 请求端口集合（支持4个Load + 4个Store）
@@ -1231,19 +1227,11 @@ struct DCacheReqPorts {
     }
   }
 };
-struct ReplayResp {
-  wire<2> replay;
-  size_t replay_addr;
-  wire<8> free_slots;
-
-  ReplayResp() : replay(0), replay_addr(0), free_slots(0) {}
-};
 
 // 响应端口集合
 struct DCacheRespPorts {
   LoadResp load_resps[LSU_LDU_COUNT];
   StoreResp store_resps[LSU_STA_COUNT];
-  ReplayResp replay_resp;
 
   void clear() {
     for (int i = 0; i < LSU_LDU_COUNT; i++) {
@@ -1251,24 +1239,23 @@ struct DCacheRespPorts {
     }
     for (int i = 0; i < LSU_STA_COUNT; i++) {
       store_resps[i].valid = false;
-      store_resps[i].replay = 0;
-      store_resps[i].is_cache_miss = false;
     }
-    replay_resp = ReplayResp();
   }
 };
 
 struct LsuDcacheIO {
   DCacheReqPorts req_ports;
+  wire<LSU_LDU_WIDTH> icache_req;
 
-  LsuDcacheIO() { req_ports.clear(); }
+  LsuDcacheIO() { icache_req = LSU_LDU_COUNT; }
 };
 
 struct DcacheLsuIO {
   DCacheRespPorts resp_ports;
-
-  DcacheLsuIO() { resp_ports.clear(); }
+  wire<1> mshr_fill;
 };
+
+
 
 struct LsuDisIO {
 

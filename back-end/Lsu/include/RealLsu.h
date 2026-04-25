@@ -140,6 +140,8 @@ public:
   bool has_translation_store_conflict(uint32_t p_addr) const override;
   bool has_committed_store_pending() const override;
 
+  void dump_debug_state(FILE *out) const override;
+  void dump_mmu_debug(FILE *out) const override { mmu->dump_debug(out); }
 private:
 
   void handle_load_req(const MicroOp &uop);

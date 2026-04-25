@@ -65,7 +65,7 @@ public:
 
   // debug接口
   virtual StqEntry get_stq_entry(int stq_idx, bool stq_flag) = 0;
-  virtual void dump_debug_state() const {}
+  virtual void dump_debug_state(FILE *out) const {}
   virtual void dump_mmu_debug(FILE *out) const { (void)out; }
 
   virtual void set_csr(Csr *csr) { (void)csr; }
@@ -80,9 +80,9 @@ public:
   virtual uint32_t coherent_read(uint32_t p_addr) = 0;
   virtual void overlay_committed_store_word(uint32_t p_addr,
                                             uint32_t &data) = 0;
-  // 当前是否存在一个已提交 store，会让对同一 32-bit PTE word 的 PTW 读
-  // 看到过旧结果。共享 PTW 只用它来决定“本次响应要不要 retry”，而不是
-  // 直接绕过 DCache 取数。
+  // 当前是否存在一个仍在 committed STQ 内、且命中同一 32-bit PTE word
+  // 的已提交 store。硬件可用 STQ 地址 CAM 保守实现；共享 PTW 只用它来
+  // 决定“本次响应要不要 retry”，而不是直接绕过 DCache 取数。
   virtual bool has_translation_store_conflict(uint32_t p_addr) const = 0;
   // sfence.vma 提交门控：是否存在“已提交但尚未从 STQ retire”的 store。
   // 注意这必须覆盖 store 已经拿到 dcache resp、但其写命中结果仍要到

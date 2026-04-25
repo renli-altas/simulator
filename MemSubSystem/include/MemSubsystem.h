@@ -5,16 +5,16 @@
 #include "MemPtwBlock.h"
 #include "PeripheralAxi.h"
 #include "PeripheralModel.h"
-#include "MemReadArbBlock.h"
-#include "MemRespRouteBlock.h"
+#include "MemRouteBlock.h"
 #include "PtwMemPort.h"
 #include "PtwWalkPort.h"
 #include "RealDcache.h"
-using MemDcacheImpl = RealDcache;
 #include "WriteBuffer.h"
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <FrontTop.h>
+
 
 class SimContext;
 class Csr;
@@ -39,6 +39,9 @@ public:
 
   explicit MemSubsystem(SimContext *ctx);
   ~MemSubsystem();
+
+  ICacheMemPortResp *icache_resp = nullptr;
+  ICacheMemPortReq *icache_req = nullptr;
 
   // External ports — LSU <-> DCache (RealDcache multi-port interface)
   LsuDcacheIO  *lsu2dcache  = nullptr;  // LSU → DCache requests
@@ -79,7 +82,7 @@ public:
   void llc_seq(const axi_interconnect::AXI_LLC_TableOut_t &table_out,
                const axi_interconnect::AXI_LLCPerfCounters_t &perf);
 
-  MemDcacheImpl  &get_dcache()  { return dcache_; }
+  RealDcache  &get_dcache()  { return dcache_; }
   MSHR        &get_mshr()    { return mshr_; }
   WriteBuffer &get_wb()      { return wb_; }
   PeripheralAxi &get_peripheral_axi() { return peripheral_axi_; }
@@ -89,16 +92,38 @@ private:
   SimContext *ctx;
 
   // Sub-modules
-  MemDcacheImpl dcache_;
+  RealDcache  dcache_;
   MSHR          mshr_;
   WriteBuffer   wb_;
   PeripheralAxi peripheral_axi_;
   PeripheralModel peripheral_model_;
   MemPtwBlock   ptw_block;
-  MemReadArbBlock read_arb_block;
-  MemRespRouteBlock resp_route_block;
+  MemRouteBlock mem_route_block;
   LsuDcacheIO dcache_req_mux_{};
   DcacheLsuIO dcache_resp_raw_{};
+
+  MSHRDcacheIO mshr_dcache_io_{};
+  DcacheMSHRIO dcache_mshr_io_{};
+
+  WBDcacheIO wb_dcache_io_{};
+  DcacheWBIO dcache_wb_io_{};
+
+  DcacheLineReadResp dcache_line_read_resp_[LSU_LDU_COUNT + LSU_STA_COUNT]{};
+  DcacheLineReadReq dcache_line_read_req_[LSU_LDU_COUNT + LSU_STA_COUNT]{};
+  PendingWrite pending_writes_[LSU_LDU_COUNT + LSU_STA_COUNT]{};
+  LruUpdate lru_updates_[LSU_LDU_COUNT + LSU_STA_COUNT]{};
+  FILLWrite fill_writes_{};
+  FillIn fill_in_{};
+  FillOut fill_out_{};
+
+  PtwReq ptw_walk_req;
+  PtwReq ptw_dtlb_req;
+  PtwReq ptw_itlb_req;
+
+  PtwGrant ptw_grant;
+  PtwEvent ptw_events;
+
+  ReplayWakeup wakeup;
 
   std::unique_ptr<AxiKitRuntime> axi_kit_runtime;
   bool internal_axi_runtime_active_ = true;

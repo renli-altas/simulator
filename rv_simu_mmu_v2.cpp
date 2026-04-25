@@ -129,7 +129,7 @@ void print_soc_config_banner() {
   constexpr uint64_t icache_capacity_bytes =
       static_cast<uint64_t>(ICACHE_SET_NUM) * ICACHE_WAY_NUM * ICACHE_LINE_SIZE;
   constexpr uint64_t dcache_capacity_bytes =
-      static_cast<uint64_t>(DCACHE_SETS) * DCACHE_WAYS * DCACHE_LINE_BYTES;
+      static_cast<uint64_t>(DCACHE_SETS_NUM) * DCACHE_WAYS_NUM * DCACHE_LINE_SIZE;
   constexpr uint64_t llc_capacity_bytes = CONFIG_AXI_LLC_SIZE_BYTES;
   const char *schedule_policy =
       ISSUE_SCHEDULE_POLICY == IssueSchedulePolicy::IQ_SLOT_PRIORITY
@@ -146,8 +146,8 @@ void print_soc_config_banner() {
       "L1D=%lluKB(%d sets x %d ways x %dB)\n",
       static_cast<unsigned long long>(icache_capacity_bytes / 1024),
       ICACHE_SET_NUM, ICACHE_WAY_NUM, ICACHE_LINE_SIZE,
-      static_cast<unsigned long long>(dcache_capacity_bytes / 1024), DCACHE_SETS,
-      DCACHE_WAYS, DCACHE_LINE_BYTES);
+      static_cast<unsigned long long>(dcache_capacity_bytes / 1024), DCACHE_SETS_NUM,
+      DCACHE_WAYS_NUM, DCACHE_LINE_SIZE);
   std::printf(
       "[CFG][MEM] hierarchy=L1I/L1D + AXI%s%s LLC=%lluMB(%u ways,mshr=%u,lookup=%ucy)\n",
       (CONFIG_ICACHE_USE_AXI_MEM_PORT ? "-icache" : ""),
@@ -193,7 +193,7 @@ void bridge_axi_to_mem_subsystem(SimCpu &cpu) {
   cpu.mem_subsystem.mshr_axi_in.req_accepted_id = rport.req.accepted_id;
   cpu.mem_subsystem.mshr_axi_in.resp_valid = rport.resp.valid;
   cpu.mem_subsystem.mshr_axi_in.resp_id = rport.resp.id;
-  for (int i = 0; i < DCACHE_LINE_WORDS &&
+  for (int i = 0; i < DCACHE_WORD_NUM &&
                   i < axi_interconnect::MAX_READ_TRANSACTION_WORDS;
        i++) {
     cpu.mem_subsystem.mshr_axi_in.resp_data[i] = rport.resp.data[i];
@@ -211,7 +211,7 @@ void bridge_axi_to_mem_subsystem(SimCpu &cpu) {
       peri_rport.req.accepted;
   cpu.mem_subsystem.peripheral_axi_read_in.resp_valid = peri_rport.resp.valid;
   cpu.mem_subsystem.peripheral_axi_read_in.resp_id = peri_rport.resp.id;
-  for (int i = 0; i < DCACHE_LINE_WORDS &&
+  for (int i = 0; i < DCACHE_WORD_NUM &&
                   i < axi_interconnect::MAX_READ_TRANSACTION_WORDS;
        i++) {
     cpu.mem_subsystem.peripheral_axi_read_in.resp_data[i] =
@@ -249,7 +249,7 @@ void bridge_mem_subsystem_to_axi(SimCpu &cpu) {
     wport.req.wdata[i] = 0;
   }
   for (int i = 0;
-       i < DCACHE_LINE_WORDS && i < axi_interconnect::CACHELINE_WORDS; i++) {
+       i < DCACHE_WORD_NUM && i < axi_interconnect::CACHELINE_WORDS; i++) {
     wport.req.wdata[i] = cpu.mem_subsystem.wb_axi_out.req_wdata[i];
   }
   wport.resp.ready = cpu.mem_subsystem.wb_axi_out.resp_ready;
@@ -277,7 +277,7 @@ void bridge_mem_subsystem_to_axi(SimCpu &cpu) {
     peri_wport.req.wdata[i] = 0;
   }
   for (int i = 0;
-       i < DCACHE_LINE_WORDS && i < axi_interconnect::CACHELINE_WORDS; i++) {
+       i < DCACHE_WORD_NUM && i < axi_interconnect::CACHELINE_WORDS; i++) {
     peri_wport.req.wdata[i] =
         cpu.mem_subsystem.peripheral_axi_write_out.req_wdata[i];
   }
@@ -466,6 +466,9 @@ void SimCpu::init() {
 
   mem_subsystem.lsu2dcache = back.lsu_dcache_req_io;
   mem_subsystem.dcache2lsu = back.lsu_dcache_resp_io;
+
+  mem_subsystem.icache_req = &icache_req;
+  mem_subsystem.icache_resp = &icache_resp;
 
   front.icache_ptw_walk_port = mem_subsystem.itlb_walk_port;
   front.icache_ptw_mem_port = mem_subsystem.itlb_ptw_port;
@@ -781,16 +784,18 @@ void SimCpu::front_cycle() {
 }
 
 bool SimCpu::ready_to_exit() const {
-  if (back.lsu->has_committed_store_pending()) {
-    return false;
-  }
+  Assert(false && "SimCpu::ready_to_exit: not implemented");
+  return false;
+  // if (back.lsu->has_committed_store_pending()) {
+  //   return false;
+  // }
 
-  const auto &peri = mem_subsystem.get_peripheral_axi().cur;
-  if (peri.busy || peri.req_accepted || peri.resp_valid) {
-    return false;
-  }
+  // const auto &peri = mem_subsystem.get_peripheral_axi().cur;
+  // if (peri.busy || peri.req_accepted || peri.resp_valid) {
+  //   return false;
+  // }
 
-  return true;
+  // return true;
 }
 void SimCpu::back2front_comb() {
   front.in.FIFO_read_enable = false;

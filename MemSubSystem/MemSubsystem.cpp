@@ -2,23 +2,23 @@
 #include "AbstractLsu.h"
 #include "config.h"
 #include "icache/GenericTable.h"
-#include <cinttypes>
-#include <memory>
-#include <cstdio>
 #include <assert.h>
+#include <cinttypes>
+#include <cstdio>
 #include <cstring>
+#include <memory>
 
-#if __has_include("UART16550_Device.h") && \
-    __has_include("AXI_Interconnect.h") && \
-    __has_include("AXI_Router_AXI4.h") && \
-    __has_include("MMIO_Bus_AXI4.h") && \
-    __has_include("SimDDR.h")
+#if __has_include("UART16550_Device.h") &&                                        \
+                  __has_include("AXI_Interconnect.h") &&                          \
+                                __has_include("AXI_Router_AXI4.h") &&             \
+                                              __has_include("MMIO_Bus_AXI4.h") && \
+                                                            __has_include("SimDDR.h")
 #define AXI_KIT_HEADERS_AVAILABLE 1
-#include "UART16550_Device.h"
 #include "AXI_Interconnect.h"
 #include "AXI_Router_AXI4.h"
 #include "MMIO_Bus_AXI4.h"
 #include "SimDDR.h"
+#include "UART16550_Device.h"
 namespace {
 using InterconnectImpl = axi_interconnect::AXI_Interconnect;
 using DdrImpl = sim_ddr::SimDDR;
@@ -557,28 +557,62 @@ MemSubsystem::MemSubsystem(SimContext *ctx) : ctx(ctx) {
 MemSubsystem::~MemSubsystem() = default;
 
 void MemSubsystem::init() {
-  Assert(lsu2dcache != nullptr && "MemSubsystem: lsu2dcache is not connected");
-  Assert(dcache2lsu  != nullptr && "MemSubsystem: dcache2lsu is not connected");
   Assert(peripheral_req != nullptr && "MemSubsystem: peripheral_req is not connected");
   Assert(peripheral_resp != nullptr && "MemSubsystem: peripheral_resp is not connected");
-  Assert(csr    != nullptr && "MemSubsystem: csr is not connected");
+  Assert(csr != nullptr && "MemSubsystem: csr is not connected");
   Assert(memory != nullptr && "MemSubsystem: memory is not connected");
-  
-  // Route LSU requests through MemReadArbBlock so PTW reads can be injected,
-  // and capture raw DCache responses before routing them back to LSU/PTW.
-  dcache_.lsu2dcache  = &dcache_req_mux_;
-  dcache_.dcache2lsu  = &dcache_resp_raw_;
+
+  // Route LSU/PTW/ICache requests through MemRouteBlock and capture raw
+  // DCache responses before routing them back to their owners.
+  dcache_.in.lsu2dcache = &dcache_req_mux_;
+  dcache_.out.dcache2lsu = &dcache_resp_raw_;
 
   // Internal MSHR ↔ DCache wires: RealDcache reads/writes MSHR IO structs
   // directly via pointers, keeping the connection zero-copy.
-  dcache_.mshr2dcache = &mshr_.out.mshr2dcache;  // MSHR output → DCache input
-  dcache_.dcache2mshr = &mshr_.in.dcachemshr;    // DCache output → MSHR input
+  dcache_.in.mshr2dcache = &mshr_dcache_io_;  // MSHR output → DCache input
+  dcache_.out.dcache2mshr = &dcache_mshr_io_; // DCache output → MSHR input
+  mshr_.in.dcache2mshr = &dcache_mshr_io_;    // DCache output → MSHR comb input
+  mshr_.out.mshr2dcache = &mshr_dcache_io_;   // MSHR output → DCache input
+
+  mshr_.in.axi_in = &mshr_axi_in;    // MSHR comb input ← AXI read/write ports
+  mshr_.out.axi_out = &mshr_axi_out; // MSHR output → AXI read/write ports
+  wb_.in.axi_in = &wb_axi_in;        // WB comb input ← AXI read/write ports (for write response handling)
+  wb_.out.axi_out = &wb_axi_out;     // WB output → AXI read/write ports (for write issuance)
 
   // Internal WriteBuffer ↔ DCache wires.
-  dcache_.wb2dcache   = &wb_.out.wbdcache;       // WB output → DCache input
-  dcache_.dcache2wb   = &wb_.in.dcachewb;        // DCache output → WB input
-  dcache_.bind_context(ctx);
-  mshr_.bind_context(ctx);
+  dcache_.in.wb2dcache = &wb_dcache_io_;  // WB output → DCache input
+  dcache_.out.dcache2wb = &dcache_wb_io_; // DCache output → WB input
+  wb_.in.dcache2wb = &dcache_wb_io_;      // DCache output → WB comb input
+  wb_.out.wb2dcache = &wb_dcache_io_;     // WB output → DCache inputs
+
+  for (int i = 0; i < LSU_LDU_COUNT + LSU_STA_COUNT; i++) {
+    dcache_.in.dcachelinereadresp[i] = &dcache_line_read_resp_[i]; // DCache line read response → LSU
+    dcache_.out.dcachereadreq[i] = &dcache_line_read_req_[i];      // DCache line read request ← LSU
+    dcache_.out.lru_updates[i] = &lru_updates_[i];                 // DCache line write request ← LSU
+    dcache_.out.pendingwrite[i] = &pending_writes_[i];             // DCache pending write flag ← LSU
+  }
+
+  dcache_.out.fill_write = &fill_writes_; // DCache fill write-back flag ← LSU
+  dcache_.in.fillin = &fill_in_;          // DCache fill input (from MSHR/WB)
+  dcache_.out.fillout = &fill_out_;       // DCache fill output (to MSHR/WB)
+
+  mem_route_block.out.dcache_req = &dcache_req_mux_;  // MemRouteBlock output → DCache request multiplexer
+  mem_route_block.in.dcache_resp = &dcache_resp_raw_; // LSU request → MemRouteBlock input
+
+  mem_route_block.in.lsu_req = &lsu2dcache->req_ports;
+  mem_route_block.out.lsu_resp = dcache2lsu;
+
+  mem_route_block.in.icache_req = icache_req;
+  mem_route_block.out.icache_resp = icache_resp;
+
+  mem_route_block.in.ptw_walk_req = &ptw_walk_req; // PTW walk request → MemRouteBlock input
+  mem_route_block.in.ptw_dtlb_req = &ptw_dtlb_req; // MemRouteBlock output → PTW walk response
+  mem_route_block.in.ptw_itlb_req = &ptw_itlb_req; // MemRouteBlock output → PTW walk response
+
+  mem_route_block.out.ptw_events = &ptw_events; // MemRouteBlock output → PTW event signals
+  mem_route_block.out.ptw_grant = &ptw_grant;   // MemRouteBlock output → PTW grant signals
+  mem_route_block.out.wakeup = &wakeup;         // MemRouteBlock output → LSU wakeup signals
+
   wb_.bind_context(ctx);
 
   // ── Initialise sub-modules ─────────────────────────────────────────────────
@@ -592,8 +626,7 @@ void MemSubsystem::init() {
   peripheral_axi_.init();
 
   ptw_block.init();
-  read_arb_block.init();
-  resp_route_block.init();
+  mem_route_block.init();
   sync_ptw_port_outputs();
   dtlb_ptw_port_inst->reset_cycle_input();
   itlb_ptw_port_inst->reset_cycle_input();
@@ -604,10 +637,24 @@ void MemSubsystem::init() {
 
   dcache_req_mux_ = {};
   dcache_resp_raw_ = {};
-  mshr_axi_in  = {};
+
+  mshr_dcache_io_ = {};
+  dcache_mshr_io_ = {};
+  wb_dcache_io_ = {};
+  dcache_wb_io_ = {};
+
+  memset(dcache_line_read_req_, 0, sizeof(dcache_line_read_req_));
+  memset(dcache_line_read_resp_, 0, sizeof(dcache_line_read_resp_));
+  memset(lru_updates_, 0, sizeof(lru_updates_));
+  memset(pending_writes_, 0, sizeof(pending_writes_));
+  fill_writes_ = {};
+  fill_in_ = {};
+  fill_out_ = {};
+
+  mshr_axi_in = {};
   mshr_axi_out = {};
-  wb_axi_in    = {};
-  wb_axi_out   = {};
+  wb_axi_in = {};
+  wb_axi_out = {};
   peripheral_axi_read_in = {};
   peripheral_axi_read_out = {};
   peripheral_axi_write_in = {};
@@ -632,7 +679,7 @@ void MemSubsystem::init() {
   static bool printed_axi_cfg = false;
   if (!printed_axi_cfg) {
     printed_axi_cfg = true;
-    LSU_MEM_DBG_PRINTF(
+    printf(
         "[CONFIG][AXI] ddr_read_latency=%ucy ddr_write_resp_latency=%ucy "
         "ddr_beat=%uB wq=%u wag=%ucy wfifo=%u wdrain=%ucy whi=%u wlo=%u "
         "r2w=%ucy w2r=%ucy "
@@ -653,21 +700,19 @@ void MemSubsystem::init() {
         static_cast<unsigned>(axi_interconnect::MAX_OUTSTANDING),
         static_cast<unsigned>(axi_interconnect::MAX_READ_OUTSTANDING_PER_MASTER),
         static_cast<unsigned>(sim_ddr::SIM_DDR_MAX_OUTSTANDING),
-        static_cast<unsigned>(DCACHE_LINE_BYTES),
-        static_cast<unsigned>(DCACHE_LINE_WORDS),
+        static_cast<unsigned>(DCACHE_LINE_SIZE),
+        static_cast<unsigned>(DCACHE_WORD_NUM),
         static_cast<unsigned>(axi_interconnect::AXI_UPSTREAM_PAYLOAD_BYTES),
         static_cast<unsigned>(axi_interconnect::MAX_READ_TRANSACTION_BYTES));
-    if (DCACHE_LINE_WORDS > axi_interconnect::CACHELINE_WORDS) {
-      LSU_MEM_DBG_PRINTF(
+    if (DCACHE_WORD_NUM > axi_interconnect::CACHELINE_WORDS) {
+      printf(
           "[MEM][AXI CFG][WARN] dcache line (%u words) is wider than AXI upstream "
           "write payload (%u words). High words may be dropped in bridge path.\n",
-          static_cast<unsigned>(DCACHE_LINE_WORDS),
+          static_cast<unsigned>(DCACHE_WORD_NUM),
           static_cast<unsigned>(axi_interconnect::CACHELINE_WORDS));
     }
   }
 #endif
-
-
 
 #if AXI_KIT_RUNTIME_ENABLED
   for (int i = 0; i < axi_interconnect::NUM_READ_MASTERS; i++) {
@@ -689,7 +734,6 @@ void MemSubsystem::init() {
     port.resp.ready = false;
   }
 #endif
-
 }
 
 void MemSubsystem::on_commit_store(uint32_t paddr, uint32_t data, uint8_t func3) {
@@ -708,48 +752,11 @@ void MemSubsystem::dump_debug_state(FILE *out) const {
   if (out == nullptr) {
     return;
   }
-  const auto ptw = ptw_block.debug_state();
-  std::fprintf(out,
-               "[MEM DEBUG][PTW] walk_active=%d state=%u owner=%u "
-               "req_id_valid=%d req_id=%zu dtlb(req_p=%d req_i=%d resp=%d "
-               "mem_p=%d mem_i=%d) itlb(req_p=%d req_i=%d resp=%d mem_p=%d "
-               "mem_i=%d)\n",
-               static_cast<int>(ptw.walk_active),
-               static_cast<unsigned>(ptw.walk_state),
-               static_cast<unsigned>(ptw.walk_owner),
-               static_cast<int>(ptw.walk_req_id_valid), ptw.walk_req_id,
-               static_cast<int>(ptw.walk_req_pending[0]),
-               static_cast<int>(ptw.walk_req_inflight[0]),
-               static_cast<int>(ptw.walk_resp_valid[0]),
-               static_cast<int>(ptw.mem_req_pending[0]),
-               static_cast<int>(ptw.mem_req_inflight[0]),
-               static_cast<int>(ptw.walk_req_pending[1]),
-               static_cast<int>(ptw.walk_req_inflight[1]),
-               static_cast<int>(ptw.walk_resp_valid[1]),
-               static_cast<int>(ptw.mem_req_pending[1]),
-               static_cast<int>(ptw.mem_req_inflight[1]));
-
-  const auto route = resp_route_block.debug_state();
-  std::fprintf(out,
-               "[MEM DEBUG][ROUTE] ptw_event_count=%u wake(dtlb=%d itlb=%d "
-               "walk=%d) ptw_port0=%d lsu_port0_replayed=%d\n",
-               static_cast<unsigned>(route.ptw_event_count),
-               static_cast<int>(route.wakeup.dtlb),
-               static_cast<int>(route.wakeup.itlb),
-               static_cast<int>(route.wakeup.walk),
-               static_cast<int>(route.ptw_occupies_port0),
-               static_cast<int>(route.lsu_port0_replayed));
-  for (size_t i = 0; i < MemRespRouteBlock::kPtwTrackCount; i++) {
-    const auto &track = route.ptw_tracks[i];
-    if (!track.valid) {
-      continue;
-    }
-    std::fprintf(out,
-                 "[MEM DEBUG][ROUTE][PTWTRACK] idx=%zu owner=%u req_id=%zu "
-                 "addr=0x%08x\n",
-                 i, static_cast<unsigned>(track.owner), track.req_id,
-                 track.req_addr);
-  }
+  ptw_block.dump_debug_state(out);
+  mem_route_block.dump_debug_state(out);
+  mshr_.dump_debug_state(out);
+  wb_.dump_debug_state(out);
+  dcache_.dump_debug_state(out);
 }
 
 void MemSubsystem::comb() {
@@ -809,123 +816,69 @@ void MemSubsystem::comb() {
   ptw_block.comb_begin(ptw_port_in);
   const auto &ptw_out = ptw_block.comb_outputs();
 
-  const uint32_t ptw_walk_read_addr = ptw_out.walk_read_addr;
-  const bool issue_ptw_walk_read = ptw_out.issue_walk_read;
-  const bool has_ptw_dtlb = ptw_out.mem_req_pending[static_cast<size_t>(PtwClient::DTLB)];
-  const bool has_ptw_itlb = ptw_out.mem_req_pending[static_cast<size_t>(PtwClient::ITLB)];
-  const uint32_t ptw_dtlb_addr =
+  ptw_walk_req.valid = ptw_out.issue_walk_read;
+  ptw_walk_req.addr = ptw_out.walk_read_addr;
+
+  ptw_dtlb_req.valid =
+      ptw_out.mem_req_pending[static_cast<size_t>(PtwClient::DTLB)];
+  ptw_dtlb_req.addr =
       ptw_out.mem_req_addr[static_cast<size_t>(PtwClient::DTLB)];
-  const uint32_t ptw_itlb_addr =
+
+  ptw_itlb_req.valid =
+      ptw_out.mem_req_pending[static_cast<size_t>(PtwClient::ITLB)];
+  ptw_itlb_req.addr =
       ptw_out.mem_req_addr[static_cast<size_t>(PtwClient::ITLB)];
 
-  auto same_cycle_store_conflicts_ptw = [&](uint32_t paddr) {
-    if (lsu2dcache == nullptr) {
-      return false;
-    }
-    for (int i = 0; i < LSU_STA_COUNT; i++) {
-      const auto &store_req = lsu2dcache->req_ports.store_ports[i];
-      if (!store_req.valid) {
-        continue;
-      }
-      if ((static_cast<uint32_t>(store_req.addr) >> 2) == (paddr >> 2)) {
-        return true;
-      }
-    }
-    return false;
-  };
+  wb_.comb_outputs_dcache();
+  wb_.comb_outputs_axi();
 
-  const bool ptw_dtlb_store_conflict =
-      has_ptw_dtlb && same_cycle_store_conflicts_ptw(ptw_dtlb_addr);
-  const bool ptw_itlb_store_conflict =
-      has_ptw_itlb && same_cycle_store_conflicts_ptw(ptw_itlb_addr);
+  mshr_.comb_outputs_dcache();
+  mshr_.comb_outputs_axi();
+  mem_route_block.comb_request();
 
-  bool ptw_walk_hold_for_coherence = false;
-  if (issue_ptw_walk_read && same_cycle_store_conflicts_ptw(ptw_walk_read_addr)) {
-    // PTW reads must not observe the pre-state of a same-cycle committed PTE
-    // store routed into DCache. Hold the walk for one cycle and let the store
-    // update become architecturally visible through the normal DCache seq path
-    // first. Shared PTW intentionally stays on the ordinary DCache request
-    // pipeline instead of sampling a speculative same-cycle view here.
-    ptw_walk_hold_for_coherence = true;
-  }
-
-  read_arb_block.eval_comb(lsu2dcache,
-                           issue_ptw_walk_read && !ptw_walk_hold_for_coherence,
-                           ptw_walk_read_addr,
-                           has_ptw_dtlb && !ptw_dtlb_store_conflict,
-                           ptw_dtlb_addr,
-                           has_ptw_itlb && !ptw_itlb_store_conflict,
-                           ptw_itlb_addr);
-
-  dcache_req_mux_ = read_arb_block.comb_result().dcache_req;
-  dcache_resp_raw_ = {};
-
-  // Feed current-cycle AXI feedback before any comb phase that consumes it.
-  mshr_.in.axi_in = mshr_axi_in;
-  wb_.in.axi_in   = wb_axi_in;
-
-  // RealDcache::stage2_comb() consumes current-cycle MSHR/WB comb outputs.
-  // Order:
-  // 1. WB comb_outputs exposes ready from the current WB view.
-  // 2. MSHR comb_outputs uses that ready to decide whether an AXI read response
-  //    may retire this cycle.
-  // 3. DCache stage1 snapshots the new requests into s1s2_nxt.
-  // 4. DCache emits WB bypass/merge queries for s1s2_cur, the requests that
-  //    stage2 will actually evaluate in this cycle.
-  // 5. WB comb_inputs consumes those queries immediately.
-  // 6. WB comb_outputs is refreshed so DCache stage2 sees same-cycle bypass.
-  wb_.comb_outputs();
-  mshr_.in.wbmshr = wb_.out.wbmshr;
-  mshr_.comb_outputs();
-  dcache_.stage1_comb();
-  dcache_.prepare_wb_queries_for_stage2();
-
-  wb_.in.mshrwb   = mshr_.out.mshrwb;  // eviction push from MSHR current comb
-  wb_.comb_inputs();
-  wb_.comb_outputs();
-  mshr_.in.wbmshr = wb_.out.wbmshr;
+  Dcache_Read(dcache_line_read_req_,
+              dcache_line_read_resp_,
+              fill_out_,
+              fill_in_);
 
   dcache_.stage2_comb();
+  Dcache_Write(pending_writes_,
+               lru_updates_,
+               fill_writes_);
 
-  const replay_resp replay_bcast =
-      replay_resp::from_io(mshr_.out.replay_resp);
+  mem_route_block.comb_response();
+  dcache_.stage1_comb();
 
-  resp_route_block.eval_comb(&dcache_resp_raw_,
-                             read_arb_block.comb_result().issued_tags,
-                             replay_bcast);
-  const auto &route_out = resp_route_block.comb_outputs();
   MemPtwBlock::FeedbackIn ptw_feedback{};
-  ptw_feedback.wakeup_dtlb = route_out.wakeup.dtlb;
-  ptw_feedback.wakeup_itlb = route_out.wakeup.itlb;
-  ptw_feedback.wakeup_walk = route_out.wakeup.walk;
-  if (read_arb_block.comb_result().granted) {
+
+  ptw_feedback.wakeup_dtlb = wakeup.dtlb;
+  ptw_feedback.wakeup_itlb = wakeup.itlb;
+  ptw_feedback.wakeup_walk = wakeup.walk;
+
+  // grant 转换
+  if (ptw_grant.valid) {
     ptw_feedback.grant_valid = true;
-    switch (read_arb_block.comb_result().granted_owner) {
-    case MemReadArbBlock::Owner::PTW_DTLB:
+    ptw_feedback.grant_req_id = ptw_grant.req_id;
+
+    switch (ptw_grant.owner) {
+    case Owner::PTW_DTLB:
       ptw_feedback.grant_owner = MemPtwBlock::GrantOwner::MEM_DTLB;
       break;
-    case MemReadArbBlock::Owner::PTW_ITLB:
+    case Owner::PTW_ITLB:
       ptw_feedback.grant_owner = MemPtwBlock::GrantOwner::MEM_ITLB;
       break;
-    case MemReadArbBlock::Owner::PTW_WALK:
+    case Owner::PTW_WALK:
       ptw_feedback.grant_owner = MemPtwBlock::GrantOwner::WALK;
-      if (read_arb_block.comb_result().injected_port >= 0) {
-        const auto &tag =
-            read_arb_block.comb_result()
-                .issued_tags[read_arb_block.comb_result().injected_port];
-        ptw_feedback.grant_req_id = tag.req_id;
-      }
       break;
     default:
       ptw_feedback.grant_valid = false;
       break;
     }
   }
-  for (uint8_t i = 0; i < route_out.ptw_event_count; i++) {
-    const auto &evt = route_out.ptw_events[i];
-    if (!evt.valid) {
-      continue;
-    }
+
+  // 单个 ptw_event 转换
+  if (ptw_events.valid) {
+    const auto &evt = ptw_events;
 
     MemPtwBlock::RoutedEvent mapped{};
     mapped.valid = true;
@@ -933,119 +886,45 @@ void MemSubsystem::comb() {
     mapped.replay = evt.replay;
     mapped.req_addr = evt.req_addr;
     mapped.req_id = evt.req_id;
+
     switch (evt.owner) {
-    case MemReadArbBlock::Owner::PTW_DTLB:
+    case Owner::PTW_DTLB:
       mapped.owner = MemPtwBlock::RoutedEventOwner::MEM_DTLB;
       break;
-    case MemReadArbBlock::Owner::PTW_ITLB:
+    case Owner::PTW_ITLB:
       mapped.owner = MemPtwBlock::RoutedEventOwner::MEM_ITLB;
       break;
-    case MemReadArbBlock::Owner::PTW_WALK:
+    case Owner::PTW_WALK:
       mapped.owner = MemPtwBlock::RoutedEventOwner::WALK;
       break;
     default:
       mapped.valid = false;
       break;
     }
-    if (!mapped.valid) {
-      continue;
-    }
 
-    if (mapped.replay == 0 && ptw_coherent_source_ != nullptr) {
-      // Resolve the PTW-visible event payload entirely on the MemSubsystem
-      // side, then feed the resolved result into ptw_feedback as an explicit
-      // PTW input. No PTW state is mutated here.
-      auto request_ptw_retry = [&]() {
-        switch (mapped.owner) {
-        case MemPtwBlock::RoutedEventOwner::MEM_DTLB:
-          ptw_feedback.wakeup_dtlb = true;
-          break;
-        case MemPtwBlock::RoutedEventOwner::MEM_ITLB:
-          ptw_feedback.wakeup_itlb = true;
-          break;
-        case MemPtwBlock::RoutedEventOwner::WALK:
-          ptw_feedback.wakeup_walk = true;
-          break;
-        default:
-          break;
-        }
-      };
-
-      uint32_t resolved_word = mapped.data;
-      uint32_t dcache_word = 0;
-      const auto dcache_coherence =
-          get_dcache().query_coherent_word(mapped.req_addr, dcache_word);
-      if (dcache_coherence == RealDcache::CoherentQueryResult::Retry) {
-        request_ptw_retry();
-        continue;
-      }
-      if (dcache_coherence == RealDcache::CoherentQueryResult::Hit) {
-        resolved_word = dcache_word;
-      }
-      ptw_coherent_source_->overlay_committed_store_word(mapped.req_addr,
-                                                         resolved_word);
-      if (ptw_coherent_source_->has_translation_store_conflict(mapped.req_addr)) {
-        request_ptw_retry();
-        continue;
-      }
-      mapped.data = resolved_word;
-    }
-
-    if (ptw_feedback.event_count < ptw_feedback.events.size()) {
-      ptw_feedback.events[ptw_feedback.event_count++] = mapped;
+    if (mapped.valid) {
+      ptw_feedback.events[0] = mapped;
+      ptw_feedback.event_count = 1;
     }
   }
+
   ptw_block.comb_finish(ptw_feedback);
+
   sync_ptw_port_outputs();
-
-  if (dcache2lsu != nullptr) {
-    *dcache2lsu = resp_route_block.comb_outputs().lsu_resp;
-
-    if (read_arb_block.comb_result().lsu_port0_preempted) {
-      if (ctx != nullptr) {
-        ctx->perf.ptw_port0_replay_count++;
-      }
-      int replay_port = -1;
-      for (int i = 0; i < LSU_LDU_COUNT; i++) {
-        if (!dcache2lsu->resp_ports.load_resps[i].valid) {
-          replay_port = i;
-          break;
-        }
-      }
-      if (replay_port < 0) {
-        // Do not silently drop this replay: LSU has already marked the preempted
-        // request as sent/waiting and will deadlock without a retry signal.
-        replay_port = 0;
-      }
-      auto &dst = dcache2lsu->resp_ports.load_resps[replay_port];
-      const auto &tag0 = read_arb_block.comb_result().preempted_lsu_tag;
-      dst = {};
-      dst.valid = tag0.valid;
-      dst.req_id = tag0.req_id;
-      dst.uop = tag0.uop;
-      // LSU consumes replay by LDQ token; keep token and req_id consistent.
-      dst.uop.rob_idx = static_cast<uint32_t>(tag0.req_id);
-      dst.replay = 3;
-    }
-  }
-
-  // Export MSHR replay wakeup to LSU. RealDcache::comb() clears resp ports
-  // every cycle, so this must be written after dcache_.comb().
-  if (dcache2lsu != nullptr) {
-    dcache2lsu->resp_ports.replay_resp = mshr_.out.replay_resp;
-  }
 
   // Phase 3a: run MSHR comb_inputs (may accept AXI R, allocate entries, and
   // prepare next-cycle registered fill / eviction outputs).
-  mshr_.comb_inputs();
+  mshr_.comb_inputs_dcache();
+  mshr_.comb_inputs_axi();
+
+  wb_.comb_inputs_dcache();
+  wb_.comb_inputs_axi();
 
   peripheral_axi_.in.read = peripheral_axi_read_in;
   peripheral_axi_.in.write = peripheral_axi_write_in;
   peripheral_axi_.comb_outputs();
   peripheral_axi_.comb_inputs();
 
-  mshr_axi_out = mshr_.out.axi_out;
-  wb_axi_out = wb_.out.axi_out;
   peripheral_axi_read_out = peripheral_axi_.out.read;
   peripheral_axi_write_out = peripheral_axi_.out.write;
 
@@ -1105,8 +984,7 @@ void MemSubsystem::seq() {
   mshr_.seq();
   wb_.seq();
   peripheral_axi_.seq();
-  read_arb_block.update_seq();
-  resp_route_block.update_seq();
+  mem_route_block.seq();
 #if AXI_KIT_RUNTIME_ENABLED
   if (internal_axi_runtime_active_) {
     axi_kit_runtime->ddr.seq();

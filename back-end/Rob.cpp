@@ -432,7 +432,7 @@ void Rob::comb_commit() {
 
     if (ctx != nullptr && ctx->cpu != nullptr) {
       std::fprintf(stderr, "[ROB DEADLOCK] dumping LSU/MMU state\n");
-      ctx->cpu->back.lsu->dump_debug_state();
+      ctx->cpu->back.lsu->dump_debug_state(stderr);
       std::fprintf(stderr, "[ROB DEADLOCK] dumping MemSubsystem state\n");
       ctx->cpu->mem_subsystem.dump_debug_state(stderr);
     }
