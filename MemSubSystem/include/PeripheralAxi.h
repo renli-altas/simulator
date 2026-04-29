@@ -60,7 +60,6 @@ struct PeripheralAxiState {
   uint8_t func3 = 0;
   uint32_t rdata = 0;
   uint8_t req_id = 0;
-  MicroOp uop = {};
 };
 
 class PeripheralAxi {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "AbstractLsu.h"
 #include "MSHR.h"
 #include "WriteBuffer.h"
 #include "config.h"
@@ -13,7 +12,7 @@
 // S1S2Reg — pipeline register between Stage 1 (SRAM read) and Stage 2 (hit check)
 // ─────────────────────────────────────────────────────────────────────────────
 struct S1S2Reg {
-    reg<1> icache_req; // latched from in.lsu2dcache->icache_req at stage1_comb(); used for timing the critical path of hit check and MSHR lookup
+    reg<LSU_LDU_WIDTH+1> icache_req; // latched from in.lsu2dcache->icache_req at stage1_comb(); used for timing the critical path of hit check and MSHR lookup
     
     FILLWrite fill_write; // latched from in.mshr2dcache->fill_req at stage1_comb(); used for timing the critical path of hit check and MSHR lookup
     // Load slots
@@ -30,6 +29,7 @@ struct S1S2Reg {
         reg<32>    data     = 0; // word to write
         reg<8>     strb     = 0; // byte-enable
         reg<32>    req_id   = 0;
+        reg<1>     replayed  = false; // whether this store has been replayed due to MSHR full or conflict, used to avoid accepting new requests for the same store and causing starvation when there are multiple back-to-back misses
     } stores[LSU_STA_COUNT];
 };
 class RealDcache {

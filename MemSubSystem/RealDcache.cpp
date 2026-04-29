@@ -69,11 +69,19 @@ void RealDcache::stage1_comb() {
             out.dcache2wb->merge_req[i].valid = false;
         }
         else{
+            bool replayed = false;
+            for(int j=0;j<LSU_STA_COUNT;j++){
+                if(s1s2_cur.stores[j].valid&&CheckAddr(req.addr,req.strb, s1s2_cur.stores[i].addr,s1s2_cur.stores[i].strb)){
+                    replayed = out.dcache2lsu->resp_ports.store_resps[j].replay != ReplayType::HIT; // If there is an older store with overlapping address that is waiting for MSHR allocation or has been allocated an MSHR but not yet completed (i.e., needs to be replayed), then this store should also be replayed to avoid starvation. Note that we only check the replay status of the older store, because if the older store is a hit, it means it can complete in the same cycle and update the cache before this store's hit check, so this store doesn't need to be replayed. On the other hand, if we check the replay status of this store itself, it may cause unnecessary replays when there are multiple back-to-back misses, because this store may not have been marked as replayed yet when we check, even though it will be replayed in the same cycle due to MSHR miss.
+                    break;
+                }
+            }
             slot.valid    = true;
             slot.addr     = req.addr;
             slot.data     = req.data;
             slot.strb     = req.strb;
             slot.req_id   = req.req_id; 
+            slot.replayed = replayed;
             AddrFields f  = decode(req.addr);
             out.dcachereadreq[idx]->set_idx = f.set_idx;
 
@@ -199,7 +207,7 @@ void RealDcache::stage2_comb() {
                 }
                 else{
                     resp.valid = true;
-                    resp.replay = ReplayType::CONFILT; 
+                    resp.replay = ReplayType::CONFLICT; 
                     resp.req_id = slot.req_id;
                 }
             }
@@ -219,7 +227,7 @@ void RealDcache::stage2_comb() {
 
         if(cache_line_match(slot.addr,in.mshr2dcache->fill_req.addr)&&in.mshr2dcache->fill_req.valid){ // hit the MSHR entry allocated in the same cycle, treat it as a hit and update the pending MSHR entry to avoid a deadlock when MSHR is full
            resp.valid  = true;
-           resp.replay = ReplayType::CONFILT;
+           resp.replay = ReplayType::CONFLICT;
            resp.req_id = slot.req_id;
            continue;
         }
@@ -234,7 +242,7 @@ void RealDcache::stage2_comb() {
         if (hit_way < DCACHE_WAYS_NUM) {
             if(s1s2_cur.fill_write.set_idx == f.set_idx && s1s2_cur.fill_write.valid&&out.fill_write->way_idx == hit_way){ // hit the line being filled in the same cycle, treat it as a hit and update the pending fill write to avoid a deadlock when MSHR is full
                 resp.valid  = true;
-                resp.replay = ReplayType::CONFILT;
+                resp.replay = ReplayType::CONFLICT;
                 resp.req_id = slot.req_id;
             }
             else{
@@ -260,7 +268,7 @@ void RealDcache::stage2_comb() {
             }
             else if(in.wb2dcache->merge_resp[i].busy){
                 resp.valid = true;
-                resp.replay = ReplayType::CONFILT; // The store can proceed but the merge logic is busy, so replay later to give chance for the merge logic to catch up and avoid long latency on the following stores that hit the same line.
+                resp.replay = ReplayType::CONFLICT; // The store can proceed but the merge logic is busy, so replay later to give chance for the merge logic to catch up and avoid long latency on the following stores that hit the same line.
                 resp.req_id = slot.req_id;
             }
             else if(in.mshr2dcache->find_resp[iidx].valid){
@@ -291,7 +299,7 @@ void RealDcache::stage2_comb() {
                 }
                 else{
                     resp.valid = true;
-                    resp.replay = ReplayType::CONFILT; // MSHR conflict with the other port in the same cycle, replay later
+                    resp.replay = ReplayType::CONFLICT; // MSHR conflict with the other port in the same cycle, replay later
                     resp.req_id = slot.req_id;
                 }
             }

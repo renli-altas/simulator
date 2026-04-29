@@ -342,7 +342,7 @@ static_assert(is_power_of_two_u64(FTQ_SIZE), "FTQ_SIZE must be a power of two");
 constexpr uint64_t OP_MASK_ALU = (1ULL << UOP_ADD) | (1ULL << UOP_ECALL) |
                                  (1ULL << UOP_EBREAK) | (1ULL << UOP_MRET) |
                                  (1ULL << UOP_SRET) | (1ULL << UOP_SFENCE_VMA) |
-                                 (1ULL << UOP_FENCE_I) | (1ULL << UOP_WFI);
+                                 (1ULL << UOP_FENCE_I) | (1ULL << UOP_FENCE) | (1ULL << UOP_WFI);
 constexpr uint64_t OP_MASK_CSR = (1ULL << UOP_CSR);
 constexpr uint64_t OP_MASK_MUL = (1ULL << UOP_MUL);
 constexpr uint64_t OP_MASK_DIV = (1ULL << UOP_DIV);
@@ -627,8 +627,10 @@ constexpr int FTQ_OFFSET_WIDTH = clog2(FETCH_WIDTH);
 
 constexpr uint32_t UART_ADDR_BASE = 0x10000000;
 constexpr uint32_t UART_MMIO_SIZE = 0x00000100;
+constexpr uint32_t UART_ADDR_MASK = 0xFFFFFFF0;
 constexpr uint32_t PLIC_ADDR_BASE = 0x0c000000;
 constexpr uint32_t PLIC_MMIO_SIZE = 0x00210000;
+constexpr uint32_t PLIC_ADDR_MASK = 0xFC000000;
 constexpr uint32_t PLIC_CLAIM_ADDR = 0x0c201004;
 constexpr uint32_t BOOT_IO_BASE = 0x00000000;
 constexpr uint32_t BOOT_IO_SIZE = 0x00002000;

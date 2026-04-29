@@ -74,7 +74,8 @@ inline bool is_exception(const DecRenIO::DecRenInst &uop) {
 inline bool is_flush_inst(const DecRenIO::DecRenInst &uop) {
   InstType type = decode_inst_type(uop.type);
   return type == CSR || type == ECALL || type == MRET || type == SRET ||
-         type == SFENCE_VMA || is_exception(uop) || type == EBREAK;
+         type == SFENCE_VMA || type == FENCE_I || is_exception(uop) ||
+         type == EBREAK;
 }
 
 struct RenDecIO {
@@ -110,6 +111,7 @@ struct FrontPreIO {
   wire<32> inst[FETCH_WIDTH];
   wire<32> pc[FETCH_WIDTH];
   wire<1> valid[FETCH_WIDTH];
+  wire<1> front_stall;
   wire<1> predict_dir[FETCH_WIDTH];
 
   wire<1> alt_pred[FETCH_WIDTH];
@@ -136,6 +138,7 @@ struct FrontPreIO {
       v = {};
     for (auto &v : valid)
       v = {};
+    front_stall = {};
     for (auto &v : predict_dir)
       v = {};
     for (auto &v : alt_pred)
@@ -367,7 +370,8 @@ inline bool is_exception(const RobCommitIO::RobCommitInst &uop) {
 inline bool is_flush_inst(const RobCommitIO::RobCommitInst &uop) {
   InstType type = decode_inst_type(uop.type);
   return type == CSR || type == ECALL || type == MRET || type == SRET ||
-         type == SFENCE_VMA || is_exception(uop) || type == EBREAK ||
+         type == SFENCE_VMA || type == FENCE_I || is_exception(uop) ||
+         type == EBREAK ||
          uop.flush_pipe;
 }
 
@@ -469,7 +473,8 @@ inline bool is_exception(const DisRobIO::DisRobInst &uop) {
 inline bool is_flush_inst(const DisRobIO::DisRobInst &uop) {
   InstType type = decode_inst_type(uop.type);
   return type == CSR || type == ECALL || type == MRET || type == SRET ||
-         type == SFENCE_VMA || is_exception(uop) || type == EBREAK ||
+         type == SFENCE_VMA || type == FENCE_I || is_exception(uop) ||
+         type == EBREAK ||
          uop.flush_pipe;
 }
 
@@ -576,7 +581,8 @@ inline bool is_exception(const RenDisIO::RenDisInst &uop) {
 inline bool is_flush_inst(const RenDisIO::RenDisInst &uop) {
   InstType type = decode_inst_type(uop.type);
   return type == CSR || type == ECALL || type == MRET || type == SRET ||
-         type == SFENCE_VMA || is_exception(uop) || type == EBREAK;
+         type == SFENCE_VMA || type == FENCE_I || is_exception(uop) ||
+         type == EBREAK;
 }
 
 struct DisRenIO {
@@ -1130,50 +1136,80 @@ struct PeripheralReqIO {
   wire<1> wen;
   wire<32> mmio_addr;
   wire<32> mmio_wdata;
-  MicroOp uop;
+  wire<3> mmio_fun3;
 
   PeripheralReqIO() {
     is_mmio = {};
     wen = {};
     mmio_addr = {};
     mmio_wdata = {};
-    uop = {};
+    mmio_fun3 = {};
   }
 };
 struct PeripheralRespIO {
   wire<1> is_mmio;
   wire<1> ready;
   wire<32> mmio_rdata;
-  MicroOp uop;
 
   PeripheralRespIO() {
     is_mmio = {};
     ready = {};
     mmio_rdata = {};
-    uop = {};
   }
 };
+enum class ReplayType : wire<2> {
+  HIT = 0,
+  CONFLICT = 1,//mshr conflict, fill confilct
+  MSHR_HIT = 2,
+  MSHR_FULL = 3,
+};
 
+enum class StoreState : uint8_t {
+  Empty,
+  Allocated,
+  WaitAddr,
+  WaitData,
+  WaitTlb,
+  Ready,
+  Committed,
+  WaitDcacheResp,
+  WaitMmioResp,
+  Replaying,
+  PageFault,
+  Done
+};
 // STQ 条目结构（定义在此以供 StoreReq 使用）
 struct StqEntry {
-  bool valid = false;
-  bool addr_valid = false;
-  bool data_valid = false;
-  bool committed = false;
-  bool done = false;
-  bool is_mmio = false;
-  bool send =
-      false; // Whether the store has been sent to DCache (for replay logic)
-  uint8_t replay = 0;
-  uint32_t addr = 0;
-  uint32_t p_addr = 0;
-  uint32_t suppress_write =
-      0; // For MMIO: bits to suppress in the write (e.g., for LR/SC)
-  uint32_t data = 0;
-  uint32_t func3 = 0;
-  mask_t br_mask = {};
-  uint32_t rob_idx = 0;
-  uint32_t rob_flag = 0;
+
+  wire<1> data_valid = false;
+  wire<32> data = 0;
+  wire<3>  func3 = 0;
+
+
+
+  wire<1> vaddr_valid = false;
+  wire<32> vaddr = 0;
+
+  wire<1> paddr_valid = false;
+  wire<32> paddr = 0;
+  wire<1> page_fault = false;
+  
+  wire<1> suppress_write = 0; // For MMIO: bits to suppress in the write (e.g., for LR/SC)
+
+  wire<1> is_mmio = false;
+  wire<1> is_lrsc = false;
+  wire<1> sc_pass = false; // For SC: whether the store-conditional succeeded
+  wire<PRF_IDX_WIDTH> dest_preg = 0; // SC returns 0/1 through STA writeback
+
+  StoreState store_state = StoreState::Empty;
+
+  ReplayType replay_type = ReplayType::HIT;
+
+
+  wire<BR_MASK_WIDTH> br_mask = {};
+  wire<ROB_IDX_WIDTH> rob_idx = 0;
+  wire<1> rob_flag = 0;
+  wire<1> stq_flag = 0;
 };
 
 struct LoadReq {
@@ -1190,12 +1226,6 @@ struct StoreReq {
   wire<32> req_id;
 };
 
-enum class ReplayType : wire<2> {
-  HIT = 0,
-  CONFILT = 1,//mshr conflict, fill confilct
-  MSHR_HIT = 2,
-  MSHR_FULL = 3,
-};
 
 // Load响应结构
 struct LoadResp {
@@ -1242,6 +1272,30 @@ struct DCacheRespPorts {
     }
   }
 };
+enum class MMUResultType : wire<2> {
+  MISS = 0,
+  HIT = 1,
+  PAGE_FAULT = 2,
+};
+struct MMUReq{
+  wire<1> valid;
+  wire<32> vaddr;
+};
+struct MMUResp{
+  wire<1> valid;
+  wire<32> paddr;
+  MMUResultType result;
+};
+struct MMULsuIO{
+  MMUResp ldq_resp[LSU_LDU_COUNT];
+  MMUResp stq_resp[LSU_STA_COUNT];
+};
+
+struct LsuMMUIO{
+  MMUReq ldq_req[LSU_LDU_COUNT];
+  MMUReq stq_req[LSU_STA_COUNT];
+  CsrStatusIO csr_status;
+};
 
 struct LsuDcacheIO {
   DCacheReqPorts req_ports;
@@ -1254,8 +1308,6 @@ struct DcacheLsuIO {
   DCacheRespPorts resp_ports;
   wire<1> mshr_fill;
 };
-
-
 
 struct LsuDisIO {
 
@@ -1283,12 +1335,10 @@ struct LsuRobIO {
     std::bitset<ROB_NUM> miss_mask;
   } tma;
   wire<1> committed_store_pending;
-  wire<1> translation_pending;
 
   LsuRobIO() {
     tma.miss_mask.reset();
     committed_store_pending = 0;
-    translation_pending = 0;
   }
 };
 

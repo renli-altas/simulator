@@ -19,7 +19,7 @@ void MemRouteBlock::comb_response() {
     out.lsu_resp->resp_ports.load_resps[LSU_LDU_COUNT-1].valid = cur.lsu_replay_valid;
     out.lsu_resp->resp_ports.load_resps[LSU_LDU_COUNT-1].req_id = cur.lsu_replay_req_id;
     out.lsu_resp->resp_ports.load_resps[LSU_LDU_COUNT-1].data = 0;                     // Data can be set as needed
-    out.lsu_resp->resp_ports.load_resps[LSU_LDU_COUNT-1].replay = ReplayType::CONFILT; // Set replay type as needed
+    out.lsu_resp->resp_ports.load_resps[LSU_LDU_COUNT-1].replay = ReplayType::CONFLICT; // Set replay type as needed
     
 
     Owner owner = cur.issued_tags.owner;
@@ -37,7 +37,7 @@ void MemRouteBlock::comb_response() {
         out.ptw_events->req_id = cur.issued_tags.req_id;
       }
     }
-    else if(replay == ReplayType::CONFILT) {
+    else if(replay == ReplayType::CONFLICT) {
         out.wakeup->dtlb = (owner == Owner::PTW_DTLB);
         out.wakeup->itlb = (owner == Owner::PTW_ITLB);
         out.wakeup->walk = (owner == Owner::PTW_WALK);

@@ -1,7 +1,7 @@
-#include "AbstractLsu.h"
 #include "BackTop.h"
 #include "Csr.h"
 #include "PhysMemory.h"
+#include "RealLsu.h"
 #include "SimCpu.h"
 #include "config.h"
 #include "diff.h"
@@ -344,11 +344,12 @@ void SimCpu::commit_sync(InstInfo *inst) {
 
   if (inst->tma.mem_commit_is_store && !inst->page_fault_store) {
     StqEntry e = back->lsu->get_stq_entry(inst->stq_idx, inst->stq_flag);
-    const bool sc_suppressed = is_amo_sc_inst(*inst) && e.suppress_write &&
+    const bool sc_suppressed = is_amo_sc_inst(inst->type, inst->func7) &&
+                               e.suppress_write &&
                                e.rob_idx == inst->rob_idx &&
                                e.rob_flag == inst->rob_flag;
-    if (!sc_suppressed && e.addr_valid && e.data_valid) {
-      mem_subsystem.on_commit_store(e.p_addr, e.data, e.func3);
+    if (!sc_suppressed && e.paddr_valid && e.data_valid) {
+      mem_subsystem.on_commit_store(e.paddr, e.data, e.func3);
     }
   }
 }
@@ -369,13 +370,14 @@ void SimCpu::difftest_prepare(InstEntry *inst_entry, bool *skip) {
 
   if (inst->tma.mem_commit_is_store && !inst->page_fault_store) {
     StqEntry e = back->lsu->get_stq_entry(inst->stq_idx, inst->stq_flag);
-    const bool sc_suppressed = is_amo_sc_inst(*inst) && e.suppress_write &&
+    const bool sc_suppressed = is_amo_sc_inst(inst->type, inst->func7) &&
+                               e.suppress_write &&
                                e.rob_idx == inst->rob_idx &&
                                e.rob_flag == inst->rob_flag;
     if (sc_suppressed) {
       dut_cpu.store = false;
     } else {
-      if (!(e.addr_valid && e.data_valid)) {
+      if (!(e.paddr_valid && e.data_valid)) {
         // Store addr/data sideband can lag the ROB commit signal by a cycle on
         // some recovery paths. Let the REF execute the instruction normally and
         // skip the per-instruction sideband check instead of aborting the run.
@@ -383,7 +385,7 @@ void SimCpu::difftest_prepare(InstEntry *inst_entry, bool *skip) {
         dut_cpu.store = false;
       } else {
         dut_cpu.store = true;
-        dut_cpu.store_addr = e.p_addr;
+        dut_cpu.store_addr = e.paddr;
         if (e.func3 == 0b00)
           dut_cpu.store_data = e.data & 0xFF;
         else if (e.func3 == 0b01)
@@ -461,8 +463,8 @@ void SimCpu::init() {
   front.in.csr_status = back.csr->out.csr_status;
   front.ctx = &ctx;
 
-  back.lsu->set_ptw_walk_port(mem_subsystem.dtlb_walk_port);
-  back.lsu->set_ptw_mem_port(mem_subsystem.dtlb_ptw_port);
+  back.set_lsu_ptw_walk_port(mem_subsystem.dtlb_walk_port);
+  back.set_lsu_ptw_mem_port(mem_subsystem.dtlb_ptw_port);
 
   mem_subsystem.lsu2dcache = back.lsu_dcache_req_io;
   mem_subsystem.dcache2lsu = back.lsu_dcache_resp_io;
@@ -699,6 +701,7 @@ void SimCpu::front_cycle() {
       if (back.in.valid[j] && front.out.predict_dir[j])
         no_taken = false;
     }
+    back.in.front_stall = front.in.FIFO_read_enable && !front.out.FIFO_valid;
     perf_account_front_supply();
   } else {
 
@@ -710,6 +713,7 @@ void SimCpu::front_cycle() {
     front.step_bpu();
 #else
 #endif
+    back.in.front_stall = front.in.FIFO_read_enable && !front.out.FIFO_valid;
   }
 #else
   // Oracle 模式：每拍都执行握手，利用 1-entry pending
@@ -739,7 +743,7 @@ void SimCpu::front_cycle() {
     front.out = oracle_pending_out;
   }
 
- #ifndef CONFIG_ORACLE_STEADY_FETCH_WIDTH
+#ifndef CONFIG_ORACLE_STEADY_FETCH_WIDTH
   bool no_taken = true;
 #endif
   for (int j = 0; j < FETCH_WIDTH; j++) {
@@ -779,6 +783,7 @@ void SimCpu::front_cycle() {
     }
 #endif
   }
+  back.in.front_stall = front.in.FIFO_read_enable && !front.out.FIFO_valid;
   perf_account_front_supply();
 #endif
 }

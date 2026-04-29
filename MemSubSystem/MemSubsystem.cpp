@@ -1,5 +1,4 @@
 #include "MemSubsystem.h"
-#include "AbstractLsu.h"
 #include "config.h"
 #include "icache/GenericTable.h"
 #include <assert.h>

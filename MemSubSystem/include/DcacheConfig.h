@@ -195,3 +195,5 @@ bool cache_line_match(uint32_t addr1, uint32_t addr2);
 
 void Dcache_Read(const DcacheLineReadReq read_req[LSU_LDU_COUNT+LSU_STA_COUNT],DcacheLineReadResp resp[LSU_LDU_COUNT+LSU_STA_COUNT], const FillOut &fillout,FillIn &fillin);
 void Dcache_Write(const PendingWrite pws[LSU_LDU_COUNT+LSU_STA_COUNT], const LruUpdate lru_updates[LSU_LDU_COUNT+LSU_STA_COUNT], const FILLWrite &fillwrite);
+
+bool CheckAddr(uint32_t addr1, uint8_t strb1, uint32_t addr2, uint8_t strb2);

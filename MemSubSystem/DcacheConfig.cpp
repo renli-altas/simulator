@@ -142,7 +142,7 @@ void Dcache_Read(const DcacheLineReadReq read_req[LSU_LDU_COUNT+LSU_STA_COUNT],D
     }
 }
 void Dcache_Write(const PendingWrite pws[LSU_LDU_COUNT+LSU_STA_COUNT], const LruUpdate lru_updates[LSU_LDU_COUNT+LSU_STA_COUNT], const FILLWrite &fillwrite){
-    for(int i=0;i<LSU_LDU_COUNT + LSU_STA_COUNT;i++){
+    for(int i=LSU_LDU_COUNT+LSU_STA_COUNT-1;i>=0;i--){
         const PendingWrite &pw = pws[i];
         const LruUpdate &lru_update = lru_updates[i];
         if(pw.valid){
@@ -162,4 +162,25 @@ void Dcache_Write(const PendingWrite pws[LSU_LDU_COUNT+LSU_STA_COUNT], const Lru
 
 void plru_tree_touch(uint32_t set_idx, uint32_t way) {
     plru_touch_way(set_idx, way);
+}
+
+bool CheckAddr(uint32_t addr1, uint8_t strb1, uint32_t addr2, uint8_t strb2) {
+    // 1. 地址完全相同，直接比较选通掩码
+    if (addr1 == addr2) {
+        return (strb1 & strb2) != 0;
+    } 
+    // 2. addr1 在低地址，addr2 在高地址
+    else if (addr1 < addr2) {
+        uint32_t diff = addr2 - addr1;
+        // 如果地址跨度大于等于8字节（strb的表示范围），绝对不可能重叠
+        if (diff >= 8) return false; 
+        // 将高地址的 strb 左移 diff 位，与低地址对齐后按位与
+        return (strb1 & (strb2 << diff)) != 0;
+    } 
+    // 3. addr1 在高地址，addr2 在低地址
+    else {
+        uint32_t diff = addr1 - addr2;
+        if (diff >= 8) return false;
+        return (strb2 & (strb1 << diff)) != 0;
+    }
 }
