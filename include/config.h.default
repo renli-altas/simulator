@@ -36,10 +36,6 @@ constexpr uint64_t div_round_u64(uint64_t numerator, uint64_t denominator) {
 #define CONFIG_TLB_MMU
 #define CONFIG_ORACLE_STEADY_FETCH_WIDTH
 
-// Replay throttling heuristics.
-constexpr int REPLAY_STORE_COUNT_UPPER_BOUND = 32;
-constexpr int REPLAY_STORE_COUNT_LOWER_BOUND = 4;
-
 // ============================================================
 // Global Limits
 // ============================================================

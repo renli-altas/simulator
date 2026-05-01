@@ -1,0 +1,77 @@
+卡死了
+[ROB DEBUG] is_empty=0, deq_ptr=74, enq_ptr=53, commit=0, single_commit=0
+Rob deq inst:
+[Bank 0] INVALID
+[Bank 1] INVALID
+[Bank 2] INVALID
+[Bank 3] INVALID
+[Bank 4] INVALID
+0xc0376568: 0x01c5ae03 cplt_mask:0x0 expect_mask:0x1 rob_idx:597 is_page_fault: 0 inst_idx: 163400583 type: 5
+0xc037656c: 0x0205ae83 cplt_mask:0x0 expect_mask:0x1 rob_idx:598 is_page_fault: 0 inst_idx: 163400584 type: 5
+0xc0376570: 0x0245af03 cplt_mask:0x0 expect_mask:0x1 rob_idx:599 is_page_fault: 0 inst_idx: 163400585 type: 5
+[ROB DEADLOCK] dumping LSU/MMU state
+RealLsu State:
+  LDQ: head=476 head_flag=0 count=512 wait_mmu_head=218 wait_mmu_count=0 wait_dcache_head=334 wait_dcache_count=3
+  STQ: head=496 commit=496 head_flag=0 count=512 commit_count=0 wait_mmu_head=153 wait_mmu_count=0 mmu_done_head=353 mmu_done_count=0
+  Finish: head=454 count=0
+  Uncached: valid=0 is_load=0 addr=0x10000000 idx=185
+  LRSC: reserve_valid=0 reserve_addr=0x8100835c
+  LDQ active entries (first 8):
+    [476] state=7 rob=597/0 vaddr=1:0xc4137380 paddr=1:0x84537380 mmio=0 page_fault=0 lrsc=0
+    [477] state=7 rob=598/0 vaddr=1:0xc4137384 paddr=1:0x84537384 mmio=0 page_fault=0 lrsc=0
+    [478] state=7 rob=599/0 vaddr=1:0xc4137388 paddr=1:0x84537388 mmio=0 page_fault=0 lrsc=0
+    [479] state=4 rob=610/0 vaddr=1:0xc413738c paddr=1:0x8453738c mmio=0 page_fault=0 lrsc=0
+    [480] state=4 rob=611/0 vaddr=1:0xc4137390 paddr=1:0x84537390 mmio=0 page_fault=0 lrsc=0
+    [481] state=4 rob=612/0 vaddr=1:0xc4137394 paddr=1:0x84537394 mmio=0 page_fault=0 lrsc=0
+    [482] state=4 rob=613/0 vaddr=1:0xc4137398 paddr=1:0x84537398 mmio=0 page_fault=0 lrsc=0
+    [483] state=4 rob=622/0 vaddr=1:0xc413739c paddr=1:0x8453739c mmio=0 page_fault=0 lrsc=0
+  STQ active entries (first 8):
+    [496] state=11 rob=600/0 data=1:0x98f704e3 vaddr=1:0xc09fe140 paddr=1:0x80dfe140 mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [497] state=11 rob=601/0 data=1:0x3c0c20ef vaddr=1:0xc09fe144 paddr=1:0x80dfe144 mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [498] state=11 rob=602/0 data=1:0x980550e3 vaddr=1:0xc09fe148 paddr=1:0x80dfe148 mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [499] state=11 rob=603/0 data=1:0x002d06b7 vaddr=1:0xc09fe14c paddr=1:0x80dfe14c mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [500] state=11 rob=604/0 data=1:0x00001637 vaddr=1:0xc09fe150 paddr=1:0x80dfe150 mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [501] state=11 rob=605/0 data=1:0x002c15b7 vaddr=1:0xc09fe154 paddr=1:0x80dfe154 mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [502] state=11 rob=606/0 data=1:0x39c68693 vaddr=1:0xc09fe158 paddr=1:0x80dfe158 mmio=0 page_fault=0 lrsc=0 sc_pass=0
+    [503] state=3 rob=607/0 data=0:0x00000000 vaddr=1:0xc09fe15c paddr=1:0x80dfe15c mmio=0 page_fault=0 lrsc=0 sc_pass=0
+[ROB DEADLOCK] dumping MemSubsystem state
+[MEM DEBUG][PTW] walk_active=0 state=0 owner=1 req_id_valid=0 req_id=0 dtlb(req_p=0 req_i=0 resp=0 mem_p=0 mem_i=0) itlb(req_p=0 req_i=0 resp=0 mem_p=0 mem_i=0)
+MemRouteBlock State:
+  Issued Tag - Owner: 0, Addr: 0x00000000, ID: 2147517803
+  PTW Wait - DTLB: 0, ITLB: 0, WALK: 0
+  LSU Replay - Valid: 0, Req ID: 2075994080
+MSHR State:
+  MSHR Count: 0
+  AXI Resp Hold Valid: 0, ID: 0
+  Entry 0: Valid: 0, Issued: 0, Addr: 0x84537380
+  Entry 1: Valid: 0, Issued: 0, Addr: 0x808ad680
+  Entry 2: Valid: 0, Issued: 0, Addr: 0x808b70c0
+  Entry 3: Valid: 0, Issued: 0, Addr: 0x807db8c0
+  Entry 4: Valid: 0, Issued: 0, Addr: 0x807dc900
+  Entry 5: Valid: 0, Issued: 0, Addr: 0x807dc980
+  Entry 6: Valid: 0, Issued: 0, Addr: 0x00000000
+  Entry 7: Valid: 0, Issued: 0, Addr: 0x00000000
+WriteBuffer State:
+  Count: 0
+  Head: 6
+  Send: 0
+  Entry 0: Addr: 0x80df5fc0, Data: 0x6b4080e7 0x04051263 0x003017b7 0x5d87a783 0xca0796e3 0x03812783 0x07c12683 0x5b01a703 0x02d12023 0x00100793 0xc0e7ca63 0x08012603 0x07812683 0x0080006f 0x02712023 0x02c12423
+  Entry 1: Addr: 0x80df6000, Data: 0x02d12a23 0xc48ff06f 0x08412583 0x08812503 0x45d970ef 0xfa050ae3 0x07c12783 0x00100693 0x0107a703 0x00872783 0x00c72703 0x14d78e63 0xfff00693 0x16d78063 0x00078693 0x02d12023
+  Entry 2: Addr: 0x80df6040, Data: 0xab8820ef 0x07812783 0x0027c503 0xcf07c0ef 0x02012683 0x00050593 0x00100613 0x06c10513 0xb9dfc0ef 0x00050693 0x10050c63 0x07812703 0x04b00593 0x00274503 0x00200813 0x00000793
+  Entry 3: Addr: 0x80df6080, Data: 0x00070613 0x62db60ef 0x00050593 0x0e050a63 0x07812503 0x00a58463 0xc69fd0ef 0xc7d7f0ef 0x02a12023 0xc3c820ef 0x02012503 0x02100713 0x00050793 0xba0786e3 0x0007d683 0xf0e686e3
+  Entry 4: Addr: 0x80df60c0, Data: 0x0187a783 0xff1ff06f 0x00800593 0xa44ff06f 0x0083a503 0x02012583 0x02712423 0x00109097 0x594080e7 0xcc051a63 0x02812383 0x930ff06f 0x06700713 0xd8f76e63 0x07c12383 0xe69fe06f
+  Entry 5: Addr: 0x80df6100, Data: 0x08412583 0x941810ef 0x02012783 0x08f12423 0x06812783 0x08f12623 0xd51fe06f 0x00000593 0x00000613 0x9c079463 0xf58ff06f 0x00062783 0x9a07d263 0x00092783 0x800006b7 0x00d7e7b3
+  Entry 6: Addr: 0x80df5f40, Data: 0xd20506e3 0x03412f03 0x02012f83 0x000f0713 0x000f8793 0x04b00f13 0xe0dff06f 0x02d12c23 0xa91ff06f 0x05012783 0x05412703 0x05812f83 0x05c12f03 0xa61ff06f 0x07812583 0x08012503
+  Entry 7: Addr: 0x80df5f80, Data: 0x00109097 0x6f0080e7 0xea0516e3 0xc80ff06f 0x0003d703 0x04b00793 0xc6f71063 0x00c12603 0x0103a783 0x10462703 0x00e78663 0x0fc62703 0xc4e79463 0x0083a503 0x00068593 0x00109097
+RealDcache State:
+  Stage1 Load Slots:
+    Slot 0: Valid: 0, Addr: 0x84537380, Req ID: 2147483469
+    Slot 1: Valid: 0, Addr: 0x84537384, Req ID: 334
+    Slot 2: Valid: 0, Addr: 0x84537380, Req ID: 1360
+    Slot 3: Valid: 0, Addr: 0x84537380, Req ID: 2147477826
+  Stage1 Store Slots:
+    Slot 0: Valid: 0, Addr: 0x80dfe130, Data: 0x999ff06f, Strb: 0x0f, Req ID: 492
+    Slot 1: Valid: 0, Addr: 0x80dfe134, Data: 0x02042503, Strb: 0x0f, Req ID: 493
+    Slot 2: Valid: 0, Addr: 0x80dfe138, Data: 0x02800793, Strb: 0x0f, Req ID: 494
+    Slot 3: Valid: 0, Addr: 0x80dfe13c, Data: 0x00055703, Strb: 0x0f, Req ID: 495
+  Stage1 Fill Write: Valid: 0, SetIdx: 0, Tag: 0x00000000, WayIdx: 0, Data: [0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000]

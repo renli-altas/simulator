@@ -142,7 +142,7 @@ void Dcache_Read(const DcacheLineReadReq read_req[LSU_LDU_COUNT+LSU_STA_COUNT],D
     }
 }
 void Dcache_Write(const PendingWrite pws[LSU_LDU_COUNT+LSU_STA_COUNT], const LruUpdate lru_updates[LSU_LDU_COUNT+LSU_STA_COUNT], const FILLWrite &fillwrite){
-    for(int i=LSU_LDU_COUNT+LSU_STA_COUNT-1;i>=0;i--){
+    for(int i=0;i<LSU_LDU_COUNT+LSU_STA_COUNT;i++){
         const PendingWrite &pw = pws[i];
         const LruUpdate &lru_update = lru_updates[i];
         if(pw.valid){

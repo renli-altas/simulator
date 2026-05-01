@@ -1,6 +1,7 @@
 #include "RealDcache.h"
 #include <cassert>
 #include <cstring>
+#include <MemUtils.h>
 
 void RealDcache::init() {
     init_dcache();
@@ -45,9 +46,23 @@ void RealDcache::stage1_comb() {
             out.dcache2wb->bypass_req[i].valid = false;
         }
         else{
+            bool replay = false;
+            for(int j=0;j<LSU_STA_COUNT;j++){
+                if(s1s2_cur.loads[j].valid&&CheckAddr(req.addr,(uint8_t)0xffff, s1s2_cur.stores[j].addr,s1s2_cur.stores[j].strb)){
+                    replay = true; // 如果有older load地址重叠且还在等待dcache响应或者等待重放中（即需要重放），则这个load也需要重放，以避免饥饿。注意我们只检查older load的状态，因为如果older load是hit，说明它可以在同一周期完成并更新cache，从而这个load不需要重放。另一方面，如果我们检查这个load自己的状态，可能会导致当有多条连续miss时出现不必要的重放，因为这个load可能还没有被标记为replay，但它会在同一周期内因为MSHR miss而被重放。
+                    break;
+                }
+            }
+            for(int j=0;j<LSU_STA_COUNT;j++){
+                if(in.lsu2dcache->req_ports.store_ports[j].valid&&CheckAddr(req.addr,(uint8_t)0xffff, in.lsu2dcache->req_ports.store_ports[j].addr,in.lsu2dcache->req_ports.store_ports[j].strb)){
+                    replay = true; // 如果有older store地址重叠且还在等待dcache响应或者等待重放中（即需要重放），则这个load也需要重放，以避免饥饿。注意我们只检查older store的状态，因为如果older store是hit，说明它可以在同一周期完成并更新cache，从而这个load不需要重放。另一方面，如果我们检查这个load自己的状态，可能会导致当有多条连续miss时出现不必要的重放，因为这个load可能还没有被标记为replay，但它会在同一周期内因为MSHR miss而被重放。
+                    break;
+                }
+            }
             slot.valid    = true;
             slot.addr     = req.addr;
             slot.req_id   = req.req_id;
+            slot.replayed  = replay;
             AddrFields f  = decode(req.addr);
             out.dcachereadreq[i]->set_idx = f.set_idx;
 
@@ -71,7 +86,7 @@ void RealDcache::stage1_comb() {
         else{
             bool replayed = false;
             for(int j=0;j<LSU_STA_COUNT;j++){
-                if(s1s2_cur.stores[j].valid&&CheckAddr(req.addr,req.strb, s1s2_cur.stores[i].addr,s1s2_cur.stores[i].strb)){
+                if(s1s2_cur.stores[j].valid&&CheckAddr(req.addr,req.strb, s1s2_cur.stores[j].addr,s1s2_cur.stores[j].strb)){
                     replayed = out.dcache2lsu->resp_ports.store_resps[j].replay != ReplayType::HIT; // If there is an older store with overlapping address that is waiting for MSHR allocation or has been allocated an MSHR but not yet completed (i.e., needs to be replayed), then this store should also be replayed to avoid starvation. Note that we only check the replay status of the older store, because if the older store is a hit, it means it can complete in the same cycle and update the cache before this store's hit check, so this store doesn't need to be replayed. On the other hand, if we check the replay status of this store itself, it may cause unnecessary replays when there are multiple back-to-back misses, because this store may not have been marked as replayed yet when we check, even though it will be replayed in the same cycle due to MSHR miss.
                     break;
                 }
@@ -159,6 +174,12 @@ void RealDcache::stage2_comb() {
         AddrFields f          = decode(slot.addr);
         uint32_t tag_expected = f.tag;
 
+        if(slot.replayed){
+            resp.valid  = true;
+            resp.replay = ReplayType::CONFLICT; // This load has been replayed due to MSHR full or conflict, so replay again to give chance for the MSHR state to be updated and avoid starvation when there are multiple back-to-back misses.
+            resp.req_id = slot.req_id;
+            continue;
+        }
         int hit_way = -1;
         for (int w = 0; w < DCACHE_WAYS_NUM; w++) {
             if (line_resp.valid[w] && line_resp.tag[w] == tag_expected) {
@@ -168,7 +189,12 @@ void RealDcache::stage2_comb() {
         }
 
         
-        if (hit_way >= 0 ) {
+         if(in.wb2dcache->bypass_resp[i].valid){
+            resp.valid = true;
+            resp.data = in.wb2dcache->bypass_resp[i].data;
+            resp.req_id = slot.req_id;
+            resp.replay = ReplayType::HIT;
+        }else if (hit_way >= 0 ) {
             // ── Cache Hit ────────────────────────────────────────────────────
             resp.valid  = true;
             resp.replay = ReplayType::HIT;
@@ -178,12 +204,7 @@ void RealDcache::stage2_comb() {
             out.lru_updates[i]->set_idx = f.set_idx;
             out.lru_updates[i]->way = hit_way;
         }
-        else if(in.wb2dcache->bypass_resp[i].valid){
-            resp.valid = true;
-            resp.data = in.wb2dcache->bypass_resp[i].data;
-            resp.req_id = slot.req_id;
-            resp.replay = ReplayType::HIT;
-        }else {
+        else {
             if(s1s2_cur.icache_req==i)continue;
             if(in.mshr2dcache->find_resp[i].valid){
                 resp.valid = true;
@@ -225,6 +246,13 @@ void RealDcache::stage2_comb() {
         AddrFields f          = decode(slot.addr);
         uint32_t tag_expected = f.tag;
 
+
+        if(slot.replayed){
+            resp.valid  = true;
+            resp.replay = ReplayType::CONFLICT; // This store has been replayed due to MSHR full or conflict, so replay again to give chance for the MSHR state to be updated and avoid starvation when there are multiple back-to-back misses.
+            resp.req_id = slot.req_id;
+            continue;
+        }        
         if(cache_line_match(slot.addr,in.mshr2dcache->fill_req.addr)&&in.mshr2dcache->fill_req.valid){ // hit the MSHR entry allocated in the same cycle, treat it as a hit and update the pending MSHR entry to avoid a deadlock when MSHR is full
            resp.valid  = true;
            resp.replay = ReplayType::CONFLICT;

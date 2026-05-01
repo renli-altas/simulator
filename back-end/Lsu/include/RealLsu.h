@@ -117,8 +117,9 @@ struct FenceUnit {
 struct LrScUnit {
   wire<1> reserve_valid;
   wire<32> reserve_addr;
-  wire<LDQ_IDX_WIDTH> reserve_ldq_idx;
-  wire<1> reserve_ldq_flag;
+  wire<ROB_IDX_WIDTH> reserve_rob_idx;
+  wire<1> reserve_rob_flag;
+  wire<BR_MASK_WIDTH> reserve_br_mask;
 };
 struct WaitMmuSTQEntry{
   wire<1> valid;
@@ -130,6 +131,7 @@ struct WaitMmuLDQEntry{
 };
 struct WaitDcacheLDQEntry{
   wire<1> valid;
+  wire<31-LDQ_IDX_WIDTH> req_gen;
   wire<LDQ_IDX_WIDTH> ldq_idx;
 };
 struct MMUDoneEntry{
@@ -182,6 +184,8 @@ struct LsuState{
 
   UncachedUnit uncached_unit;
   LrScUnit lrsc_unit;
+
+  wire<31-LDQ_IDX_WIDTH> req_gen; // 用于区分不同轮次的重放，防止过期重放条目被误用
 };
 class RealLsu {
 public:

@@ -1299,7 +1299,7 @@ struct LsuMMUIO{
 
 struct LsuDcacheIO {
   DCacheReqPorts req_ports;
-  wire<LSU_LDU_WIDTH> icache_req;
+  wire<LSU_LDU_WIDTH+1> icache_req;
 
   LsuDcacheIO() { icache_req = LSU_LDU_COUNT; }
 };

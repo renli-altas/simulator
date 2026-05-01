@@ -393,7 +393,10 @@ void BackTop::comb() {
   lsu->comb_dis2lsu();
   rename->comb_fire();
   idu->comb_fire();
-
+  lsu->comb_lsu2dcache_ldq();
+  lsu->comb_lsu2dcache_stq();
+  lsu->comb_mmio_out();
+  lsu->comb_check();
   isu->comb_enq();
   // Rob recovery was split out of comb_fire(); keep the original priority:
   // branch rollback happens before enqueue, and global flush overrides both.
@@ -401,12 +404,7 @@ void BackTop::comb() {
   rob->comb_fire();
   rob->comb_flush();
   isu->comb_flush();
-  if (!rob_bcast.flush && !dec_bcast.mispred) {
-    lsu->comb_lsu2dcache_ldq();
-    lsu->comb_lsu2dcache_stq();
-    lsu->comb_mmio_out();
-    lsu->comb_check();
-  }
+    
   lsu->comb_flush();
   pre->comb_fire();
   prf->comb_pipeline();

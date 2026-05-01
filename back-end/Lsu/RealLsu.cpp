@@ -15,6 +15,18 @@
 namespace {
 
 constexpr uint32_t kFinishSize = LDQ_SIZE + STQ_SIZE;
+constexpr uint32_t kDcacheReqIdOwnerBit = 31;
+constexpr uint32_t kLsuReqIdIdxBits = LDQ_IDX_WIDTH;
+constexpr uint32_t kLsuReqIdGenBits = 31 - LDQ_IDX_WIDTH;
+constexpr uint32_t kLsuReqIdIdxMask = (1u << LDQ_IDX_WIDTH) - 1;
+constexpr uint32_t kRouteReqIdBase = 1u << kDcacheReqIdOwnerBit;
+
+constexpr uint32_t kLsuReqIdGenMask = (1u << kLsuReqIdGenBits) - 1;
+
+static uint32_t normalize_lsu_req_gen(uint32_t gen) {
+  return gen & kLsuReqIdGenMask;
+}
+
 
 template <typename PtrT, typename FlagT>
 static void advance_ring_ptr(PtrT &ptr, FlagT &flag, uint32_t size) {
@@ -92,6 +104,46 @@ static bool stq_distance_from_head_to_boundary(uint32_t head,
   // [head, head + count]
   return distance <= count;
 }
+
+static uint32_t make_lsu_load_req_id(uint32_t wait_idx, uint32_t gen) {
+  return (normalize_lsu_req_gen(gen) << LDQ_IDX_WIDTH) |
+         (wait_idx & kLsuReqIdIdxMask);
+}
+
+static uint32_t lsu_req_id_gen(uint32_t req_id) {
+  return (req_id >> LDQ_IDX_WIDTH) & kLsuReqIdGenMask;
+}
+
+static uint32_t lsu_req_id_wait_idx(uint32_t req_id) {
+  return req_id & kLsuReqIdIdxMask;
+}
+
+static bool get_nearest_older_store_tag(const LsuState &s,
+                                        StoreTag boundary,
+                                        StoreTag &nearest) {
+  uint32_t distance = 0;
+  if (!stq_distance_from_head_to_boundary(
+          s.stq_head, s.stq_head_flag, s.stq_count, boundary, distance)) {
+    return false;
+  }
+
+  if (distance == 0) {
+    return false;
+  }
+
+  const uint32_t offset = distance - 1;
+  const uint32_t pos = s.stq_head + offset;
+
+  nearest.idx = pos % STQ_SIZE;
+  nearest.flag = s.stq_head_flag ^ ((pos / STQ_SIZE) & 0x1);
+  return true;
+}
+
+static bool lsu_is_timer_addr(uint32_t paddr) {
+  return paddr == OPENSBI_TIMER_LOW_ADDR ||
+         paddr == OPENSBI_TIMER_HIGH_ADDR;
+}
+
 
 }; // namespace
 
@@ -187,7 +239,7 @@ void RealLsu::comb_tlb_out() {
 
   // 将等待MMU响应的LDQ条目发送给MMU
   for (int i = 0; i < issue_ldq; i++) {
-    const auto &entry = cur.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE];
+    const auto &entry = cur.wait_mmu_ldq[(cur.wait_mmu_ldq_head + i) % LDQ_SIZE];
     const LdqEntry &ldq_entry = cur.ldq[entry.ldq_idx];
     out.lsu2mmu->ldq_req[i].valid = ldq_entry.load_state == LoadState::WaitTlb && entry.valid;
     out.lsu2mmu->ldq_req[i].vaddr = ldq_entry.v_addr;
@@ -195,7 +247,7 @@ void RealLsu::comb_tlb_out() {
 
   // 将等待MMU响应的STQ条目发送给MMU
   for (int i = 0; i < issue_stq; i++) {
-    const auto &entry = nxt.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE];
+    const auto &entry = cur.wait_mmu_stq[(cur.wait_mmu_stq_head + i) % STQ_SIZE];
     const StqEntry &stq_entry = cur.stq[entry.stq_idx];
     out.lsu2mmu->stq_req[i].valid = stq_entry.store_state == StoreState::WaitTlb && entry.valid;
     out.lsu2mmu->stq_req[i].vaddr = stq_entry.vaddr;
@@ -244,11 +296,25 @@ void RealLsu::comb_tlb_in() {
       } else {
         wait_mmu_ldq_entries[i].valid = false;
       }
-      nxt.wait_mmu_ldq[nxt.wait_mmu_ldq_head].valid = false; // 无论命中与否都需要将条目写回等待队列
-      nxt.wait_mmu_ldq_head = (nxt.wait_mmu_ldq_head + 1) % LDQ_SIZE;
-      nxt.wait_mmu_ldq_count--;
+      nxt.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE].valid = false; // 无论命中与否都需要将条目写回等待队列
     }
   }
+
+  uint32_t tmp_head = nxt.wait_mmu_ldq_head;
+  uint32_t tmp_count = nxt.wait_mmu_ldq_count;
+  uint32_t issue = tmp_count > LSU_LDU_COUNT ? LSU_LDU_COUNT : tmp_count;
+  for (int i = 0; i < issue; i++) {
+    if (!nxt.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE].valid) {
+      tmp_head = (tmp_head + 1) % LDQ_SIZE;
+      if (tmp_count > 0) {
+        tmp_count--;
+      }
+    } else {
+      break;
+    }
+  }
+  nxt.wait_mmu_ldq_head = tmp_head;
+  nxt.wait_mmu_ldq_count = tmp_count;
 
   for (int i = 0; i < LSU_STA_COUNT; i++) {
     if (in.mmu2lsu->stq_resp[i].valid) {
@@ -266,11 +332,20 @@ void RealLsu::comb_tlb_in() {
 
           if (stq_entry.data_valid) {
             stq_entry.store_state = StoreState::Done;
-            const uint32_t done_idx =
-                (nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE;
-            nxt.mmu_done_stq[done_idx].valid = true;
-            nxt.mmu_done_stq[done_idx].stq_idx = entry.stq_idx;
-            nxt.mmu_done_stq_count++;
+            if (!stq_entry.is_lrsc) {
+              const uint32_t done_idx =
+                  (nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE;
+              nxt.mmu_done_stq[done_idx].valid = true;
+              nxt.mmu_done_stq[done_idx].stq_idx = entry.stq_idx;
+              nxt.mmu_done_stq_count++;
+            } else {
+              const uint32_t finish_idx =
+                  (nxt.finish_head + nxt.finish_count) % kFinishSize;
+              nxt.finish[finish_idx].valid = true;
+              nxt.finish[finish_idx].idx = entry.stq_idx;
+              nxt.finish[finish_idx].is_load = false;
+              nxt.finish_count++;
+            }
           } else {
             stq_entry.store_state = StoreState::WaitData;
           }
@@ -281,21 +356,43 @@ void RealLsu::comb_tlb_in() {
           stq_entry.page_fault = true;
           stq_entry.store_state = StoreState::PageFault; // 进入页面错误状态，由后续逻辑处理异常
           wait_mmu_stq_entries[i].valid = false;
-
-          nxt.mmu_done_stq[(nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE].valid = true;
-          nxt.mmu_done_stq[(nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE].stq_idx = entry.stq_idx; // 将STQ条目加入MMU完成队列
-          nxt.mmu_done_stq_count++;
+          if (stq_entry.is_lrsc) {
+            const uint32_t finish_idx =
+                (nxt.finish_head + nxt.finish_count) % kFinishSize;
+            nxt.finish[finish_idx].valid = true;
+            nxt.finish[finish_idx].idx = entry.stq_idx;
+            nxt.finish[finish_idx].is_load = false;
+            nxt.finish_count++;
+          } else {
+            nxt.mmu_done_stq[(nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE].valid = true;
+            nxt.mmu_done_stq[(nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE].stq_idx = entry.stq_idx; // 将STQ条目加入MMU完成队列
+            nxt.mmu_done_stq_count++;
+          }
 
           nxt.lrsc_unit.reserve_valid = false; // 如果store发生页面错误，取消LRSC保留
         }
       } else {
         wait_mmu_stq_entries[i].valid = false;
       }
-      nxt.wait_mmu_stq[nxt.wait_mmu_stq_head].valid = false; // 无论命中与否都需要将条目写回等待队列
-      nxt.wait_mmu_stq_head = (nxt.wait_mmu_stq_head + 1) % STQ_SIZE;
-      nxt.wait_mmu_stq_count--;
+      nxt.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE].valid = false; // 无论命中与否都需要将条目写回等待队列
     }
   }
+
+  tmp_head = nxt.wait_mmu_stq_head;
+  tmp_count = nxt.wait_mmu_stq_count;
+  issue = tmp_count > LSU_STA_COUNT ? LSU_STA_COUNT : tmp_count;
+  for (int i = 0; i < issue; i++) {
+    if (!nxt.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE].valid) {
+      tmp_head = (tmp_head + 1) % STQ_SIZE;
+      if (tmp_count > 0) {
+        tmp_count--;
+      }
+    } else {
+      break;
+    }
+  }
+  nxt.wait_mmu_stq_head = tmp_head;
+  nxt.wait_mmu_stq_count = tmp_count;
 
   for (int i = 0; i < LSU_LDU_COUNT; i++) {
     if (wait_mmu_ldq_entries[i].valid) {
@@ -413,14 +510,29 @@ void RealLsu::comb_lsu2dcache_ldq() {
   }
 
   int32_t issue_ldq = cur.wait_dcache_ldq_count > LSU_LDU_COUNT ? LSU_LDU_COUNT : cur.wait_dcache_ldq_count;
+  uint32_t issued = 0;
   for (int i = 0; i < issue_ldq; i++) {
-    const auto &entry = cur.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE];
-    LdqEntry &ldq_entry = nxt.ldq[entry.ldq_idx];
-    out.lsu2dcache->req_ports.load_ports[i].valid = ldq_entry.load_state == LoadState::ReadyToIssue && entry.valid;
-    out.lsu2dcache->req_ports.load_ports[i].addr = ldq_entry.p_addr;
-    out.lsu2dcache->req_ports.load_ports[i].req_id = entry.ldq_idx;
-    ldq_entry.load_state = LoadState::WaitDcacheResp; // 发出load请求后进入等待数据返回状态
+    const auto &entry = cur.wait_dcache_ldq[(cur.wait_dcache_ldq_head + i) % LDQ_SIZE];
+    const LdqEntry &cur_ldq_entry = cur.ldq[entry.ldq_idx];
+    auto &nxt_ldq_entry = nxt.ldq[entry.ldq_idx];
+    if (entry.valid && cur_ldq_entry.load_state == LoadState::ReadyToIssue) {
+      uint32_t wait_idx = (cur.wait_dcache_ldq_head + i) % LDQ_SIZE;
+
+      out.lsu2dcache->req_ports.load_ports[i].valid = true;
+      out.lsu2dcache->req_ports.load_ports[i].addr = cur_ldq_entry.p_addr;
+      uint32_t gen = normalize_lsu_req_gen(cur.req_gen + issued);
+
+      out.lsu2dcache->req_ports.load_ports[i].req_id =
+          make_lsu_load_req_id(wait_idx, gen);
+
+      nxt.wait_dcache_ldq[wait_idx].req_gen = gen;
+
+      nxt_ldq_entry.load_state = LoadState::WaitDcacheResp;
+      issued++;
+    }
   }
+  nxt.req_gen = normalize_lsu_req_gen(cur.req_gen + issued);
+
 }
 
 void RealLsu::comb_dcache2lsu_ldq() {
@@ -428,14 +540,43 @@ void RealLsu::comb_dcache2lsu_ldq() {
   WaitDcacheLDQEntry wait_dcache_ldq_entries[LSU_LDU_COUNT] = {};
   for (int i = 0; i < LSU_LDU_COUNT; i++) {
     if (in.dcache2lsu->resp_ports.load_resps[i].valid) {
-      uint32_t ldq_idx = in.dcache2lsu->resp_ports.load_resps[i].req_id;
-      if (ldq_idx >= LDQ_SIZE) {
+      uint32_t req_id = in.dcache2lsu->resp_ports.load_resps[i].req_id;
+
+      if (req_id & (1u << 31)) {
 #if !BSD_CONFIG
-        Assert(0 && "Load response idx out of bound");
+        Assert(0 && "Invalid load response ID from DCache");
 #endif
+        continue; // 理论上 MemRouteBlock 应该过滤掉，LSU 不处理非 LSU response
+      }
+
+      uint32_t entry_idx = lsu_req_id_wait_idx(req_id);
+      uint32_t resp_gen = lsu_req_id_gen(req_id);
+
+      const auto &wait_entry = cur.wait_dcache_ldq[entry_idx];
+
+      if (!wait_entry.valid) {
+        continue; // stale response after flush/replay queue movement
+      }
+
+      if (wait_entry.req_gen != resp_gen) {
+      #if !BSD_CONFIG
+        std::fprintf(stderr,
+            "[LSU][REQ-GEN-MISMATCH] port=%d req_id=%u entry_idx=%u "
+            "resp_gen=%u wait_gen=%u wait_ldq=%u head=%u count=%u\n",
+            i, req_id, entry_idx, resp_gen,
+            static_cast<unsigned>(wait_entry.req_gen),
+            static_cast<unsigned>(wait_entry.ldq_idx),
+            static_cast<unsigned>(cur.wait_dcache_ldq_head),
+            static_cast<unsigned>(cur.wait_dcache_ldq_count));
+        Assert(0 && "LSU load response req_gen mismatch");
+      #endif
         continue;
       }
-      if (cur.wait_dcache_ldq[(cur.wait_dcache_ldq_head + i) % LDQ_SIZE].valid) {
+
+
+
+      uint32_t ldq_idx = wait_entry.ldq_idx;
+      if (cur.wait_dcache_ldq[entry_idx].valid) {
         LdqEntry &entry = nxt.ldq[ldq_idx];
         if (entry.load_state == LoadState::WaitDcacheResp) {
           if (in.dcache2lsu->resp_ports.load_resps[i].replay == ReplayType::HIT) {
@@ -449,18 +590,10 @@ void RealLsu::comb_dcache2lsu_ldq() {
             nxt.finish[finish_idx].idx = ldq_idx; // 将完成的LDQ条目加入完成队列
             nxt.finish[finish_idx].is_load = true;
             nxt.finish_count++;
-          } else if (in.dcache2lsu->resp_ports.load_resps[i].replay == ReplayType::CONFLICT) {
-            nxt.ldq[ldq_idx].load_state = LoadState::ReadyToIssue;
-            wait_dcache_ldq_entries[i].valid = true;
-            wait_dcache_ldq_entries[i].ldq_idx = ldq_idx;
           } else {
             nxt.ldq[ldq_idx].load_state = LoadState::ReadyToIssue;
             wait_dcache_ldq_entries[i].valid = true;
             wait_dcache_ldq_entries[i].ldq_idx = ldq_idx;
-
-            // uint32_t wait_replay_idx = (nxt.wait_dcache_replay_head + nxt.wait_dcache_replay_count) % LDQ_SIZE;
-            // nxt.wait_dcache_replay[wait_replay_idx].ldq_idx = ldq_idx;
-            // nxt.wait_dcache_replay_count++;
 
 #if !BSD_CONFIG
             if (entry.cache_miss == false) { // 只有之前不是未命中的load才标记为未命中需要重放，之前已经是未命中了就说明这个load已经在重放中了，不需要再次标记和重放了，这样可以避免因为冲突导致的重放而再次发生冲突和重放的情况，减少不必要的重放
@@ -471,12 +604,29 @@ void RealLsu::comb_dcache2lsu_ldq() {
         } else {
           wait_dcache_ldq_entries[i].valid = false;
         }
+        nxt.wait_dcache_ldq[entry_idx].valid = false; // 只有收到响应后才出队，避免丢失仍在等待dcache的load
+      } else {
+        wait_dcache_ldq_entries[i].valid = false;
       }
-      nxt.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE].valid = false; // 无论命中与否都需要将条目写回等待队列
-      nxt.wait_dcache_ldq_head = (nxt.wait_dcache_ldq_head + 1) % LDQ_SIZE;
-      nxt.wait_dcache_ldq_count--;
+    } else {
+      wait_dcache_ldq_entries[i].valid = false;
     }
   }
+  uint32_t tmp_head = nxt.wait_dcache_ldq_head;
+  uint32_t tmp_count = nxt.wait_dcache_ldq_count;
+  uint32_t issue = tmp_count > LSU_LDU_COUNT ? LSU_LDU_COUNT : tmp_count;
+  for (int i = 0; i < issue; i++) {
+    if (!nxt.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE].valid) {
+      tmp_head = (tmp_head + 1) % LDQ_SIZE;
+      if (tmp_count > 0) {
+        tmp_count--;
+      }
+    } else {
+      break;
+    }
+  }
+  nxt.wait_dcache_ldq_head = tmp_head;
+  nxt.wait_dcache_ldq_count = tmp_count;
 
   for (int i = 0; i < LSU_LDU_COUNT; i++) {
     if (wait_dcache_ldq_entries[i].valid) {
@@ -536,18 +686,34 @@ void RealLsu::comb_lsu2dcache_stq() {
   }
 
   uint32_t commit_count = cur.stq_commit_count;
-  if (commit_count > cur.stq_count) {
-    commit_count = cur.stq_count;
+  if (commit_count > cur.stq_count*3) {
+    commit_count = cur.stq_count*3;
   }
 
   int32_t issued_stq = 0;
   for (uint32_t i = 0; i < commit_count && issued_stq < LSU_STA_COUNT; i++) {
-    const uint32_t stq_idx = (nxt.stq_head + i) % STQ_SIZE;
+    const uint32_t stq_idx = (cur.stq_head + i) % STQ_SIZE;
     auto &entry = nxt.stq[stq_idx];
+    uint8_t entry_strb = LsuUtils::get_store_strb(entry.paddr, entry.func3);
+
     if (entry.store_state == StoreState::Committed) {
+      bool has_older_unfinished_store = false;
+      for(uint32_t j = 0; j < i; j++) {
+        const uint32_t older_stq_idx = (cur.stq_head + j) % STQ_SIZE;
+        uint8_t older_entry_strb = LsuUtils::get_store_strb(nxt.stq[older_stq_idx].paddr, nxt.stq[older_stq_idx].func3);
+        if (CheckAddr(entry.paddr, entry_strb, nxt.stq[older_stq_idx].paddr, older_entry_strb) && nxt.stq[older_stq_idx].store_state != StoreState::Done) {
+          entry.store_state = StoreState::Committed; // 还有更老的store没有完成，当前store继续保持在提交状态等待更老的store完成
+          has_older_unfinished_store = true;
+          break;
+        }
+      }
+    
+      if(has_older_unfinished_store) {
+        continue;
+      }
+
       if (entry.is_mmio == true) {
-        if (lsu_mmio_is_oldest_unfinished(in.rob_bcast, entry.rob_idx) &&
-            !nxt.uncached_unit.valid) {
+        if (i == 0 && !nxt.uncached_unit.valid) {
           nxt.uncached_unit.valid = true;
           nxt.uncached_unit.is_load = false;
           nxt.uncached_unit.addr = entry.paddr;
@@ -555,7 +721,6 @@ void RealLsu::comb_lsu2dcache_stq() {
           nxt.uncached_unit.func3 = entry.func3;
           nxt.uncached_unit.idx = stq_idx;              // 将准备好发出请求的store的STQ索引传递给uncached unit，方便后续处理响应时找到对应的STQ条目
           entry.store_state = StoreState::WaitMmioResp; // MMIO store发出后进入等待MMIO响应状态
-          issued_stq++;
         }
       } else {
         if (entry.suppress_write) {
@@ -566,12 +731,13 @@ void RealLsu::comb_lsu2dcache_stq() {
         out.lsu2dcache->req_ports.store_ports[issued_stq].addr = entry.paddr;
         out.lsu2dcache->req_ports.store_ports[issued_stq].data =
             LsuUtils::align_store_data(entry.data, entry.paddr, entry.func3);
-        out.lsu2dcache->req_ports.store_ports[issued_stq].strb =
-            LsuUtils::get_store_strb(entry.paddr, entry.func3);
+        out.lsu2dcache->req_ports.store_ports[issued_stq].strb = entry_strb;
         out.lsu2dcache->req_ports.store_ports[issued_stq].req_id = stq_idx;
         entry.store_state = StoreState::WaitDcacheResp; // 发出store请求后，进入等待dcache响应状态
         issued_stq++;
       }
+    } else {
+      break;
     }
   }
 }
@@ -598,16 +764,7 @@ void RealLsu::comb_lsu2exe() {
         wb_uop.page_fault_store = stq_entry.page_fault;
         wb_uop.dest_en = false;
 
-        if (stq_entry.is_lrsc && !stq_entry.page_fault) {
-          const bool sc_pass = cur.lrsc_unit.reserve_valid &&
-                               cur.lrsc_unit.reserve_addr == stq_entry.paddr;
-          stq_entry.sc_pass = sc_pass;
-          stq_entry.suppress_write = !sc_pass;
-          nxt.lrsc_unit.reserve_valid = false;
-          wb_uop.result = sc_pass ? 0 : 1;
-          wb_uop.dest_preg = stq_entry.dest_preg;
-          wb_uop.dest_en = true;
-        }
+
 
         out.lsu2exe->sta_wb_req[i].uop =
             LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
@@ -619,9 +776,23 @@ void RealLsu::comb_lsu2exe() {
       }
     }
     nxt.mmu_done_stq[done_idx].valid = false; // 无论如何都需要将MMU完成的STQ条目标记为无效
-    nxt.mmu_done_stq_head = (nxt.mmu_done_stq_head + 1) % STQ_SIZE;
-    nxt.mmu_done_stq_count--;
   }
+
+  uint32_t tmp_head = nxt.mmu_done_stq_head;
+  uint32_t tmp_count = nxt.mmu_done_stq_count;
+  issue = tmp_count > LSU_STA_COUNT ? LSU_STA_COUNT : tmp_count;
+  for (int i = 0; i < issue; i++) {
+    if (!nxt.mmu_done_stq[(nxt.mmu_done_stq_head + i) % STQ_SIZE].valid) {
+      tmp_head = (tmp_head + 1) % STQ_SIZE;
+      if (tmp_count > 0) {
+        tmp_count--;
+      }
+    } else {
+      break;
+    }
+  }
+  nxt.mmu_done_stq_head = tmp_head;
+  nxt.mmu_done_stq_count = tmp_count;
 
   issue = cur.finish_count > LSU_LDU_COUNT ? LSU_LDU_COUNT : cur.finish_count;
   for (int i = 0; i < issue; i++) {
@@ -644,6 +815,8 @@ void RealLsu::comb_lsu2exe() {
           wb_uop.dest_preg = ldq_entry.dest_preg;
           wb_uop.page_fault_load = ldq_entry.page_fault;
           wb_uop.dest_en = true;
+          
+          wb_uop.dbg.difftest_skip =!ldq_entry.page_fault && lsu_is_timer_addr(ldq_entry.p_addr);
           out.lsu2exe->wb_req[i].uop =
               LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
           ldq_entry.load_state = LoadState::Done; // load完成，进入完成状态等待提交
@@ -651,14 +824,66 @@ void RealLsu::comb_lsu2exe() {
           if (ldq_entry.is_lrsc && !ldq_entry.page_fault) {
             nxt.lrsc_unit.reserve_valid = true;
             nxt.lrsc_unit.reserve_addr = ldq_entry.p_addr;
+            nxt.lrsc_unit.reserve_rob_idx = ldq_entry.rob_idx;
+            nxt.lrsc_unit.reserve_rob_flag = ldq_entry.rob_flag;
+            nxt.lrsc_unit.reserve_br_mask = ldq_entry.br_mask;
           }
+        }
+      } else {
+        auto &stq_entry = nxt.stq[entry.idx];
+        if (stq_entry.store_state == StoreState::Done || stq_entry.store_state == StoreState::PageFault) {
+          auto &stq_entry = nxt.stq[entry.idx];
+          MicroOp wb_uop;
+          wb_uop.op = UOP_LOAD; // 关键：让 ROB 看到 G0
+          wb_uop.rob_idx = stq_entry.rob_idx;
+          wb_uop.rob_flag = stq_entry.rob_flag;
+          wb_uop.br_mask = stq_entry.br_mask;
+          wb_uop.diag_val = stq_entry.vaddr;
+          wb_uop.page_fault_store = stq_entry.page_fault;
+          wb_uop.dest_en = false;
+
+          if (stq_entry.page_fault) {
+            wb_uop.result = stq_entry.vaddr;
+          } else {
+            const bool sc_pass =
+                cur.lrsc_unit.reserve_valid &&
+                cur.lrsc_unit.reserve_addr == stq_entry.paddr;
+
+            stq_entry.sc_pass = sc_pass;
+            stq_entry.suppress_write = !sc_pass;
+            nxt.lrsc_unit.reserve_valid = false;
+
+            wb_uop.result = sc_pass ? 0 : 1;
+            wb_uop.dest_preg = stq_entry.dest_preg;
+            wb_uop.dest_en = true;
+          }
+
+          out.lsu2exe->wb_req[i].valid = true;
+          out.lsu2exe->wb_req[i].uop =
+              LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
+
+          stq_entry.store_state = StoreState::Done;
         }
       }
     }
     nxt.finish[finish_idx].valid = false; // 无论如何都需要将完成的条目标记为无效
-    nxt.finish_head = (nxt.finish_head + 1) % kFinishSize;
-    nxt.finish_count--;
   }
+
+  tmp_head = nxt.finish_head;
+  tmp_count = nxt.finish_count;
+  issue = tmp_count > LSU_LDU_COUNT ? LSU_LDU_COUNT : tmp_count;
+  for (int i = 0; i < issue; i++) {
+    if (!nxt.finish[(nxt.finish_head + i) % kFinishSize].valid) {
+      tmp_head = (tmp_head + 1) % kFinishSize;
+      if (tmp_count > 0) {
+        tmp_count--;
+      }
+    } else {
+      break;
+    }
+  }
+  nxt.finish_head = tmp_head;
+  nxt.finish_count = tmp_count;
 }
 void RealLsu::comb_stq_commit() {
   auto commit_stq_entry = [&]() {
@@ -706,9 +931,25 @@ void RealLsu::comb_stq_commit() {
 void RealLsu::comb_flush() {
   if (in.rob_bcast->flush) {
     nxt.ldq_count = 0;
-    nxt.stq_count = 0;
-    nxt.stq_commit = nxt.stq_head;
-    nxt.stq_commit_count = 0;
+    const uint32_t keep_committed =
+        std::min<uint32_t>(nxt.stq_commit_count, nxt.stq_count);
+
+    nxt.stq_count = keep_committed;
+    nxt.stq_commit_count = keep_committed;
+    nxt.stq_commit = stq_idx_after(nxt.stq_head, keep_committed);
+
+    for (int i = 0; i < LDQ_SIZE; i++) {
+      nxt.wait_dcache_ldq[i].valid = false;
+      nxt.wait_mmu_ldq[i].valid = false;
+    }
+    for (int i = 0; i < STQ_SIZE; i++) {
+      nxt.wait_mmu_stq[i].valid = false;
+      nxt.mmu_done_stq[i].valid = false;
+    }
+    for (int i = 0; i < kFinishSize; i++) {
+      nxt.finish[i].valid = false;
+    }
+
     nxt.wait_mmu_ldq_count = 0;
     nxt.wait_mmu_stq_count = 0;
     nxt.mmu_done_stq_count = 0;
@@ -716,70 +957,69 @@ void RealLsu::comb_flush() {
     nxt.wait_dcache_ldq_count = 0;
 
     nxt.uncached_unit.valid = false;
-    nxt.lrsc_unit.reserve_valid = false;
+    // nxt.lrsc_unit.reserve_valid = false;
   }
 
   if (in.dec_bcast->mispred) {
-    for (int i = 0; i < cur.ldq_count; i++) {
-      if ((cur.ldq[(cur.ldq_head + i) % LDQ_SIZE].br_mask & in.dec_bcast->br_mask) != 0) {
+    for (int i = 0; i < nxt.ldq_count; i++) {
+      if ((nxt.ldq[(nxt.ldq_head + i) % LDQ_SIZE].br_mask & in.dec_bcast->br_mask) != 0) {
         nxt.ldq_count = i; // 将第一个需要清除的条目之前的条目保留，之后的条目全部清除
         break;
       }
     }
-    for (int i = 0; i < cur.stq_count; i++) {
-      if ((cur.stq[(cur.stq_head + i) % STQ_SIZE].br_mask & in.dec_bcast->br_mask) != 0) {
+    for (int i = 0; i < nxt.stq_count; i++) {
+      if ((nxt.stq[(nxt.stq_head + i) % STQ_SIZE].br_mask & in.dec_bcast->br_mask) != 0) {
         nxt.stq_count = i; // 将第一个需要清除的条目之前的条目保留，之后的条目全部清除
         break;
       }
     }
-    for (int i = 0; i < cur.wait_mmu_ldq_count; i++) {
-      if (!ldq_idx_alive_after_flush(cur.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE].ldq_idx, nxt.ldq_head, nxt.ldq_count)) { // wait MMU的条目索引如果超过了新的LDQ count，说明这个条目需要被清除
-        nxt.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE].valid = 0;                    // 将需要清除的条目无效化
+    for (int i = 0; i < nxt.wait_mmu_ldq_count; i++) {
+      if (!ldq_idx_alive_after_flush(nxt.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE].ldq_idx, nxt.ldq_head, nxt.ldq_count)) { // wait MMU的条目索引如果超过了新的LDQ count，说明这个条目需要被清除
+        nxt.wait_mmu_ldq[(nxt.wait_mmu_ldq_head + i) % LDQ_SIZE].valid = 0;                                                            // 将需要清除的条目无效化
       }
     }
-    for (int i = 0; i < cur.wait_mmu_stq_count; i++) {
-      if (!stq_idx_alive_after_flush(cur.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE].stq_idx, nxt.stq_head, nxt.stq_count)) { // wait MMU的条目索引如果超过了新的STQ count，说明这个条目需要被清除
-        nxt.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE].valid = 0;                    // 将需要清除的条目无效化
+    for (int i = 0; i < nxt.wait_mmu_stq_count; i++) {
+      if (!stq_idx_alive_after_flush(nxt.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE].stq_idx, nxt.stq_head, nxt.stq_count)) { // wait MMU的条目索引如果超过了新的STQ count，说明这个条目需要被清除
+        nxt.wait_mmu_stq[(nxt.wait_mmu_stq_head + i) % STQ_SIZE].valid = 0;                                                            // 将需要清除的条目无效化
       }
     }
-    for (int i = 0; i < cur.mmu_done_stq_count; i++) {
-      if (!stq_idx_alive_after_flush(cur.mmu_done_stq[(nxt.mmu_done_stq_head + i) % STQ_SIZE].stq_idx, nxt.stq_head, nxt.stq_count)) { // MMU完成队列的条目索引如果超过了新的STQ count，说明这个条目需要被清除
-        nxt.mmu_done_stq[(nxt.mmu_done_stq_head + i) % STQ_SIZE].valid = 0;                    // 将需要清除的条目无效化
+    for (int i = 0; i < nxt.mmu_done_stq_count; i++) {
+      if (!stq_idx_alive_after_flush(nxt.mmu_done_stq[(nxt.mmu_done_stq_head + i) % STQ_SIZE].stq_idx, nxt.stq_head, nxt.stq_count)) { // MMU完成队列的条目索引如果超过了新的STQ count，说明这个条目需要被清除
+        nxt.mmu_done_stq[(nxt.mmu_done_stq_head + i) % STQ_SIZE].valid = 0;                                                            // 将需要清除的条目无效化
       }
     }
-    for (int i = 0; i < cur.finish_count; i++) {
-      if (cur.finish[(nxt.finish_head + i) % kFinishSize].is_load) {
-        if (!finish_idx_alive_after_flush(cur.finish[(nxt.finish_head + i) % kFinishSize].idx, nxt.finish_head, nxt.ldq_count)) { // 完成队列中load条目的索引如果超过了新的LDQ count，说明这个条目需要被清除
-          nxt.finish[(nxt.finish_head + i) % kFinishSize].valid = 0;                // 将需要清除的条目无效化
-        }
+    for (int i = 0; i < nxt.finish_count; i++) {
+      bool alive = false;
+      if (nxt.finish[(nxt.finish_head + i) % kFinishSize].is_load) {
+        alive = ldq_idx_alive_after_flush(nxt.finish[(nxt.finish_head + i) % kFinishSize].idx, nxt.ldq_head, nxt.ldq_count);
       } else {
-        if (!finish_idx_alive_after_flush(cur.finish[(nxt.finish_head + i) % kFinishSize].idx, nxt.finish_head, nxt.stq_count)) { // 完成队列中store条目的索引如果超过了新的STQ count，说明这个条目需要被清除
-          nxt.finish[(nxt.finish_head + i) % kFinishSize].valid = 0;                // 将需要清除的条目无效化
-        }
+        alive = stq_idx_alive_after_flush(nxt.finish[(nxt.finish_head + i) % kFinishSize].idx, nxt.stq_head, nxt.stq_count);
+      }
+      if (!alive) {                                                // 完成队列的条目索引如果超过了新的LDQ/STQ count，说明这个条目需要被清除
+        nxt.finish[(nxt.finish_head + i) % kFinishSize].valid = 0; // 将需要清除的条目无效化
       }
     }
-    for (int i = 0; i < cur.wait_dcache_ldq_count; i++) {
-      if (!ldq_idx_alive_after_flush(cur.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE].ldq_idx, nxt.ldq_head, nxt.ldq_count)) { // wait dcache的条目索引如果超过了新的LDQ count，说明这个条目需要被清除
-        nxt.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE].valid = 0;                    // 将需要清除的条目无效化
+    for (int i = 0; i < nxt.wait_dcache_ldq_count; i++) {
+      if (!ldq_idx_alive_after_flush(nxt.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE].ldq_idx, nxt.ldq_head, nxt.ldq_count)) { // wait dcache的条目索引如果超过了新的LDQ count，说明这个条目需要被清除
+        nxt.wait_dcache_ldq[(nxt.wait_dcache_ldq_head + i) % LDQ_SIZE].valid = 0;                                                            // 将需要清除的条目无效化
       }
     }
-    if (cur.uncached_unit.valid) {
-      int32_t dis_ldq = (cur.uncached_unit.idx + LDQ_SIZE - cur.ldq_head) % LDQ_SIZE;
-      int32_t dis_stq = (cur.uncached_unit.idx + STQ_SIZE - cur.stq_head) % STQ_SIZE;
-      if (cur.uncached_unit.is_load && !ldq_idx_alive_after_flush(cur.uncached_unit.idx, nxt.ldq_head, nxt.ldq_count)) { // uncached unit中如果有load条目，并且索引超过了新的LDQ count，说明这个条目需要被清除
-        nxt.uncached_unit.valid = false;                           // 将uncached unit无效化
+    if (nxt.uncached_unit.valid) {
+      int32_t dis_ldq = (nxt.uncached_unit.idx + LDQ_SIZE - nxt.ldq_head) % LDQ_SIZE;
+      int32_t dis_stq = (nxt.uncached_unit.idx + STQ_SIZE - nxt.stq_head) % STQ_SIZE;
+      if (nxt.uncached_unit.is_load && !ldq_idx_alive_after_flush(nxt.uncached_unit.idx, nxt.ldq_head, nxt.ldq_count)) { // uncached unit中如果有load条目，并且索引超过了新的LDQ count，说明这个条目需要被清除
+        nxt.uncached_unit.valid = false;                                                                                 // 将uncached unit无效化
       }
-      if (!cur.uncached_unit.is_load && !stq_idx_alive_after_flush(cur.uncached_unit.idx, nxt.stq_head, nxt.stq_count)) { // uncached unit中如果有store条目，并且索引超过了新的STQ count，说明这个条目需要被清除
-        nxt.uncached_unit.valid = false;                            // 将uncached unit无效化
+      if (!nxt.uncached_unit.is_load && !stq_idx_alive_after_flush(nxt.uncached_unit.idx, nxt.stq_head, nxt.stq_count)) { // uncached unit中如果有store条目，并且索引超过了新的STQ count，说明这个条目需要被清除
+        nxt.uncached_unit.valid = false;                                                                                  // 将uncached unit无效化
       }
     }
-    if (cur.lrsc_unit.reserve_valid) {
-      if (!ldq_idx_alive_after_flush(cur.lrsc_unit.reserve_ldq_idx, nxt.ldq_head, nxt.ldq_count)) { // LRSC保留的地址如果超过了新的LDQ count，说明这个保留需要被清除
-        nxt.lrsc_unit.reserve_valid = false;             // 将LRSC保留无效化
-      }
+    if (nxt.lrsc_unit.reserve_valid &&
+        (nxt.lrsc_unit.reserve_br_mask & in.dec_bcast->br_mask) != 0) {
+      nxt.lrsc_unit.reserve_valid = false;
     }
 
-    nxt.stq_commit_count = std::min(cur.stq_commit_count, nxt.stq_count);
+    nxt.stq_commit_count = std::min(nxt.stq_commit_count, nxt.stq_count);
     nxt.stq_commit = stq_idx_after(nxt.stq_head, nxt.stq_commit_count);
   }
 
@@ -789,6 +1029,9 @@ void RealLsu::comb_flush() {
     }
     for (int i = 0; i < cur.stq_count; i++) {
       nxt.stq[(cur.stq_head + i) % STQ_SIZE].br_mask &= ~in.dec_bcast->clear_mask; // 将需要清除的分支对应的br mask位清0
+    }
+    if (in.dec_bcast->clear_mask && nxt.lrsc_unit.reserve_valid) {
+      nxt.lrsc_unit.reserve_br_mask &= ~in.dec_bcast->clear_mask;
     }
   }
 }
@@ -936,11 +1179,18 @@ void RealLsu::handle_store_data(const MicroOp &inst) {
   entry.data_valid = true;
   if (entry.paddr_valid && entry.store_state == StoreState::WaitData) {
     entry.store_state = StoreState::Done;
-    const uint32_t done_idx =
-        (nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE;
-    nxt.mmu_done_stq[done_idx].valid = true;
-    nxt.mmu_done_stq[done_idx].stq_idx = inst.stq_idx;
-    nxt.mmu_done_stq_count++;
+    if (entry.is_lrsc) {
+      nxt.finish[(nxt.finish_head + nxt.finish_count) % kFinishSize].valid = true;
+      nxt.finish[(nxt.finish_head + nxt.finish_count) % kFinishSize].is_load = false;
+      nxt.finish[(nxt.finish_head + nxt.finish_count) % kFinishSize].idx = inst.stq_idx;
+      nxt.finish_count++;
+    } else {
+      const uint32_t done_idx =
+          (nxt.mmu_done_stq_head + nxt.mmu_done_stq_count) % STQ_SIZE;
+      nxt.mmu_done_stq[done_idx].valid = true;
+      nxt.mmu_done_stq[done_idx].stq_idx = inst.stq_idx;
+      nxt.mmu_done_stq_count++;
+    }
   }
 }
 
@@ -966,7 +1216,7 @@ void RealLsu::handle_store_addr(const MicroOp &inst) {
   entry.dest_preg = inst.dest_preg;
   entry.store_state = StoreState::WaitTlb;
 
-  entry.is_lrsc = ((inst.func7 >> 2) == AmoOp::SC);
+  entry.is_lrsc = inst.is_atomic && ((inst.func7 >> 2) == AmoOp::SC);
 
   uint32_t wait_mmu_idx = (nxt.wait_mmu_stq_head + nxt.wait_mmu_stq_count) % STQ_SIZE;
   nxt.wait_mmu_stq[wait_mmu_idx].valid = true;

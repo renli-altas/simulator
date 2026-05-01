@@ -5,7 +5,17 @@
 #include "IO.h"
 #include <cstdint>
 #include <cstdio>
-constexpr uint32_t MemRouteBlockReqID = LDQ_SIZE + 16;
+constexpr uint32_t DcacheReqIdRouteBit = 1u << 31;
+constexpr uint32_t MemRouteBlockReqID = DcacheReqIdRouteBit;
+
+static inline bool dcache_req_id_is_route(uint32_t req_id) {
+  return (req_id & DcacheReqIdRouteBit) != 0;
+}
+
+static inline uint32_t next_route_req_id(uint32_t req_id) {
+  uint32_t next = req_id + 1;
+  return dcache_req_id_is_route(next) ? next : MemRouteBlockReqID;
+}
 
 enum class Owner : uint8_t {
   NONE = 0,

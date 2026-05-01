@@ -20,6 +20,7 @@ struct S1S2Reg {
         reg<1>     valid    = false;
         reg<32>    addr     = 0;
         reg<32>     req_id   = 0;
+        reg<1>    replayed  = false; // whether this load has been replayed due to MSHR full or conflict, used to avoid accepting new requests for the same load and causing starvation when there are multiple back-to-back misses
     } loads[LSU_LDU_COUNT];
 
     // Store slots
