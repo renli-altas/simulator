@@ -47,18 +47,18 @@ void RealDcache::stage1_comb() {
         }
         else{
             bool replay = false;
-            for(int j=0;j<LSU_STA_COUNT;j++){
-                if(s1s2_cur.loads[j].valid&&CheckAddr(req.addr,(uint8_t)0xffff, s1s2_cur.stores[j].addr,s1s2_cur.stores[j].strb)){
-                    replay = true; // 如果有older load地址重叠且还在等待dcache响应或者等待重放中（即需要重放），则这个load也需要重放，以避免饥饿。注意我们只检查older load的状态，因为如果older load是hit，说明它可以在同一周期完成并更新cache，从而这个load不需要重放。另一方面，如果我们检查这个load自己的状态，可能会导致当有多条连续miss时出现不必要的重放，因为这个load可能还没有被标记为replay，但它会在同一周期内因为MSHR miss而被重放。
-                    break;
-                }
-            }
-            for(int j=0;j<LSU_STA_COUNT;j++){
-                if(in.lsu2dcache->req_ports.store_ports[j].valid&&CheckAddr(req.addr,(uint8_t)0xffff, in.lsu2dcache->req_ports.store_ports[j].addr,in.lsu2dcache->req_ports.store_ports[j].strb)){
-                    replay = true; // 如果有older store地址重叠且还在等待dcache响应或者等待重放中（即需要重放），则这个load也需要重放，以避免饥饿。注意我们只检查older store的状态，因为如果older store是hit，说明它可以在同一周期完成并更新cache，从而这个load不需要重放。另一方面，如果我们检查这个load自己的状态，可能会导致当有多条连续miss时出现不必要的重放，因为这个load可能还没有被标记为replay，但它会在同一周期内因为MSHR miss而被重放。
-                    break;
-                }
-            }
+            // for(int j=0;j<LSU_STA_COUNT;j++){
+            //     if(s1s2_cur.loads[j].valid&&CheckAddr(req.addr,(uint8_t)0xffff, s1s2_cur.stores[j].addr,s1s2_cur.stores[j].strb)){
+            //         replay = true; // 如果有older load地址重叠且还在等待dcache响应或者等待重放中（即需要重放），则这个load也需要重放，以避免饥饿。注意我们只检查older load的状态，因为如果older load是hit，说明它可以在同一周期完成并更新cache，从而这个load不需要重放。另一方面，如果我们检查这个load自己的状态，可能会导致当有多条连续miss时出现不必要的重放，因为这个load可能还没有被标记为replay，但它会在同一周期内因为MSHR miss而被重放。
+            //         break;
+            //     }
+            // }
+            // for(int j=0;j<LSU_STA_COUNT;j++){
+            //     if(in.lsu2dcache->req_ports.store_ports[j].valid&&CheckAddr(req.addr,(uint8_t)0xffff, in.lsu2dcache->req_ports.store_ports[j].addr,in.lsu2dcache->req_ports.store_ports[j].strb)){
+            //         replay = true; // 如果有older store地址重叠且还在等待dcache响应或者等待重放中（即需要重放），则这个load也需要重放，以避免饥饿。注意我们只检查older store的状态，因为如果older store是hit，说明它可以在同一周期完成并更新cache，从而这个load不需要重放。另一方面，如果我们检查这个load自己的状态，可能会导致当有多条连续miss时出现不必要的重放，因为这个load可能还没有被标记为replay，但它会在同一周期内因为MSHR miss而被重放。
+            //         break;
+            //     }
+            // }
             slot.valid    = true;
             slot.addr     = req.addr;
             slot.req_id   = req.req_id;
@@ -85,12 +85,12 @@ void RealDcache::stage1_comb() {
         }
         else{
             bool replayed = false;
-            for(int j=0;j<LSU_STA_COUNT;j++){
-                if(s1s2_cur.stores[j].valid&&CheckAddr(req.addr,req.strb, s1s2_cur.stores[j].addr,s1s2_cur.stores[j].strb)){
-                    replayed = out.dcache2lsu->resp_ports.store_resps[j].replay != ReplayType::HIT; // If there is an older store with overlapping address that is waiting for MSHR allocation or has been allocated an MSHR but not yet completed (i.e., needs to be replayed), then this store should also be replayed to avoid starvation. Note that we only check the replay status of the older store, because if the older store is a hit, it means it can complete in the same cycle and update the cache before this store's hit check, so this store doesn't need to be replayed. On the other hand, if we check the replay status of this store itself, it may cause unnecessary replays when there are multiple back-to-back misses, because this store may not have been marked as replayed yet when we check, even though it will be replayed in the same cycle due to MSHR miss.
-                    break;
-                }
-            }
+            // for(int j=0;j<LSU_STA_COUNT;j++){
+            //     if(s1s2_cur.stores[j].valid&&CheckAddr(req.addr,req.strb, s1s2_cur.stores[j].addr,s1s2_cur.stores[j].strb)){
+            //         replayed = out.dcache2lsu->resp_ports.store_resps[j].replay != ReplayType::HIT; // If there is an older store with overlapping address that is waiting for MSHR allocation or has been allocated an MSHR but not yet completed (i.e., needs to be replayed), then this store should also be replayed to avoid starvation. Note that we only check the replay status of the older store, because if the older store is a hit, it means it can complete in the same cycle and update the cache before this store's hit check, so this store doesn't need to be replayed. On the other hand, if we check the replay status of this store itself, it may cause unnecessary replays when there are multiple back-to-back misses, because this store may not have been marked as replayed yet when we check, even though it will be replayed in the same cycle due to MSHR miss.
+            //         break;
+            //     }
+            // }
             slot.valid    = true;
             slot.addr     = req.addr;
             slot.data     = req.data;

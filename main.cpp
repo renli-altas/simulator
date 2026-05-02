@@ -400,7 +400,6 @@ int main(int argc, char *argv[]) {
     ref_cpu.ref_only = true;
 
     std::cout << "[Debug] Running Reference Model Standalone..." << std::endl;
-    uint64_t ref_commit_cnt = 0;
 
     uint64_t ref_commit_cnt = 0;
 
