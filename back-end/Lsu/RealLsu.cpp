@@ -11,140 +11,23 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+STLFResult check_stlf(uint32_t load_addr, uint32_t load_func3, uint32_t store_addr, uint32_t store_func3) {
+  int store_width = get_mem_width(store_func3);
+  int load_width = get_mem_width(load_func3);
+  uint32_t s_start = store_addr;
+  uint32_t s_end = s_start + store_width;
+  uint32_t l_start = load_addr;
+  uint32_t l_end = l_start + load_width;
+  uint32_t overlap_start = std::max(s_start, l_start);
+  uint32_t overlap_end = std::min(s_end, l_end);
 
-namespace {
-
-constexpr uint32_t kFinishSize = LDQ_SIZE + STQ_SIZE;
-constexpr uint32_t kDcacheReqIdOwnerBit = 31;
-constexpr uint32_t kLsuReqIdIdxBits = LDQ_IDX_WIDTH;
-constexpr uint32_t kLsuReqIdGenBits = 31 - LDQ_IDX_WIDTH;
-constexpr uint32_t kLsuReqIdIdxMask = (1u << LDQ_IDX_WIDTH) - 1;
-constexpr uint32_t kRouteReqIdBase = 1u << kDcacheReqIdOwnerBit;
-
-constexpr uint32_t kLsuReqIdGenMask = (1u << kLsuReqIdGenBits) - 1;
-
-static uint32_t normalize_lsu_req_gen(uint32_t gen) {
-  return gen & kLsuReqIdGenMask;
-}
-
-
-template <typename PtrT, typename FlagT>
-static void advance_ring_ptr(PtrT &ptr, FlagT &flag, uint32_t size) {
-  const uint32_t next = static_cast<uint32_t>(ptr) + 1;
-  if (next >= size) {
-    ptr = 0;
-    flag = !flag;
+  if (s_start <= l_start && s_end >= l_end) {
+    return STLFResult::Overlap; // Store completely covers Load
+  } else if (l_end <= s_start || l_start >= s_end) {
+    return STLFResult::Disjoint; // No overlap
   } else {
-    ptr = next;
+    return STLFResult::Retry; // Partial overlap, conservatively treat as conflict to avoid corner cases
   }
-}
-
-template <typename PtrT>
-static void advance_ring_ptr(PtrT &ptr, uint32_t size) {
-  const uint32_t next = static_cast<uint32_t>(ptr) + 1;
-  ptr = next >= size ? 0 : next;
-}
-
-static bool ldq_idx_alive_after_flush(uint32_t idx, uint32_t head,
-                                      uint32_t new_count) {
-  return ((idx + LDQ_SIZE - head) % LDQ_SIZE) < new_count;
-}
-
-static bool stq_idx_alive_after_flush(uint32_t idx, uint32_t head,
-                                      uint32_t new_count) {
-  return ((idx + STQ_SIZE - head) % STQ_SIZE) < new_count;
-}
-static bool finish_idx_alive_after_flush(uint32_t idx, uint32_t head,
-                                         uint32_t new_count) {
-  return ((idx + kFinishSize - head) % kFinishSize) < new_count;
-}
-
-static bool stq_tail_flag(uint32_t head, uint32_t count, bool head_flag) {
-  return (head + count) >= STQ_SIZE ? !head_flag : head_flag;
-}
-
-static uint32_t stq_idx_after(uint32_t head, uint32_t count) {
-  return (head + count) % STQ_SIZE;
-}
-
-static bool lsu_is_mmio_addr(uint32_t paddr) {
-  return ((paddr & UART_ADDR_MASK) == UART_ADDR_BASE) ||
-         ((paddr & PLIC_ADDR_MASK) == PLIC_ADDR_BASE) ||
-         (paddr == OPENSBI_TIMER_LOW_ADDR) ||
-         (paddr == OPENSBI_TIMER_HIGH_ADDR);
-}
-
-static bool lsu_mmio_is_oldest_unfinished(const RobBroadcastIO *rob_bcast,
-                                          uint32_t rob_idx) {
-  if (rob_bcast == nullptr) {
-    return false;
-  }
-  if (rob_bcast->head_incomplete_valid) {
-    return rob_bcast->head_incomplete_rob_idx == rob_idx;
-  }
-  return rob_bcast->head_valid && rob_bcast->head_rob_idx == rob_idx;
-}
-
-static uint32_t stq_tag_value(uint32_t idx, bool flag) {
-  return (flag ? STQ_SIZE : 0) + idx;
-}
-
-static bool stq_distance_from_head_to_boundary(uint32_t head,
-                                               bool head_flag,
-                                               uint32_t count,
-                                               StoreTag boundary,
-                                               uint32_t &distance) {
-  constexpr uint32_t kRing = STQ_SIZE * 2;
-  const uint32_t h = stq_tag_value(head, head_flag);
-  const uint32_t b = stq_tag_value(boundary.idx, boundary.flag);
-
-  distance = (b + kRing - h) % kRing;
-
-  // boundary 必须落在当前 active window 或 tail 上：
-  // [head, head + count]
-  return distance <= count;
-}
-
-static uint32_t make_lsu_load_req_id(uint32_t wait_idx, uint32_t gen) {
-  return (normalize_lsu_req_gen(gen) << LDQ_IDX_WIDTH) |
-         (wait_idx & kLsuReqIdIdxMask);
-}
-
-static uint32_t lsu_req_id_gen(uint32_t req_id) {
-  return (req_id >> LDQ_IDX_WIDTH) & kLsuReqIdGenMask;
-}
-
-static uint32_t lsu_req_id_wait_idx(uint32_t req_id) {
-  return req_id & kLsuReqIdIdxMask;
-}
-
-static bool get_nearest_older_store_tag(const LsuState &s,
-                                        StoreTag boundary,
-                                        StoreTag &nearest) {
-  uint32_t distance = 0;
-  if (!stq_distance_from_head_to_boundary(
-          s.stq_head, s.stq_head_flag, s.stq_count, boundary, distance)) {
-    return false;
-  }
-
-  if (distance == 0) {
-    return false;
-  }
-
-  const uint32_t offset = distance - 1;
-  const uint32_t pos = s.stq_head + offset;
-
-  nearest.idx = pos % STQ_SIZE;
-  nearest.flag = s.stq_head_flag ^ ((pos / STQ_SIZE) & 0x1);
-  return true;
-}
-
-static bool lsu_is_timer_addr(uint32_t paddr) {
-  return paddr == OPENSBI_TIMER_LOW_ADDR ||
-         paddr == OPENSBI_TIMER_HIGH_ADDR;
-}
-
-
 }; // namespace
 
 RealLsu::RealLsu(SimContext *ctx) : cur{}, nxt{}, in{}, out{}, ctx(ctx) {}
@@ -451,6 +334,7 @@ void RealLsu::comb_dis2lsu() {
   }
 }
 
+#ifndef LSU_STLF
 void RealLsu::comb_stlf() {
   int32_t issue = cur.ldq_count > LSU_LDU_COUNT ? LSU_LDU_COUNT : cur.ldq_count;
 
@@ -503,7 +387,98 @@ void RealLsu::comb_stlf() {
     }
   }
 }
+#else
+void RealLsu::comb_stlf() {
+  int32_t issue = cur.ldq_count > LOAD_WINDOWS_WIDTH ? LOAD_WINDOWS_WIDTH : cur.ldq_count;
 
+  uint32_t todcache_wait_count = 0;
+  for (int i = 0; i < issue; i++) {
+    const uint32_t ldq_idx = (nxt.ldq_head + i) % LDQ_SIZE;
+    LdqEntry &entry = nxt.ldq[ldq_idx];
+
+    if (entry.load_state != LoadState::CheckStlf) {
+      continue;
+    }
+
+    uint32_t older_store_count = 0;
+    const bool boundary_ok = stq_distance_from_head_to_boundary(
+        cur.stq_head,
+        cur.stq_head_flag,
+        cur.stq_count,
+        entry.stq_snapshot,
+        older_store_count);
+
+    if (!boundary_ok) {
+#if !BSD_CONFIG
+      Assert(0 && "LDQ STQ snapshot boundary is outside active STQ window");
+#endif
+      continue;
+    }
+
+    if (entry.is_mmio && older_store_count == 0) {
+      if (lsu_mmio_is_oldest_unfinished(in.rob_bcast, entry.rob_idx) &&
+          !nxt.uncached_unit.valid) {
+        entry.load_state = LoadState::WaitMmioResp;
+        nxt.uncached_unit.valid = true;
+        nxt.uncached_unit.is_load = true;
+        nxt.uncached_unit.addr = entry.p_addr;
+        nxt.uncached_unit.func3 = entry.func3;
+        nxt.uncached_unit.idx = ldq_idx;
+      }
+      continue;
+    }
+    uint32_t check_stlf_num = 0;
+    for (int j = older_store_count - 1; j >= 0; j--) {
+      const uint32_t stq_idx = (cur.stq_head + j) % STQ_SIZE;
+      const StqEntry &stq_entry = cur.stq[stq_idx];
+      if (!stq_entry.paddr_valid) {
+        entry.load_state = LoadState::CheckStlf;
+        break;
+      }
+      STLFResult stlf_result = check_stlf(entry.p_addr, entry.func3, stq_entry.paddr, stq_entry.func3);
+      if (stlf_result == STLFResult::Overlap) {
+        if (!stq_entry.data_valid) {
+          entry.load_state = LoadState::CheckStlf;
+          break;
+        }
+        const uint32_t forward_offset = entry.p_addr - stq_entry.paddr;
+        entry.result = extract_data(stq_entry.data, forward_offset, entry.func3);
+        entry.load_state = LoadState::ReadyToWb;
+
+        const uint32_t finish_idx =
+            (nxt.finish_head + nxt.finish_count) % kFinishSize;
+        nxt.finish[finish_idx].valid = true;  // 将完成的LDQ条目加入完成队列
+        nxt.finish[finish_idx].idx = ldq_idx; // 将完成的LDQ条目加入完成队列
+        nxt.finish[finish_idx].is_load = true;
+        nxt.finish_count++;
+        break;
+      } else if (stlf_result == STLFResult::Retry) {
+        entry.load_state = LoadState::CheckStlf;
+        break;
+      } else {
+        check_stlf_num++;
+      }
+    }
+
+    if (check_stlf_num != older_store_count) {
+      continue;
+    }
+
+    // 没有 older store 了，才允许发射 load。
+    entry.load_state = LoadState::ReadyToIssue;
+    const uint32_t wait_idx =
+        (nxt.wait_dcache_ldq_head + nxt.wait_dcache_ldq_count) % LDQ_SIZE;
+    nxt.wait_dcache_ldq[wait_idx].valid = true;
+    nxt.wait_dcache_ldq[wait_idx].ldq_idx = ldq_idx;
+    nxt.wait_dcache_ldq_count++;
+    todcache_wait_count++;
+    if (todcache_wait_count == LSU_LDU_COUNT) {
+      break;
+    }
+  }
+}
+
+#endif
 void RealLsu::comb_lsu2dcache_ldq() {
   for (int i = 0; i < LSU_LDU_COUNT; i++) {
     out.lsu2dcache->req_ports.load_ports[i].valid = false; // 默认不发出load请求，后续根据LDQ条目状态决定是否发出请求
@@ -532,7 +507,6 @@ void RealLsu::comb_lsu2dcache_ldq() {
     }
   }
   nxt.req_gen = normalize_lsu_req_gen(cur.req_gen + issued);
-
 }
 
 void RealLsu::comb_dcache2lsu_ldq() {
@@ -559,28 +533,26 @@ void RealLsu::comb_dcache2lsu_ldq() {
       }
 
       if (wait_entry.req_gen != resp_gen) {
-      #if !BSD_CONFIG
+#if !BSD_CONFIG
         std::fprintf(stderr,
-            "[LSU][REQ-GEN-MISMATCH] port=%d req_id=%u entry_idx=%u "
-            "resp_gen=%u wait_gen=%u wait_ldq=%u head=%u count=%u\n",
-            i, req_id, entry_idx, resp_gen,
-            static_cast<unsigned>(wait_entry.req_gen),
-            static_cast<unsigned>(wait_entry.ldq_idx),
-            static_cast<unsigned>(cur.wait_dcache_ldq_head),
-            static_cast<unsigned>(cur.wait_dcache_ldq_count));
+                     "[LSU][REQ-GEN-MISMATCH] port=%d req_id=%u entry_idx=%u "
+                     "resp_gen=%u wait_gen=%u wait_ldq=%u head=%u count=%u\n",
+                     i, req_id, entry_idx, resp_gen,
+                     static_cast<unsigned>(wait_entry.req_gen),
+                     static_cast<unsigned>(wait_entry.ldq_idx),
+                     static_cast<unsigned>(cur.wait_dcache_ldq_head),
+                     static_cast<unsigned>(cur.wait_dcache_ldq_count));
         Assert(0 && "LSU load response req_gen mismatch");
-      #endif
+#endif
         continue;
       }
-
-
 
       uint32_t ldq_idx = wait_entry.ldq_idx;
       if (cur.wait_dcache_ldq[entry_idx].valid) {
         LdqEntry &entry = nxt.ldq[ldq_idx];
         if (entry.load_state == LoadState::WaitDcacheResp) {
           if (in.dcache2lsu->resp_ports.load_resps[i].replay == ReplayType::HIT) {
-            entry.result = LsuUtils::extract_data(in.dcache2lsu->resp_ports.load_resps[i].data, entry.p_addr, entry.func3);
+            entry.result = extract_data(in.dcache2lsu->resp_ports.load_resps[i].data, entry.p_addr, entry.func3);
             entry.load_state = LoadState::ReadyToWb;
             wait_dcache_ldq_entries[i].valid = false;
 
@@ -686,29 +658,29 @@ void RealLsu::comb_lsu2dcache_stq() {
   }
 
   uint32_t commit_count = cur.stq_commit_count;
-  if (commit_count > cur.stq_count*3) {
-    commit_count = cur.stq_count*3;
+  if (commit_count > STORE_WINDOWS_WIDTH) {
+    commit_count = STORE_WINDOWS_WIDTH;
   }
 
   int32_t issued_stq = 0;
   for (uint32_t i = 0; i < commit_count && issued_stq < LSU_STA_COUNT; i++) {
     const uint32_t stq_idx = (cur.stq_head + i) % STQ_SIZE;
     auto &entry = nxt.stq[stq_idx];
-    uint8_t entry_strb = LsuUtils::get_store_strb(entry.paddr, entry.func3);
+    uint8_t entry_strb = get_store_strb(entry.paddr, entry.func3);
 
     if (entry.store_state == StoreState::Committed) {
       bool has_older_unfinished_store = false;
-      for(uint32_t j = 0; j < i; j++) {
+      for (uint32_t j = 0; j < i; j++) {
         const uint32_t older_stq_idx = (cur.stq_head + j) % STQ_SIZE;
-        uint8_t older_entry_strb = LsuUtils::get_store_strb(nxt.stq[older_stq_idx].paddr, nxt.stq[older_stq_idx].func3);
+        uint8_t older_entry_strb = get_store_strb(nxt.stq[older_stq_idx].paddr, nxt.stq[older_stq_idx].func3);
         if (CheckAddr(entry.paddr, entry_strb, nxt.stq[older_stq_idx].paddr, older_entry_strb) && nxt.stq[older_stq_idx].store_state != StoreState::Done) {
           entry.store_state = StoreState::Committed; // 还有更老的store没有完成，当前store继续保持在提交状态等待更老的store完成
           has_older_unfinished_store = true;
           break;
         }
       }
-    
-      if(has_older_unfinished_store) {
+
+      if (has_older_unfinished_store) {
         continue;
       }
 
@@ -730,7 +702,7 @@ void RealLsu::comb_lsu2dcache_stq() {
         out.lsu2dcache->req_ports.store_ports[issued_stq].valid = true;
         out.lsu2dcache->req_ports.store_ports[issued_stq].addr = entry.paddr;
         out.lsu2dcache->req_ports.store_ports[issued_stq].data =
-            LsuUtils::align_store_data(entry.data, entry.paddr, entry.func3);
+            align_store_data(entry.data, entry.paddr, entry.func3);
         out.lsu2dcache->req_ports.store_ports[issued_stq].strb = entry_strb;
         out.lsu2dcache->req_ports.store_ports[issued_stq].req_id = stq_idx;
         entry.store_state = StoreState::WaitDcacheResp; // 发出store请求后，进入等待dcache响应状态
@@ -763,8 +735,6 @@ void RealLsu::comb_lsu2exe() {
         wb_uop.result = stq_entry.vaddr;
         wb_uop.page_fault_store = stq_entry.page_fault;
         wb_uop.dest_en = false;
-
-
 
         out.lsu2exe->sta_wb_req[i].uop =
             LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
@@ -815,8 +785,8 @@ void RealLsu::comb_lsu2exe() {
           wb_uop.dest_preg = ldq_entry.dest_preg;
           wb_uop.page_fault_load = ldq_entry.page_fault;
           wb_uop.dest_en = true;
-          
-          wb_uop.dbg.difftest_skip =!ldq_entry.page_fault && lsu_is_timer_addr(ldq_entry.p_addr);
+
+          wb_uop.dbg.difftest_skip = !ldq_entry.page_fault && lsu_is_timer_addr(ldq_entry.p_addr);
           out.lsu2exe->wb_req[i].uop =
               LsuExeIO::LsuExeRespUop::from_micro_op(wb_uop);
           ldq_entry.load_state = LoadState::Done; // load完成，进入完成状态等待提交

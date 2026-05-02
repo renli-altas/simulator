@@ -183,6 +183,14 @@ void print_soc_config_banner() {
         iq_name, iq.size, iq.dispatch_width, iq.port_start_idx,
         iq.port_start_idx + iq.port_num - 1, iq.port_num);
   }
+  #ifdef LSU_STLF
+  std::printf("[LSU STLF ON]");
+  #else
+  std::printf("[LSU STLF OFF]");
+  #endif
+  std::printf("[LSU LOAD/STORE WINDOWS] load_windows=%d lsu_ldu_count=%d LDQ_SIZE=%d store_windows=%d lsu_sta_count=%d STQ_SIZE=%d\n",
+               LOAD_WINDOWS_WIDTH,LSU_LDU_COUNT,LDQ_SIZE,STORE_WINDOWS_WIDTH,LSU_STA_COUNT,STQ_SIZE);
+
 }
 
 void bridge_axi_to_mem_subsystem(SimCpu &cpu) {

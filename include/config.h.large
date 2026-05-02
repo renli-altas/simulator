@@ -514,6 +514,9 @@ constexpr int calculate_max_iq_size() {
 constexpr int MAX_IQ_SIZE = calculate_max_iq_size();
 constexpr int IQ_READY_NUM_WIDTH = bit_width_for_count(MAX_IQ_SIZE + 1);
 
+#define LSU_STLF
+constexpr int LOAD_WINDOWS_WIDTH = LSU_LDU_COUNT; 
+constexpr int STORE_WINDOWS_WIDTH = STQ_SIZE;
 // ============================================================
 // Global Sanity Checks
 // ============================================================

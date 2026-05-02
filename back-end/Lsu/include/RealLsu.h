@@ -4,6 +4,7 @@
 #include "TlbMmu.h"
 #include "config.h"
 #include <cstdio>
+#include "MemUtils.h"
 #include <cstdint>
 #include <memory>
 
@@ -50,10 +51,6 @@ enum class LoadState : uint8_t {
   Done
 };
 
-struct StoreTag {
-  reg<STQ_IDX_WIDTH> idx = 0;
-  reg<1> flag = false;
-};
 struct LoadTag {
   reg<LDQ_IDX_WIDTH> idx = 0;
   reg<1> flag = false;
@@ -186,6 +183,12 @@ struct LsuState{
   LrScUnit lrsc_unit;
 
   wire<31-LDQ_IDX_WIDTH> req_gen; // 用于区分不同轮次的重放，防止过期重放条目被误用
+};
+
+enum class STLFResult : wire<2> {
+  Disjoint = 0,
+  Overlap = 1,
+  Retry = 2,
 };
 class RealLsu {
 public:
