@@ -8,7 +8,7 @@
 // ==========================================
 // ALU: 算术逻辑单元
 // ==========================================
-class AluUnit : public FixedLatencyFU {
+class AluUnit : public SingleCycleFU {
   static constexpr int SUB = 0b000;
   static constexpr int SLL = 0b001;
   static constexpr int SLT = 0b010;
@@ -18,22 +18,15 @@ class AluUnit : public FixedLatencyFU {
   static constexpr int OR = 0b110;
   static constexpr int AND = 0b111;
 
-  FtqExuPcRespIO *ftq_pc_resp;
-  int ftq_pc_port;
-
 public:
-  AluUnit(std::string name = "ALU", int port_idx = 0,
-          FtqExuPcRespIO *ftq_pc_resp = nullptr, int ftq_pc_port = 0)
-      : FixedLatencyFU(name, port_idx, 1), ftq_pc_resp(ftq_pc_resp),
-        ftq_pc_port(ftq_pc_port) {}
+  AluUnit(std::string name = "ALU", int port_idx = 0)
+      : SingleCycleFU(name, port_idx) {}
 
 protected:
   void impl_compute(ExuInst &inst) override {
     uint32_t operand1, operand2;
     if (inst.src1_is_pc) {
-      Assert(ftq_pc_resp != nullptr);
-      Assert(ftq_pc_resp->resp[ftq_pc_port].valid);
-      operand1 = ftq_pc_resp->resp[ftq_pc_port].pc;
+      operand1 = inst.pc;
     } else
       operand1 = inst.src1_rdata;
 
@@ -226,17 +219,9 @@ protected:
 // ==========================================
 // AGU: 地址生成单元 (IO 精确修改版)
 // ==========================================
-class AguUnit : public FixedLatencyFU {
-  ExeLsuIO *exe2lsu;
-  int agu_port_idx; // 标记这是第几个 AGU 端口
-
+class AguUnit : public SingleCycleFU {
 public:
-  // 构造函数传入 port_id，用于区分写入哪个 LSU 输入端口
-  AguUnit(std::string name, int port_idx, ExeLsuIO *exe2lsu, int agu_port_idx)
-      : FixedLatencyFU(name, port_idx, 1), exe2lsu(exe2lsu),
-        agu_port_idx(agu_port_idx) {}
-
-  int lsu_port_id() const { return agu_port_idx; }
+  AguUnit(std::string name, int port_idx) : SingleCycleFU(name, port_idx) {}
 
 protected:
   void impl_compute(ExuInst &inst) override {
@@ -245,32 +230,15 @@ protected:
     uint64_t vaddr = inst.src1_rdata + inst.imm;
     inst.result =
         vaddr; // 记录结果，如果是 Load，这个值是地址；如果是 STA，也是地址
-
-    // 2. 驱动 LSU IO 接口
-    // 我们不再调用函数，而是模拟“连线”，将请求置为 valid
-    // 注意：需要在 Exu 或 Top Level 每一拍开始时清空 backend->in，以防止 latch
-    // 效应
-    if (agu_port_idx < LSU_AGU_COUNT) {
-      exe2lsu->agu_req[agu_port_idx].valid = true;
-      exe2lsu->agu_req[agu_port_idx].uop = inst.to_exe_lsu_req_uop();
-      // 这里的 inst 已经包含了刚刚计算好的 result (vaddr)
-    }
   }
 };
 
 // ==========================================
 // SDU: 存数数据单元 (IO 精确修改版)
 // ==========================================
-class SduUnit : public FixedLatencyFU {
-  ExeLsuIO *exe2lsu;
-  int sdu_port_idx; // 标记这是第几个 SDU 端口
-
+class SduUnit : public SingleCycleFU {
 public:
-  SduUnit(std::string name, int port_idx, ExeLsuIO *exe2lsu, int sdu_port_idx)
-      : FixedLatencyFU(name, port_idx, 1), exe2lsu(exe2lsu),
-        sdu_port_idx(sdu_port_idx) {}
-
-  int lsu_port_id() const { return sdu_port_idx; }
+  SduUnit(std::string name, int port_idx) : SingleCycleFU(name, port_idx) {}
 
 protected:
   void impl_compute(ExuInst &inst) override {
@@ -326,12 +294,6 @@ protected:
 
     // 更新 uop 中的 result，以便传输给 LSU
     inst.result = result_data; // 这里 result 存的是 Data
-
-    // === 2. 驱动 LSU IO 接口 ===
-    if (sdu_port_idx < LSU_SDU_COUNT) {
-      exe2lsu->sdu_req[sdu_port_idx].valid = true;
-      exe2lsu->sdu_req[sdu_port_idx].uop = inst.to_exe_lsu_req_uop();
-    }
   }
 };
 
@@ -373,29 +335,21 @@ protected:
 // ==========================================
 // BRU: 分支单元
 // ==========================================
-class BruUnit : public FixedLatencyFU {
+class BruUnit : public SingleCycleFU {
   static constexpr int BEQ = 0b000;
   static constexpr int BNE = 0b001;
   static constexpr int BLT = 0b100;
   static constexpr int BGE = 0b101;
   static constexpr int BLTU = 0b110;
   static constexpr int BGEU = 0b111;
-  FtqExuPcRespIO *ftq_pc_resp;
-  int ftq_pc_port;
-
 public:
-  BruUnit(std::string name, int port_idx, FtqExuPcRespIO *ftq_pc_resp,
-          int ftq_pc_port)
-      : FixedLatencyFU(name, port_idx, 1), ftq_pc_resp(ftq_pc_resp),
-        ftq_pc_port(ftq_pc_port) {}
+  BruUnit(std::string name, int port_idx) : SingleCycleFU(name, port_idx) {}
 
 protected:
   void impl_compute(ExuInst &inst) override {
     uint32_t operand1 = inst.src1_rdata;
     uint32_t operand2 = inst.src2_rdata;
-    Assert(ftq_pc_resp != nullptr);
-    Assert(ftq_pc_resp->resp[ftq_pc_port].valid);
-    uint32_t inst_pc = ftq_pc_resp->resp[ftq_pc_port].pc;
+    uint32_t inst_pc = inst.pc;
     uint32_t pc_br = inst_pc + inst.imm;
     bool br_taken = true;
 
@@ -441,18 +395,13 @@ protected:
     inst.mispred = false;
 #else
     // FTQ lookup
-    bool pred_taken = false;
+    bool pred_taken = inst.ftq_pred_taken;
     uint32_t pred_target = 0;
 
-    const auto &ftq_resp = ftq_pc_resp->resp[ftq_pc_port];
-    if (ftq_resp.entry_valid) {
-      pred_taken = ftq_resp.pred_taken;
-      if (pred_taken) {
-        // FTQ stores next_pc of the fetch block.
-        pred_target = ftq_resp.next_pc;
-      } else {
-        pred_target = inst_pc + 4;
-      }
+    if (pred_taken) {
+      pred_target = inst.ftq_next_pc;
+    } else {
+      pred_target = inst_pc + 4;
     }
 
     // Verify
@@ -522,38 +471,15 @@ protected:
     }
   }
 
-  // int calculate_latency(const InstUop &inst) override {
-  // 固定返回DIV_MAX_LATENCY以消除竞态条件
-  // 原始的SRT动态延迟计算会导致与唤醒管道不匹配
-  // uint64_t divisor = inst.src2_rdata;
-  // uint64_t dividend = inst.src1_rdata;
-  // if (divisor == 0 || dividend == 0)
-  //   return 4;
-  // int clz_n = __builtin_clzl(dividend);
-  // int clz_d = __builtin_clzl(divisor);
-  // int effective_bits = (64 - clz_n) - (64 - clz_d);
-  // if (effective_bits < 0)
-  //   effective_bits = 0;
-  // return (effective_bits / radix_log2) + 4;
-  // return DIV_MAX_LATENCY;
-  // }
 };
 
 // ==========================================
 // CSR: 控制状态寄存器单元
 // ==========================================
-class CsrUnit : public FixedLatencyFU {
-  ExeCsrIO *exe2csr;
-  CsrExeIO *csr2exe;
-
+class CsrUnit : public SingleCycleFU {
 public:
-  CsrUnit(std::string name, int port_idx, ExeCsrIO *exe2csr, CsrExeIO *csr2exe)
-      : FixedLatencyFU(name, port_idx, 1), exe2csr(exe2csr), csr2exe(csr2exe) {}
+  CsrUnit(std::string name, int port_idx) : SingleCycleFU(name, port_idx) {}
 
 protected:
-  void impl_compute(ExuInst &inst) override {
-    if (exe2csr->re) {
-      inst.result = csr2exe->rdata;
-    }
-  }
+  void impl_compute(ExuInst &inst) override { (void)inst; }
 };

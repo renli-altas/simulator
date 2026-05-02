@@ -9,10 +9,11 @@ struct ExuInst : public PrfExeIO::PrfExeUop {
   wire<1> br_taken;
   wire<1> page_fault_inst;
   wire<1> flush_pipe;
+  wire<1> ftq_entry_valid;
 
   ExuInst()
       : diag_val(0), result(0), mispred(0), br_taken(0), page_fault_inst(0),
-        flush_pipe(0) {}
+        flush_pipe(0), ftq_entry_valid(0) {}
 
   static ExuInst from_prf_exe_uop(const PrfExeIO::PrfExeUop &src) {
     ExuInst dst;

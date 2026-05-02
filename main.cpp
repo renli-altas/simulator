@@ -1,5 +1,6 @@
 #include "SimCpu.h"
 #include "PhysMemory.h"
+#include "RISCV.h"
 #include "config.h"
 #include "diff.h"
 #include <csignal>
@@ -401,6 +402,8 @@ int main(int argc, char *argv[]) {
     std::cout << "[Debug] Running Reference Model Standalone..." << std::endl;
     uint64_t ref_commit_cnt = 0;
 
+    uint64_t ref_commit_cnt = 0;
+
     sim_time = 0;
     while (sim_time < (long long)MAX_SIM_TIME) { // Or a large limit
       difftest_step(false);
@@ -442,7 +445,7 @@ int main(int argc, char *argv[]) {
              "*************************************************************",
              (long long)sim_time);
 
-    cpu.cycle();
+      cpu.cycle();
 
     if (handle_pending_sigint()) {
         pmem_release();
